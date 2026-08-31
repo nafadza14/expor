@@ -317,11 +317,19 @@ async function requireMe() {
 }
 async function refreshMe() {
   try {
-    const wasOnboarded = ME && ME.onboarded;
+    const prev = ME;
     const fresh = await api('/api/me');
     // Never revert an onboarded-in-this-tab user back to onboarded=false just
     // because the backend save hasn't caught up.
-    if (wasOnboarded && !fresh.onboarded) fresh.onboarded = true;
+    if (prev && prev.onboarded && !fresh.onboarded) fresh.onboarded = true;
+    // Preserve locally-set hs_focus & target_countries if backend hasn't caught up
+    // (fire-and-forget saves on Vercel cold starts may still be in flight).
+    if (prev && Array.isArray(prev.hs_focus) && prev.hs_focus.length && (!Array.isArray(fresh.hs_focus) || !fresh.hs_focus.length)) {
+      fresh.hs_focus = prev.hs_focus;
+    }
+    if (prev && Array.isArray(prev.target_countries) && prev.target_countries.length && (!Array.isArray(fresh.target_countries) || !fresh.target_countries.length)) {
+      fresh.target_countries = prev.target_countries;
+    }
     ME = fresh;
   } catch {}
 }
@@ -863,31 +871,43 @@ route(/^\/onboarding$/, async (app) => {
 // ================= dashboard =================
 route(/^\/dashboard$/, async (app) => {
   await requireMe();
+  // Ensure ME has all required fields with safe defaults — a partial ME (from
+  // cold-start Supabase sync race) must never crash the dashboard render.
+  ME.name = ME.name || (ME.email ? ME.email.split('@')[0] : 'User');
+  ME.hs_focus = Array.isArray(ME.hs_focus) ? ME.hs_focus : [];
+  ME.target_countries = Array.isArray(ME.target_countries) ? ME.target_countries : [];
+  ME.plan = ME.plan || 'free';
+  ME.plan_name = ME.plan_name || 'Free';
+  ME.unread_alerts = ME.unread_alerts || 0;
+  ME.quotas = ME.quotas || { search: { used: 0, limit: null }, profile: { used: 0, limit: null }, send: { used: 0, limit: null }, export: { used: 0, limit: null } };
   // Render the shell with placeholders immediately so the user sees the app
   // structure even if /api/dashboard is slow on a Vercel cold instance.
-  app.innerHTML = shell(`<div class="hero-card" style="margin-bottom:24px;text-align:center;padding:40px">
-    <div class="spinner" style="margin:0 auto 12px"></div>
-    <p class="muted">Memuat data dashboard…</p>
-  </div>`);
-  bindShell();
+  try {
+    app.innerHTML = shell(`<div class="hero-card" style="margin-bottom:24px;text-align:center;padding:40px">
+      <div class="spinner" style="margin:0 auto 12px"></div>
+      <p class="muted">Memuat data dashboard…</p>
+    </div>`);
+    bindShell();
+  } catch (e) { console.warn('[eksporin] shell render failed:', e); }
   let d;
   try {
-    d = await api('/api/dashboard');
+    d = await api('/api/dashboard', { timeout: 20000 });
   } catch (e) {
     console.warn('[eksporin] /api/dashboard failed, showing fallback:', e);
     // Fallback: minimal dashboard so user sees SOMETHING even if backend is down.
-    d = {
-      saved: 0,
-      outreach: { total: 0, opened: 0, replied: 0 },
-      pipeline: [],
-      alerts_unread: 0,
-      trend: [],
-      country_breakdown: [],
-      recommendations: [],
-    };
-    setTimeout(() => toast('Dashboard sedang lambat merespons. Refresh halaman untuk data lengkap.', true), 300);
+    d = null;
   }
-  try { await refreshMe(); } catch {}
+  // Fire-and-forget refreshMe — don't block dashboard render on it.
+  refreshMe().catch(() => {});
+  // Normalize dashboard payload with safe defaults for every field.
+  d = d || {};
+  d.saved = d.saved || 0;
+  d.outreach = d.outreach || { total: 0, opened: 0, replied: 0 };
+  d.pipeline = Array.isArray(d.pipeline) ? d.pipeline : [];
+  d.alerts_unread = d.alerts_unread || 0;
+  d.trend = Array.isArray(d.trend) ? d.trend : [];
+  d.country_breakdown = Array.isArray(d.country_breakdown) ? d.country_breakdown : [];
+  d.recommendations = Array.isArray(d.recommendations) ? d.recommendations : [];
   const pl = Object.fromEntries(d.pipeline.map((p) => [p.status, p.n]));
   const q = ME.quotas;
   const quotaRow = (lbl, m) => {
