@@ -5,6 +5,8 @@ echo ========================================
 echo   Pushing EksporIn ke GitHub...
 echo ========================================
 echo.
+git add -A
+git commit -m "feat: add AI Buyer Discovery Engine frontend + fix Vercel config"
 git push -u origin main --force
 echo.
 if %errorlevel%==0 (

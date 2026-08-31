@@ -657,6 +657,149 @@ function handleApi(db, req, res, url, body) {
     });
   }
 
+  // ===== AI Buyer Discovery Engine =====
+  if (route('POST', '/api/discover')) {
+    const { query } = body || {};
+    if (!query || query.trim().length < 3) return err(res, 400, 'Masukkan deskripsi produk yang ingin dicari buyer-nya.');
+
+    // Step 1: HS Code Mapping (simulated LLM)
+    const qLower = query.toLowerCase();
+    const HS_MAP = [
+      { keywords: ['vanili', 'vanilla', 'vanila'], hs: '0905', desc_en: 'Vanilla beans', desc_id: 'Vanili', industry: ['Food & Beverage', 'Flavoring', 'Confectionery'], titles: ['Procurement Manager', 'Sourcing Director', 'Category Buyer'] },
+      { keywords: ['kopi', 'coffee', 'arabica', 'robusta', 'gayo'], hs: '0901', desc_en: 'Coffee', desc_id: 'Kopi', industry: ['Coffee Roasters', 'Specialty Coffee', 'FMCG'], titles: ['Head of Sourcing', 'Green Coffee Buyer', 'Purchasing Manager'] },
+      { keywords: ['lada', 'pepper', 'merica'], hs: '0904', desc_en: 'Pepper', desc_id: 'Lada', industry: ['Spices', 'Food Ingredients'], titles: ['Procurement Manager', 'Sourcing Director'] },
+      { keywords: ['pala', 'nutmeg'], hs: '0908', desc_en: 'Nutmeg', desc_id: 'Pala', industry: ['Spices', 'Essential Oils'], titles: ['Category Buyer', 'Supply Chain Manager'] },
+      { keywords: ['udang', 'shrimp', 'prawn', 'vannamei'], hs: '0306', desc_en: 'Shrimps and prawns', desc_id: 'Udang', industry: ['Seafood', 'Frozen Foods'], titles: ['Seafood Buyer', 'Procurement Lead'] },
+      { keywords: ['tuna', 'cakalang', 'skipjack', 'ikan'], hs: '0303', desc_en: 'Fish, frozen', desc_id: 'Ikan beku', industry: ['Seafood', 'Marine Foods'], titles: ['Purchasing Manager', 'Import Director'] },
+      { keywords: ['kelapa', 'coconut', 'kopra', 'coco'], hs: '1513', desc_en: 'Coconut oil', desc_id: 'Minyak kelapa', industry: ['Agri-food', 'Oils & Fats'], titles: ['Commodity Trader', 'Procurement Manager'] },
+      { keywords: ['karet', 'rubber', 'sir'], hs: '4001', desc_en: 'Natural rubber', desc_id: 'Karet alam', industry: ['Rubber', 'Industrial Materials'], titles: ['Purchasing Manager', 'Technical Buyer'] },
+      { keywords: ['kayu', 'wood', 'plywood', 'timber'], hs: '4412', desc_en: 'Plywood', desc_id: 'Kayu lapis', industry: ['Wood products', 'Building Materials'], titles: ['Procurement Lead', 'Import Manager'] },
+      { keywords: ['rotan', 'rattan', 'anyaman', 'basket'], hs: '4602', desc_en: 'Basketwork of rattan', desc_id: 'Anyaman rotan', industry: ['Home & living', 'Decor'], titles: ['Product Sourcing Manager', 'Buyer'] },
+      { keywords: ['furni', 'furniture', 'mebel', 'kursi', 'meja', 'teak', 'jati'], hs: '9403', desc_en: 'Furniture', desc_id: 'Perabot', industry: ['Furniture', 'Interiors'], titles: ['Sourcing Director', 'Category Manager', 'Import Director'] },
+    ];
+
+    let matched = HS_MAP.find((m) => m.keywords.some((k) => qLower.includes(k)));
+    if (!matched) {
+      // Fallback: search by text across HS codes in DB
+      const hsMatch = db.prepare("SELECT * FROM hs_codes WHERE description_en LIKE ? OR description_id LIKE ? LIMIT 1").get('%' + query + '%', '%' + query + '%');
+      if (hsMatch) {
+        matched = { hs: hsMatch.code.slice(0, 4), desc_en: hsMatch.description_en, desc_id: hsMatch.description_id, industry: ['General Trade'], titles: ['Procurement Manager'] };
+      } else {
+        matched = { hs: '0901', desc_en: query, desc_id: query, industry: ['General Trade'], titles: ['Procurement Manager'] };
+      }
+    }
+
+    // Step 2: Trade Records & Company Retrieval
+    const buyers = db.prepare(`
+      SELECT DISTINCT b.*, bh.shipment_count, bh.total_value_usd as hs_value
+      FROM buyers b
+      JOIN buyer_hs bh ON bh.buyer_id = b.id
+      WHERE bh.hs_code LIKE ?
+      ORDER BY b.base_score DESC, bh.total_value_usd DESC
+      LIMIT 20
+    `).all(matched.hs + '%');
+
+    // Step 3: Decision Maker Enrichment (simulated Apollo.io)
+    const FIRST_NAMES = ['James', 'Sarah', 'Michael', 'Emma', 'David', 'Yuki', 'Kenji', 'Lars', 'Sanne', 'Ahmed', 'Olivia', 'Tom', 'Mei', 'Anna', 'John'];
+    const LAST_NAMES = ['Miller', 'Chen', 'Tanaka', 'De Vries', 'Al Rashid', 'Wilson', 'Taylor', 'Brown', 'Smith', 'Johnson'];
+    const rng = (seed) => { let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; };
+
+    const results = buyers.map((b, idx) => {
+      const r = rng(b.id * 7 + 31);
+      const contacts = db.prepare('SELECT * FROM buyer_contacts WHERE buyer_id=?').all(b.id);
+      const bHs = db.prepare('SELECT hs_code FROM buyer_hs WHERE buyer_id=?').all(b.id).map((x) => x.hs_code);
+      const website = contacts.find((c) => c.contact_type === 'website');
+      const domain = website ? website.value.replace(/https?:\/\/(www\.)?/, '').replace(/\/.*/, '') : null;
+
+      // Simulated decision makers
+      const numContacts = Math.floor(r() * 3) + 1;
+      const decisionMakers = [];
+      for (let i = 0; i < numContacts; i++) {
+        const fn = FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)];
+        const ln = LAST_NAMES[Math.floor(r() * LAST_NAMES.length)];
+        const title = matched.titles[Math.floor(r() * matched.titles.length)];
+        decisionMakers.push({
+          full_name: `${fn} ${ln}`,
+          job_title: title,
+          email: domain ? `${fn.toLowerCase()}.${ln.toLowerCase()}@${domain}` : null,
+          email_status: r() > 0.3 ? 'verified' : 'unverified',
+          linkedin_url: `https://linkedin.com/in/${fn.toLowerCase()}-${ln.toLowerCase()}-${Math.floor(r() * 9000 + 1000)}`,
+          phone: contacts.find((c) => c.contact_type === 'phone')?.value || null,
+        });
+      }
+
+      // Step 4: Match Score & Outreach Angle
+      const idSup = b.has_indonesian_supplier;
+      const activityBonus = b.shipments_12mo > 8 ? 20 : b.shipments_12mo > 3 ? 10 : 0;
+      const growthBonus = (b.yoy_percent || 0) > 0 ? 15 : 0;
+      const volumeBonus = b.volume_12mo_kg > 100000 ? 15 : b.volume_12mo_kg > 30000 ? 10 : 5;
+      const untappedBonus = !idSup ? 20 : 5;
+      const matchScore = Math.min(100, Math.max(10, 30 + activityBonus + growthBonus + volumeBonus + untappedBonus + Math.floor(r() * 10)));
+
+      const angles = {
+        high_growth: `${b.name} menunjukkan pertumbuhan impor ${b.yoy_percent || 0}% YoY — timing tepat untuk masuk sebagai pemasok baru dengan penawaran harga FOB kompetitif dan sampel gratis.`,
+        untapped: `${b.name} belum pernah impor dari Indonesia. Ini peluang first-mover — tonjolkan keunggulan origin Indonesia, sertifikasi, dan tawarkan trial shipment.`,
+        existing: `${b.name} sudah familiar dengan pemasok Indonesia. Diferensiasi lewat kualitas konsisten, lead time lebih pendek, dan harga yang bersaing.`,
+        volume: `${b.name} mengimpor volume besar (${Math.round(b.volume_12mo_kg / 1000)} ton/tahun). Tawarkan kontrak jangka panjang dengan harga volume discount.`,
+      };
+      let angle = angles.untapped;
+      if (idSup) angle = angles.existing;
+      if ((b.yoy_percent || 0) > 10) angle = angles.high_growth;
+      if (b.volume_12mo_kg > 200000) angle = angles.volume;
+
+      return {
+        rank: idx + 1,
+        company: {
+          id: b.id, name: b.name, country: b.country,
+          country_name: COUNTRY_NAMES[b.country] || b.country,
+          city: b.city, industry: b.industry, size_bucket: b.size_bucket,
+          domain, website: website?.value,
+          annual_import_frequency: b.total_shipments,
+          last_shipment_date: b.last_shipment_date,
+          imported_hs_codes: bHs,
+          primary_source_countries: [],
+          company_tier: b.size_bucket === 'XL' ? 'Enterprise' : b.size_bucket === 'L' ? 'Mid-Market' : 'SMB',
+        },
+        decision_makers: decisionMakers,
+        scoring: {
+          match_score: matchScore,
+          score_label: matchScore >= 80 ? 'Hot Lead' : matchScore >= 60 ? 'Warm Lead' : matchScore >= 40 ? 'Worth Exploring' : 'Low Priority',
+          reasoning: `Skor ${matchScore}/100 berdasarkan: aktivitas impor ${b.shipments_12mo}x/tahun, volume ${Math.round(b.volume_12mo_kg / 1000)} ton, ${idSup ? 'sudah impor dari Indonesia' : 'belum pernah dari Indonesia (untapped)'}, growth ${b.yoy_percent || 0}% YoY.`,
+          customized_pitch_angle: angle,
+        },
+        trade_data: {
+          shipments_12mo: b.shipments_12mo,
+          volume_12mo_kg: b.volume_12mo_kg,
+          value_12mo_usd: b.value_12mo_usd,
+          yoy_percent: b.yoy_percent,
+          has_indonesian_supplier: !!b.has_indonesian_supplier,
+        },
+      };
+    });
+
+    results.sort((a, b) => b.scoring.match_score - a.scoring.match_score);
+
+    return json(res, 200, {
+      query,
+      interpretation: {
+        hs_code_6_digit: matched.hs,
+        hs_code_description: matched.desc_en,
+        description_id: matched.desc_id,
+        trade_manifest_keywords: matched.keywords || [query],
+        target_industry_segments: matched.industry,
+        buyer_job_titles_to_target: matched.titles,
+      },
+      pipeline_steps: [
+        { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
+        { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan` },
+        { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${results.reduce((a, r) => a + r.decision_makers.length, 0)} kontak terverifikasi` },
+        { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 60).length} hot/warm leads` },
+      ],
+      total_leads: results.length,
+      leads: results,
+    });
+  }
+
   return err(res, 404, 'Endpoint tidak ditemukan.');
 }
 

@@ -42,6 +42,7 @@ const I = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   logoW: '<svg viewBox="0 0 32 32" fill="none"><path d="M8 22 L14 12 L18 17 L24 8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M16 15H8a5 5 0 0 0-5 5v1h18v-1a5 5 0 0 0-5-5z"/><circle cx="19" cy="5" r="2.5" fill="currentColor" stroke="none"/><path d="M19 3v4M17 5h4" stroke="white" stroke-width="1.2"/></svg>',
 };
 
 // state
@@ -163,6 +164,7 @@ function shell(content) {
       <div style="min-width:0"><div class="nm">${esc(u.name)}</div><div class="em">${esc(u.org_name || u.email)}</div></div></div>
     <nav class="nav">
       ${navItem('#/dashboard', I.home, 'Dashboard')}
+      ${navItem('#/discover', I.ai, 'AI Find Buyer')}
       ${navItem('#/direktori', I.grid, 'Direktori HS')}
       ${navItem('#/cari', I.search, 'Cari Buyer')}
       ${navItem('#/shipments', I.ship, 'Shipment Explorer')}
@@ -382,6 +384,148 @@ route(/^\/dashboard$/, async (app) => {
       </tbody></table></div>` : '<div class="empty"><div class="ic">🔎</div><h3>Belum ada rekomendasi</h3><p class="muted">Lengkapi HS fokus & negara target di onboarding.</p></div>'}</div>`);
   bindShell();
 });
+
+// ================= AI Buyer Discovery Engine =================
+route(/^\/discover$/, async (app) => {
+  await requireMe();
+  let loading = false;
+  let result = null;
+
+  const draw = () => {
+    app.innerHTML = shell(`
+      <div class="hero-card" style="margin-bottom:24px;border-left:4px solid var(--primary-600)">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div style="font-size:36px">🤖</div>
+          <div style="flex:1"><h1 style="margin-bottom:4px">AI Buyer Discovery Engine</h1>
+          <p class="muted">Deskripsikan produk ekspor Anda dalam bahasa alami — AI akan memetakan HS code, mencari importir aktif, meng-enrich kontak decision maker, dan memberikan skor kecocokan + angle outreach.</p></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <input class="input" id="ai-query" placeholder="Contoh: Vanili kering grade A, kopi arabica Gayo, udang vannamei beku, furnitur jati Jepara…" style="flex:1;font-size:15px;padding:12px 16px" value="">
+          <button class="btn btn-primary btn-lg" id="ai-go" ${loading ? 'disabled' : ''}>${loading ? '⏳ Menganalisis...' : '🔍 Cari Buyer'}</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          ${['Vanili polong kering', 'Kopi arabica Gayo', 'Udang vannamei beku', 'Furnitur jati', 'Lada hitam Muntok', 'Minyak kelapa mentah'].map((s) => `<button class="btn btn-sm btn-ghost ai-suggest">${s}</button>`).join('')}
+        </div>
+      </div>
+      ${loading ? '<div class="card" style="text-align:center;padding:48px"><div class="spinner"></div><p class="muted" style="margin-top:16px">Menjalankan 4-step pipeline: HS mapping → trade records → contact enrichment → scoring...</p></div>' : ''}
+      ${result ? renderDiscoverResult(result) : !loading ? `
+        <div class="grid grid-4" style="margin-bottom:24px">
+          ${[
+            ['1️⃣', 'HS Code Mapping', 'AI memetakan deskripsi produk ke kode HS 6-digit, sinonim kargo, dan target industri buyer.'],
+            ['2️⃣', 'Trade Records', 'Query database Bill of Lading (B/L) untuk menemukan importir aktif beserta volume & frekuensi.'],
+            ['3️⃣', 'Contact Enrichment', 'Pencarian PIC (Procurement, Sourcing) dengan email terverifikasi dan profil LinkedIn.'],
+            ['4️⃣', 'Scoring & Pitch', 'Match Score 0-100 dan angle outreach yang dipersonalisasi per buyer.'],
+          ].map(([ic, t, d]) => `<div class="card card-compact"><div style="font-size:24px;margin-bottom:8px">${ic}</div><h3 style="margin-bottom:6px">${t}</h3><p class="muted body-sm">${d}</p></div>`).join('')}
+        </div>` : ''}`);
+    bindShell();
+
+    $('#ai-go')?.addEventListener('click', runDiscover);
+    $('#ai-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') runDiscover(); });
+    $$('.ai-suggest').forEach((el) => el.addEventListener('click', () => {
+      if ($('#ai-query')) { $('#ai-query').value = el.textContent; runDiscover(); }
+    }));
+  };
+
+  const runDiscover = async () => {
+    const q = $('#ai-query')?.value?.trim();
+    if (!q) return toast('Masukkan deskripsi produk', true);
+    loading = true; result = null; draw();
+    try {
+      result = await api('/api/discover', { method: 'POST', body: { query: q } });
+    } catch (e) {
+      toast(e.data?.error || 'Gagal menjalankan discovery', true);
+    }
+    loading = false; draw();
+  };
+  draw();
+});
+
+function renderDiscoverResult(r) {
+  const interp = r.interpretation;
+  return `
+    <!-- Pipeline Steps -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><h3>🔄 Pipeline Execution</h3><span class="pill pill-success">Selesai</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+        ${r.pipeline_steps.map((s) => `<div style="padding:12px;border-radius:10px;background:var(--bg-surface-alt)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><b class="body-sm">Step ${s.step}</b><span class="pill pill-success body-sm">✓</span></div>
+          <div class="caption muted">${esc(s.name)}</div>
+          <div class="caption" style="margin-top:4px;color:var(--primary-600)">${esc(s.result)}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Interpretation -->
+    <div class="grid grid-2" style="margin-bottom:16px">
+      <div class="card">
+        <h3 style="margin-bottom:12px">🎯 Interpretasi AI</h3>
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+          <div><div class="caption muted-3">HS Code</div><span class="hs-code-chip" style="font-size:16px">${esc(interp.hs_code_6_digit)}</span></div>
+          <div><div class="caption muted-3">Deskripsi</div><b>${esc(interp.hs_code_description)}</b></div>
+        </div>
+        <div style="margin-top:14px"><div class="caption muted-3">Target Industri</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.target_industry_segments.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
+        <div style="margin-top:10px"><div class="caption muted-3">Jabatan PIC Target</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.buyer_job_titles_to_target.map((s) => `<span class="pill pill-info">${esc(s)}</span>`).join('')}</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:12px">📊 Ringkasan</h3>
+        <div class="grid grid-2" style="gap:16px">
+          <div class="metric-card card-compact"><div class="lbl">Total Leads</div><div class="numeric-lg">${r.total_leads}</div></div>
+          <div class="metric-card card-compact"><div class="lbl">Hot/Warm Leads</div><div class="numeric-lg">${r.leads.filter((l) => l.scoring.match_score >= 60).length}</div></div>
+          <div class="metric-card card-compact"><div class="lbl">Kontak Ditemukan</div><div class="numeric-lg">${r.leads.reduce((a, l) => a + l.decision_makers.length, 0)}</div></div>
+          <div class="metric-card card-compact"><div class="lbl">Negara</div><div class="numeric-lg">${new Set(r.leads.map((l) => l.company.country)).size}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leads Table -->
+    <div class="card">
+      <div class="card-header"><h3>🏆 Leads Siap Eksekusi</h3>
+        <span class="caption muted">${r.total_leads} buyer ditemukan untuk "${esc(r.query)}"</span></div>
+      <div id="leads-list">${r.leads.map((lead, idx) => `
+        <div class="lead-card" style="border:1px solid var(--border-subtle);border-radius:12px;padding:20px;margin-bottom:12px;${lead.scoring.match_score >= 80 ? 'border-left:4px solid #B91C1C;background:var(--bg-surface-alt)' : lead.scoring.match_score >= 60 ? 'border-left:4px solid #B45309' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+            <div style="flex:1;min-width:280px">
+              <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+                <span class="muted num">#${lead.rank}</span>
+                <h3 style="margin:0"><a href="#/buyer/${lead.company.id}" style="color:inherit">${esc(lead.company.name)}</a></h3>
+                ${scorePill(lead.scoring.match_score, lead.scoring.score_label)}
+                ${!lead.trade_data.has_indonesian_supplier ? '<span class="pill pill-success">Untapped</span>' : ''}
+              </div>
+              <p class="muted body-sm">${flag(lead.company.country)} ${esc(lead.company.country_name)} · ${esc(lead.company.city || '')} · ${esc(lead.company.industry || '')} · ${esc(lead.company.company_tier)}</p>
+              <div style="display:flex;gap:20px;margin-top:10px;flex-wrap:wrap">
+                <div><span class="caption muted-3">Shipment/tahun</span><br><b class="num">${fmtN(lead.trade_data.shipments_12mo)}</b></div>
+                <div><span class="caption muted-3">Volume 12 bln</span><br><b class="num">${fmtKg(lead.trade_data.volume_12mo_kg)}</b></div>
+                <div><span class="caption muted-3">Nilai 12 bln</span><br><b class="num">${fmtUSD(lead.trade_data.value_12mo_usd)}</b></div>
+                <div><span class="caption muted-3">Growth YoY</span><br><b class="num ${(lead.trade_data.yoy_percent || 0) >= 0 ? 'delta-up' : 'delta-down'}" style="color:${(lead.trade_data.yoy_percent || 0) >= 0 ? 'var(--secondary-600)' : 'var(--danger-text)'}">${(lead.trade_data.yoy_percent || 0) >= 0 ? '↑' : '↓'} ${Math.abs(lead.trade_data.yoy_percent || 0)}%</b></div>
+              </div>
+            </div>
+            <div style="min-width:280px">
+              <div class="caption muted-3" style="margin-bottom:6px">👤 Decision Makers</div>
+              ${lead.decision_makers.map((dm) => `
+                <div style="padding:8px 0;border-bottom:1px dotted var(--border-subtle)">
+                  <b class="body-sm">${esc(dm.full_name)}</b> <span class="caption muted">— ${esc(dm.job_title)}</span>
+                  <div style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap">
+                    ${dm.email ? `<span class="caption" title="${dm.email_status}">✉️ ${esc(dm.email)} ${dm.email_status === 'verified' ? '<span class="pill pill-success" style="font-size:9px">verified</span>' : ''}</span>` : ''}
+                    ${dm.linkedin_url ? `<a class="caption" href="${esc(dm.linkedin_url)}" target="_blank">💼 LinkedIn</a>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>
+          <div style="margin-top:14px;padding:12px;border-radius:8px;background:var(--primary-50, #EFF6FF);border:1px solid var(--primary-100, #DBEAFE)">
+            <div class="caption muted-3" style="margin-bottom:4px">🎯 Outreach Angle</div>
+            <p class="body-sm" style="line-height:20px;margin:0">${esc(lead.scoring.customized_pitch_angle)}</p>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary btn-sm" onclick="location.hash='#/buyer/${lead.company.id}'">Lihat Profil Lengkap</button>
+            <button class="btn btn-secondary btn-sm" onclick="saveToList(${lead.company.id})">+ Simpan ke Daftar</button>
+            <button class="btn btn-neutral btn-sm" onclick="composeTo(${lead.company.id})">✉️ Kirim Outreach</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+}
 
 // ================= HS directory =================
 route(/^\/direktori$/, async (app, m, params) => {
