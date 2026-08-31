@@ -1,14 +1,8 @@
 // Vercel serverless catch-all for /api/* routes
 'use strict';
 
-let db;
-try {
-  db = require('../src/db').getDb();
-} catch (e) {
-  console.error('[eksporin] DB init failed:', e.message, e.stack);
-}
-
 const { handleApi } = require('../src/api');
+let dbPromise = null;
 
 module.exports = async (req, res) => {
   // CORS
@@ -17,12 +11,16 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
-  if (!db) {
-    try { db = require('../src/db').getDb(); } catch (e) {
-      console.error('[eksporin] DB retry failed:', e.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Database init gagal: ' + e.message }));
-    }
+  // Async DB init (sql.js WASM needs async loading)
+  let db;
+  try {
+    if (!dbPromise) dbPromise = require('../src/db').getDb();
+    db = await dbPromise;
+  } catch (e) {
+    console.error('[eksporin] DB init failed:', e.message, e.stack);
+    dbPromise = null; // retry next request
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Database init gagal: ' + e.message }));
   }
 
   const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);

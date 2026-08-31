@@ -1,14 +1,42 @@
-// EksporIn — database bootstrap (better-sqlite3, Vercel-compatible)
+// EksporIn — database bootstrap (sql.js, Vercel-compatible, pure JS/WASM)
 'use strict';
-const Database = require('better-sqlite3');
-const path = require('node:path');
-const fs = require('node:fs');
+const initSqlJs = require('sql.js');
 
-// On Vercel, only /tmp is writable; locally use ./data/
-const DB_PATH = process.env.VERCEL
-  ? '/tmp/eksporin.db'
-  : (process.env.EKSPORIN_DB || path.join(__dirname, '..', 'data', 'eksporin.db'));
+// ---------- Compatibility wrapper: sql.js → better-sqlite3 API ----------
+class StatementCompat {
+  constructor(db, sql) { this._db = db; this._sql = sql; }
+  run(...params) {
+    this._db.run(this._sql, params);
+    return { changes: this._db.getRowsModified() };
+  }
+  get(...params) {
+    let stmt;
+    try {
+      stmt = this._db.prepare(this._sql);
+      if (params.length) stmt.bind(params);
+      return stmt.step() ? stmt.getAsObject() : undefined;
+    } finally { if (stmt) stmt.free(); }
+  }
+  all(...params) {
+    const results = [];
+    let stmt;
+    try {
+      stmt = this._db.prepare(this._sql);
+      if (params.length) stmt.bind(params);
+      while (stmt.step()) results.push(stmt.getAsObject());
+    } finally { if (stmt) stmt.free(); }
+    return results;
+  }
+}
 
+class DbCompat {
+  constructor(sqlJsDb) { this._db = sqlJsDb; }
+  prepare(sql) { return new StatementCompat(this._db, sql); }
+  exec(sql) { this._db.exec(sql); }
+  pragma(str) { try { this._db.exec('PRAGMA ' + str); } catch (e) { /* ignore */ } }
+}
+
+// ---------- Schema ----------
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,22 +220,29 @@ CREATE TABLE IF NOT EXISTS usage_meters (
 );
 `;
 
+// ---------- Singleton ----------
 let _db = null;
+let _initPromise = null;
 
-function getDb() {
+async function getDb() {
   if (_db) return _db;
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const isNew = !fs.existsSync(DB_PATH);
-  _db = new Database(DB_PATH);
-  try { _db.pragma('journal_mode = WAL'); } catch (e) { /* WAL unsupported on some filesystems */ }
-  _db.exec(SCHEMA);
-  const count = _db.prepare('SELECT COUNT(*) AS c FROM buyers').get().c;
-  if (isNew || count === 0) {
-    console.log('[eksporin] Database kosong - melakukan seeding data demo...');
-    require('./seed').seed(_db);
-    console.log('[eksporin] Seeding selesai.');
-  }
-  return _db;
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    console.log('[eksporin] Initializing sql.js database...');
+    const SQL = await initSqlJs();
+    const rawDb = new SQL.Database();
+    _db = new DbCompat(rawDb);
+    _db.pragma('journal_mode = WAL');
+    _db.exec(SCHEMA);
+    const count = _db.prepare('SELECT COUNT(*) AS c FROM buyers').get();
+    if (!count || count.c === 0) {
+      console.log('[eksporin] Database kosong - melakukan seeding data demo...');
+      require('./seed').seed(_db);
+      console.log('[eksporin] Seeding selesai.');
+    }
+    return _db;
+  })();
+  return _initPromise;
 }
 
-module.exports = { getDb, DB_PATH };
+module.exports = { getDb };

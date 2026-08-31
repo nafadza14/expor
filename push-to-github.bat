@@ -6,7 +6,7 @@ echo   Pushing EksporIn ke GitHub...
 echo ========================================
 echo.
 git add -A
-git commit -m "feat: add AI Buyer Discovery Engine frontend + fix Vercel config"
+git commit -m "fix: switch to sql.js (pure WASM) to fix Vercel native module crash"
 git push -u origin main --force
 echo.
 if %errorlevel%==0 (

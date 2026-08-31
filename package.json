@@ -7,12 +7,11 @@
     "start": "node server.js",
     "dev": "node server.js",
     "build": "echo 'No build step required'",
-    "postinstall": "npm rebuild better-sqlite3",
     "reset-db": "node -e \"const fs=require('fs'),p=require('path').join(__dirname,'data');fs.rmSync(p,{recursive:true,force:true});console.log('Database dihapus')\""
   },
   "engines": { "node": ">=18.0.0" },
   "dependencies": {
-    "better-sqlite3": "^11.0.0"
+    "sql.js": "^1.11.0"
   },
   "license": "UNLICENSED",
   "private": true
