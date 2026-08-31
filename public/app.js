@@ -257,7 +257,9 @@ function shell(content) {
   const u = ME;
   const planPill = { free: 'pill-neutral', starter: 'pill-orange', growth: 'pill-success', business: 'pill-violet' }[u.plan] || 'pill-neutral';
   return `<div class="app-shell">
-  <aside class="sidebar">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <button class="sidebar-close" id="sidebar-close" aria-label="Tutup menu">${I.x}</button>
     <div class="sidebar-brand"><span class="logo">${I.logoW}</span>EksporIn</div>
     <div class="sidebar-user"><span class="avatar">${esc((u.name || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase())}</span>
       <div style="min-width:0"><div class="nm">${esc(u.name)}</div><div class="em">${esc(u.org_name || u.email)}</div></div></div>
@@ -280,9 +282,11 @@ function shell(content) {
   </aside>
   <div class="main">
     <header class="topbar">
+      <button class="topbar-menu" id="topbar-menu" aria-label="Menu">${I.menu}</button>
+      <div class="topbar-brand-mobile"><span class="logo" style="width:28px;height:28px;border-radius:8px;background:var(--orange);display:inline-flex;align-items:center;justify-content:center">${I.logoW}</span><span style="font-weight:700">EksporIn</span></div>
       <div class="search-wrap">${I.search}<input class="input" id="global-search" placeholder="Cari buyer atau HS code… (Enter)"></div>
       <div class="topbar-right">
-        <span class="pill ${planPill}">Paket ${esc(u.plan_name)}</span>
+        <span class="pill ${planPill} plan-pill">Paket ${esc(u.plan_name)}</span>
         <button class="bell" onclick="location.hash='#/alerts'" title="Notifikasi">${I.bell}${u.unread_alerts ? '<span class="dot"></span>' : ''}</button>
       </div>
     </header>
@@ -302,6 +306,18 @@ function bindShell() {
       location.hash = /^\d{2,6}$/.test(v) ? `#/cari?hs=${v}` : `#/cari?q=${encodeURIComponent(v)}`;
     }
   });
+  // Mobile sidebar drawer
+  const sidebar = $('#sidebar');
+  const backdrop = $('#sidebar-backdrop');
+  const openSidebar = () => { sidebar?.classList.add('open'); backdrop?.classList.add('open'); document.body.style.overflow = 'hidden'; };
+  const closeSidebar = () => { sidebar?.classList.remove('open'); backdrop?.classList.remove('open'); document.body.style.overflow = ''; };
+  $('#topbar-menu')?.addEventListener('click', openSidebar);
+  $('#sidebar-close')?.addEventListener('click', closeSidebar);
+  backdrop?.addEventListener('click', closeSidebar);
+  // Auto-close when a nav link is clicked (on mobile)
+  $$('.sidebar .nav-item').forEach((el) => el.addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 900px)').matches) closeSidebar();
+  }));
 }
 // If the wizard just finished but backend saves were slow/failed, we keep the
 // user unstuck by remembering the optimistic onboarded=true state locally.
