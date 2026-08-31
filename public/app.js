@@ -230,7 +230,11 @@ async function refreshMe() { ME = await api('/api/me'); }
 
 // ================= landing =================
 route(/^\/$/, async (app) => {
-  try { ME = await api('/api/me'); if (ME) { location.hash = '#/dashboard'; return; } } catch { /* not logged in */ }
+  // Always render the landing page on `/`. Do NOT auto-redirect logged-in users
+  // — a stale session without onboarding would bounce them to the onboarding wizard
+  // and hide the homepage. Users click Masuk or the dashboard link in the nav explicitly.
+  let loggedIn = false;
+  try { ME = await api('/api/me'); loggedIn = !!ME; } catch { /* not logged in — expected */ }
   const FLOWER = `<svg class="flower-logo" viewBox="0 0 32 32" fill="#ef4d23">${Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4;return `<circle cx="${(16+10*Math.cos(a)).toFixed(2)}" cy="${(16+10*Math.sin(a)).toFixed(2)}" r="3.5"/>`;}).join('')}<circle cx="16" cy="16" r="3.5"/></svg>`;
   const CHEVRON_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   const CHEVRON_RIGHT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
@@ -262,11 +266,18 @@ route(/^\/$/, async (app) => {
               <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'})" class="chev">Halaman ${CHEVRON_DOWN}</a>
             </div>
             <div class="pill-nav-right">
-              <a href="#/login" class="pill-signin">Masuk</a>
-              <a href="#/register" class="pill-cta">
-                <span class="cta-full">Akses awal</span><span class="cta-short">Akses</span>
-                <span class="arrow-circle">${CHEVRON_RIGHT}</span>
-              </a>
+              ${loggedIn ? `
+                <a href="#/dashboard" class="pill-cta">
+                  <span class="cta-full">Buka Dashboard</span><span class="cta-short">Dashboard</span>
+                  <span class="arrow-circle">${CHEVRON_RIGHT}</span>
+                </a>
+              ` : `
+                <a href="#/login" class="pill-signin">Masuk</a>
+                <a href="#/register" class="pill-cta">
+                  <span class="cta-full">Daftar gratis</span><span class="cta-short">Daftar</span>
+                  <span class="arrow-circle">${CHEVRON_RIGHT}</span>
+                </a>
+              `}
               <button class="pill-menu" onclick="document.getElementById('pillMenuPanel').classList.toggle('open')" aria-label="Menu">${MENU_ICON}</button>
             </div>
             <div class="pill-menu-panel" id="pillMenuPanel">
@@ -274,7 +285,7 @@ route(/^\/$/, async (app) => {
               <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Fitur</a>
               <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Tentang</a>
               <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Halaman</a>
-              <a href="#/login">Masuk</a>
+              ${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : '<a href="#/login">Masuk</a>'}
             </div>
           </div>
         </div>
@@ -286,11 +297,11 @@ route(/^\/$/, async (app) => {
             Shaping <span class="serif-italic">Exporters</span><br>of tomorrow
           </h1>
           <p class="hero-sub">Platform intelijen buyer global untuk eksportir Indonesia. Data bea cukai, skor prioritas, dan kontak decision maker dalam satu dashboard.</p>
-          <a class="hero-cta" href="#/register">
-            <span>Mulai Gratis</span>
+          <a class="hero-cta" href="${loggedIn ? '#/dashboard' : '#/register'}">
+            <span>${loggedIn ? 'Buka Dashboard' : 'Mulai Gratis'}</span>
             <span class="arrow-circle">${CHEVRON_RIGHT}</span>
           </a>
-          <p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>
+          ${loggedIn ? '' : '<p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>'}
         </div>
 
         <!-- Dashboard preview tray -->
