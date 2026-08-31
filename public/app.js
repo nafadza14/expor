@@ -757,84 +757,10 @@ route(/^\/$/, async (app) => {
 // ================= auth =================
 function authHero() {
   return `<div class="auth-hero">
-    <div class="auth-brand">${LOGO_SVG} <span>EksporIn</span></div>
-    <div class="auth-illustration">
-      <svg viewBox="0 0 420 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:420px;height:auto">
-        <defs>
-          <linearGradient id="ai-panel-a" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#ffffff"/>
-            <stop offset="100%" stop-color="#fff8f3"/>
-          </linearGradient>
-          <radialGradient id="ai-panel-glow" cx="50%" cy="75%" r="55%">
-            <stop offset="0%" stop-color="#ffe1cf" stop-opacity=".55"/>
-            <stop offset="100%" stop-color="#ffe1cf" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect x="0" y="0" width="420" height="320" rx="20" fill="url(#ai-panel-a)"/>
-        <rect x="0" y="0" width="420" height="320" rx="20" fill="url(#ai-panel-glow)"/>
-
-        <g transform="translate(30 30)">
-          <rect x="0" y="0" width="200" height="90" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
-          <circle cx="26" cy="30" r="12" fill="#ffdfca"/>
-          <path d="M20 30 L25 35 L34 25" stroke="#ef4d23" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <rect x="46" y="22" width="130" height="6" rx="3" fill="#282828"/>
-          <rect x="46" y="34" width="90" height="4" rx="2" fill="#a99a8c"/>
-          <rect x="14" y="54" width="60" height="10" rx="5" fill="#ffe0c9"/>
-          <text x="44" y="62" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">HS 0905</text>
-          <rect x="80" y="54" width="66" height="10" rx="5" fill="#ffe0c9"/>
-          <text x="113" y="62" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">Vanili A</text>
-          <rect x="14" y="72" width="60" height="6" rx="3" fill="#ffdfca"/>
-          <rect x="80" y="72" width="90" height="6" rx="3" fill="#ffdfca"/>
-        </g>
-
-        <g transform="translate(250 60)">
-          <rect x="0" y="0" width="150" height="90" rx="12" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
-          <text x="16" y="22" fill="#777" font-size="10" font-weight="600" font-family="system-ui">Match Score</text>
-          <path d="M18 76 A50 50 0 0 1 132 76" stroke="#f4d0b0" stroke-width="6" fill="none" stroke-linecap="round"/>
-          <path d="M18 76 A50 50 0 0 1 118 42" stroke="#ef4d23" stroke-width="6" fill="none" stroke-linecap="round"/>
-          <text x="75" y="72" text-anchor="middle" fill="#282828" font-size="22" font-weight="700" font-family="system-ui">87</text>
-        </g>
-
-        <g transform="translate(30 160)">
-          <rect x="0" y="0" width="240" height="130" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
-          <text x="16" y="24" fill="#282828" font-size="11" font-weight="700" font-family="system-ui">Buyer per negara</text>
-          <text x="16" y="46" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇺🇸 US</text>
-          <rect x="72" y="40" width="140" height="6" rx="3" fill="#ffdfca"/>
-          <rect x="72" y="40" width="128" height="6" rx="3" fill="#ef4d23"/>
-          <text x="216" y="46" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">20</text>
-          <text x="16" y="66" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇳🇱 NL</text>
-          <rect x="72" y="60" width="140" height="6" rx="3" fill="#ffdfca"/>
-          <rect x="72" y="60" width="70" height="6" rx="3" fill="#ef4d23"/>
-          <text x="216" y="66" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">10</text>
-          <text x="16" y="86" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇯🇵 JP</text>
-          <rect x="72" y="80" width="140" height="6" rx="3" fill="#ffdfca"/>
-          <rect x="72" y="80" width="60" height="6" rx="3" fill="#ef4d23"/>
-          <text x="216" y="86" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">9</text>
-          <text x="16" y="106" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇦🇪 AE</text>
-          <rect x="72" y="100" width="140" height="6" rx="3" fill="#ffdfca"/>
-          <rect x="72" y="100" width="46" height="6" rx="3" fill="#ef4d23"/>
-          <text x="216" y="106" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">7</text>
-        </g>
-
-        <g transform="translate(290 175)">
-          <rect x="0" y="0" width="110" height="110" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
-          <rect x="14" y="16" width="82" height="10" rx="3" fill="#ffe0c9"/>
-          <text x="55" y="24" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">✉ Outreach</text>
-          <path d="M14 38 L14 90 L96 90 L96 38 Z" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
-          <path d="M14 38 L55 66 L96 38" stroke="#ef4d23" stroke-width="1.5" fill="none"/>
-          <g transform="translate(88 82)">
-            <circle r="10" fill="#4d8c35"/>
-            <path d="M-4 0 L-1 3 L4 -3" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          </g>
-          <text x="14" y="106" fill="#777" font-size="7" font-weight="600" font-family="system-ui">EN · ES · ZH</text>
-        </g>
-
-        <g transform="translate(280 20)">
-          <path d="M10 -4 L12 4 L20 6 L12 8 L10 16 L8 8 L0 6 L8 4 Z" fill="#ef4d23" opacity=".85"/>
-        </g>
-      </svg>
-    </div>
-    <div class="auth-copy">
+    <img class="auth-bg" src="https://images.pexels.com/photos/3848793/pexels-photo-3848793.jpeg?auto=compress&cs=tinysrgb&w=1600&q=80" alt="" aria-hidden="true">
+    <div class="auth-bg-tint"></div>
+    <div class="auth-brand">${LOGO_SVG.replace(/#ef4d23/g, '#fff')} <span>EksporIn</span></div>
+    <div class="auth-copy auth-glass">
       <h1>Buyer luar negeri, tinggal <span class="serif-italic">satu klik</span></h1>
       <p>Data bea cukai, skor prioritas, dan kontak decision maker. Diorganisir agar UKM Indonesia bisa menemukan buyer tepat dalam hitungan menit.</p>
       <ul class="auth-checklist">
