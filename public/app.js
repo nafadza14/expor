@@ -745,8 +745,10 @@ route(/^\/onboarding$/, async (app) => {
     $('#w-skip').onclick = finish;
     $('#w-next').onclick = async () => {
       if (state.step === 0) state.org = $('#w-org').value.trim();
-      if (state.step === 1 && !state.hs.length) return toast('Pilih minimal 1 kode HS', true);
-      if (state.step === 2 && !state.countries.length) return toast('Pilih minimal 1 negara', true);
+      // Show a friendly hint when the user hasn't selected anything on optional
+      // steps, but don't block them — they can always refine choices later.
+      if (state.step === 1 && !state.hs.length) toast('Tip: pilih HS untuk rekomendasi lebih akurat. Anda bisa lewati juga.', false);
+      if (state.step === 2 && !state.countries.length) toast('Tip: pilih negara target agar alert lebih relevan.', false);
       if (state.step < 4) { state.step++; draw(); } else await finish();
     };
   };
