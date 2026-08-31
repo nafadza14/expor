@@ -123,12 +123,24 @@ async function api(path, opts = {}) {
     if (synced) res = await rawFetch(path, opts);
   }
   const ct = res.headers.get('content-type') || '';
-  const data = ct.includes('json') ? await res.json() : await res.text();
+  let data;
+  if (ct.includes('json')) {
+    try { data = await res.json(); } catch (e) { data = null; }
+  } else {
+    const text = await res.text();
+    // Defensive: if the API returned HTML (e.g. Vercel SPA fallback catching an
+    // /api/* path because rewrites are wrong), synthesize a clear error object
+    // so callers never receive a string where they expect a JSON object.
+    if (/^\s*<!doctype|^\s*<html/i.test(text)) {
+      throw { status: res.status || 502, data: { error: 'API endpoint not reachable — got HTML instead of JSON. Check Vercel routing.' } };
+    }
+    data = text;
+  }
   if (res.status === 401 && !path.includes('/auth/')) {
-    if (path !== '/api/me') location.hash = '#/login'; // landing & requireMe handle /api/me themselves
+    if (path !== '/api/me') location.hash = '#/login';
     throw { status: 401, data };
   }
-  if (res.status === 402) { upgradeModal(data.error); throw { status: 402, data, handled: true }; }
+  if (res.status === 402) { upgradeModal(data && data.error); throw { status: 402, data, handled: true }; }
   if (!res.ok) throw { status: res.status, data };
   return data;
 }
