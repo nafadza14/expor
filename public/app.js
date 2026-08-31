@@ -301,16 +301,21 @@ async function retryPendingOnboarding() {
   if (sbOk || localOk) { try { localStorage.removeItem('eksporin_pending_onboarding'); } catch {} }
 }
 
+// Sticky onboarded flag — once a user finishes onboarding in ANY session, we
+// remember locally so they're never bounced back to the wizard even if the
+// backend save didn't persist (Vercel serverless cold-start re-seeds DB).
+function isStickyOnboarded() { try { return localStorage.getItem('eksporin_onboarded') === '1'; } catch { return false; } }
+function setStickyOnboarded() { try { localStorage.setItem('eksporin_onboarded', '1'); } catch {} }
 async function requireMe() {
   if (!ME) {
     try { ME = await api('/api/me'); }
     catch { location.hash = '#/login'; throw { handled: true }; }
   }
-  // Preserve optimistic onboarded=true when a save is still pending (Vercel
-  // cold-instance edge cases). Retry the save in the background.
-  if (!ME.onboarded && hasPendingOnboarding()) {
+  // Preserve optimistic onboarded=true when a save is still pending, OR when
+  // the user completed onboarding in a previous session (sticky flag).
+  if (!ME.onboarded && (hasPendingOnboarding() || isStickyOnboarded())) {
     ME.onboarded = true;
-    retryPendingOnboarding();
+    if (hasPendingOnboarding()) retryPendingOnboarding();
   }
   if (!ME.onboarded && parseHash().path !== '/onboarding') { location.hash = '#/onboarding'; throw { handled: true }; }
   return ME;
@@ -321,7 +326,7 @@ async function refreshMe() {
     const fresh = await api('/api/me');
     // Never revert an onboarded-in-this-tab user back to onboarded=false just
     // because the backend save hasn't caught up.
-    if (prev && prev.onboarded && !fresh.onboarded) fresh.onboarded = true;
+    if (((prev && prev.onboarded) || isStickyOnboarded()) && !fresh.onboarded) fresh.onboarded = true;
     // Preserve locally-set hs_focus & target_countries if backend hasn't caught up
     // (fire-and-forget saves on Vercel cold starts may still be in flight).
     if (prev && Array.isArray(prev.hs_focus) && prev.hs_focus.length && (!Array.isArray(fresh.hs_focus) || !fresh.hs_focus.length)) {
@@ -811,6 +816,9 @@ route(/^\/onboarding$/, async (app) => {
 
       // Cache the payload FIRST so retryPendingOnboarding() can pick it up
       try { localStorage.setItem('eksporin_pending_onboarding', JSON.stringify(payload)); } catch (e) { console.warn('[eksporin] localStorage set failed:', e); }
+      // Sticky onboarded flag — user stays onboarded across sessions even if
+      // backend re-seeds (Vercel cold-start) or Supabase sync fails.
+      setStickyOnboarded();
 
       // Optimistically patch ME so requireMe() on /dashboard doesn't bounce.
       try {

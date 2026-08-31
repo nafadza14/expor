@@ -6,7 +6,7 @@ echo   Pushing EksporIn ke GitHub...
 echo ========================================
 echo.
 git add -A
-git commit -m "fix: bulletproof dashboard render - try/catch wrapper + safe HS slice + fallback UI"
+git commit -m "fix: sticky onboarded flag - never bounce user back to wizard across sessions"
 git push -u origin main --force
 echo.
 if %errorlevel%==0 (
