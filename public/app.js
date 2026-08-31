@@ -93,14 +93,26 @@ async function syncSupabaseSession() {
   } catch (e) { console.warn('[eksporin] supabase-sync failed:', e); return false; }
 }
 
+async function currentSbToken() {
+  if (!window.sb) return null;
+  try {
+    const { data } = await window.sb.auth.getSession();
+    return data && data.session && data.session.access_token || null;
+  } catch { return null; }
+}
+
 async function rawFetch(path, opts) {
-  return fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  // Attach Supabase Bearer token so serverless cold instances can identify the user
+  // without relying on a persistent session cookie.
+  const tok = await currentSbToken();
+  if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  return fetch(path, { credentials: 'same-origin', ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
 }
 
 async function api(path, opts = {}) {
   let res = await rawFetch(path, opts);
-  // Auto-recover from 401 on protected endpoints: if a Supabase session exists,
-  // re-sync it to the backend (creates/refreshes local session cookie), then retry once.
+  // Auto-recover from 401 on protected endpoints: refresh Supabase session and retry once.
   if (res.status === 401 && !path.includes('/auth/') && window.sb) {
     const synced = await syncSupabaseSession();
     if (synced) res = await rawFetch(path, opts);
@@ -296,18 +308,11 @@ route(/^\/$/, async (app) => {
               <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'})" class="chev">Halaman ${CHEVRON_DOWN}</a>
             </div>
             <div class="pill-nav-right">
-              ${loggedIn ? `
-                <a href="#/dashboard" class="pill-cta">
-                  <span class="cta-full">Buka Dashboard</span><span class="cta-short">Dashboard</span>
-                  <span class="arrow-circle">${CHEVRON_RIGHT}</span>
-                </a>
-              ` : `
-                <a href="#/login" class="pill-signin">Masuk</a>
-                <a href="#/register" class="pill-cta">
-                  <span class="cta-full">Daftar gratis</span><span class="cta-short">Daftar</span>
-                  <span class="arrow-circle">${CHEVRON_RIGHT}</span>
-                </a>
-              `}
+              <a href="#/login" class="pill-signin">Masuk</a>
+              <a href="#/register" class="pill-cta">
+                <span class="cta-full">Daftar gratis</span><span class="cta-short">Daftar</span>
+                <span class="arrow-circle">${CHEVRON_RIGHT}</span>
+              </a>
               <button class="pill-menu" onclick="document.getElementById('pillMenuPanel').classList.toggle('open')" aria-label="Menu">${MENU_ICON}</button>
             </div>
             <div class="pill-menu-panel" id="pillMenuPanel">
@@ -315,7 +320,9 @@ route(/^\/$/, async (app) => {
               <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Fitur</a>
               <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Tentang</a>
               <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Halaman</a>
-              ${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : '<a href="#/login">Masuk</a>'}
+              <a href="#/login">Masuk</a>
+              <a href="#/register">Daftar gratis</a>
+              ${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : ''}
             </div>
           </div>
         </div>
@@ -327,11 +334,17 @@ route(/^\/$/, async (app) => {
             Shaping <span class="serif-italic">Exporters</span><br>of tomorrow
           </h1>
           <p class="hero-sub">Platform intelijen buyer global untuk eksportir Indonesia. Data bea cukai, skor prioritas, dan kontak decision maker dalam satu dashboard.</p>
-          <a class="hero-cta" href="${loggedIn ? '#/dashboard' : '#/register'}">
-            <span>${loggedIn ? 'Buka Dashboard' : 'Mulai Gratis'}</span>
-            <span class="arrow-circle">${CHEVRON_RIGHT}</span>
-          </a>
-          ${loggedIn ? '' : '<p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>'}
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:24px">
+            <a class="hero-cta" href="#/register" style="margin-top:0">
+              <span>Daftar Gratis</span>
+              <span class="arrow-circle">${CHEVRON_RIGHT}</span>
+            </a>
+            <a class="hero-cta" href="#/login" style="margin-top:0;background:#fff;color:#0b0f1a;border:1px solid rgba(0,0,0,.1)">
+              <span>Masuk</span>
+              <span class="arrow-circle" style="background:rgba(0,0,0,.08)">${CHEVRON_RIGHT}</span>
+            </a>
+          </div>
+          <p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>
         </div>
 
         <!-- Dashboard preview tray -->
@@ -630,7 +643,9 @@ route(/^\/onboarding$/, async (app) => {
         export_status: state.export_status, goal: state.goal,
         org_name: state.org || null,
       };
-      // 1) Source of truth: Supabase profiles table. This must succeed.
+      // 1) Try Supabase profiles (source of truth if the table exists). Best-effort —
+      //    if the table isn't set up yet or RLS blocks us, we log and continue so the
+      //    user is never stuck on the wizard.
       let sbSaved = false;
       if (window.sb) {
         try {
@@ -649,29 +664,25 @@ route(/^\/onboarding$/, async (app) => {
               onboarded: true,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'id' });
-            if (error) throw error;
-            sbSaved = true;
+            if (error) {
+              console.warn('[eksporin] Supabase profile save skipped:', error.message);
+            } else {
+              sbSaved = true;
+            }
           }
         } catch (e) {
-          console.error('[eksporin] Supabase profile save failed:', e);
-          const msg = (e && e.message) || 'Gagal menyimpan ke Supabase.';
-          // Common cause: profiles table not yet created — surface a helpful hint.
-          if (/relation .*profiles.* does not exist|relation "profiles" does not exist/i.test(msg)) {
-            toast('Tabel profiles belum ada di Supabase. Jalankan supabase-setup.sql dulu.', true);
-          } else if (/row.level security|RLS/i.test(msg)) {
-            toast('RLS Supabase menolak. Cek policy profiles_insert_own & profiles_update_own.', true);
-          } else {
-            toast('Gagal simpan profile: ' + msg, true);
-          }
-          return;
+          console.warn('[eksporin] Supabase profile save threw:', e);
         }
       }
-      // 2) Mirror to local backend for buyer-intel features. Best-effort — the
-      // auto-recovering api() will re-sync from Supabase if the session is stale.
+      // 2) Local backend save — this is what makes onboarding "stick" for the buyer
+      //    intel features (search, alerts, scoring). The auto-recovering api() will
+      //    re-sync the session from Supabase if the local cookie is stale.
       try {
         await api('/api/me/onboarding', { method: 'POST', body: payload });
       } catch (e) {
-        console.warn('[eksporin] Local onboarding save failed (Supabase is source of truth):', e);
+        console.error('[eksporin] Local onboarding save failed:', e);
+        toast(e.data?.error || 'Gagal menyimpan onboarding. Coba lagi.', true);
+        return;
       }
       ME = null;
       toast(sbSaved ? 'Selamat datang di EksporIn! 🎉' : 'Onboarding tersimpan.');

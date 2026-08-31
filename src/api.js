@@ -6,6 +6,84 @@ const { hashPassword, verifyPassword, createSession, getSessionUser, destroySess
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dbdzmhrofgcmkdszjxxq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_--qPH56dWsGCxUzm7Mc_Aw_2P53hp3r';
 
+// Small in-memory cache: access_token -> {userId, expires} to avoid hitting Supabase
+// on every request. Serverless-safe: cache lives only within this hot instance.
+const SB_TOKEN_CACHE = new Map();
+const SB_CACHE_TTL_MS = 60 * 1000;
+
+// Verify a Supabase JWT and upsert the mirroring local user row.
+// Returns the local user row or null if the token is invalid.
+async function verifySupabaseToken(db, accessToken) {
+  if (!accessToken) return null;
+  const cached = SB_TOKEN_CACHE.get(accessToken);
+  if (cached && cached.expires > Date.now()) {
+    return db.prepare('SELECT * FROM users WHERE id=?').get(cached.userId) || null;
+  }
+  try {
+    const uResp = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'apikey': SUPABASE_ANON_KEY },
+    });
+    if (!uResp.ok) return null;
+    const sbUser = await uResp.json();
+    if (!sbUser || !sbUser.email) return null;
+
+    // Fetch profile (optional)
+    let profile = {};
+    try {
+      const pResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(sbUser.id)}&select=*`, {
+        headers: { 'Authorization': 'Bearer ' + accessToken, 'apikey': SUPABASE_ANON_KEY, 'Accept': 'application/json' },
+      });
+      if (pResp.ok) { const arr = await pResp.json(); if (Array.isArray(arr) && arr[0]) profile = arr[0]; }
+    } catch {}
+
+    const email = sbUser.email;
+    const displayName = profile.name || (sbUser.user_metadata && sbUser.user_metadata.name) || email.split('@')[0];
+    const orgName = profile.org_name || (sbUser.user_metadata && sbUser.user_metadata.org_name) || null;
+    const hsFocus = Array.isArray(profile.hs_focus) ? profile.hs_focus : [];
+    const targetCountries = Array.isArray(profile.target_countries) ? profile.target_countries : [];
+    const exportStatus = profile.export_status || null;
+    const goal = profile.goal || null;
+    const onboarded = profile.onboarded ? 1 : 0;
+
+    let u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+    if (!u) {
+      db.prepare(`INSERT INTO users (email, password_hash, name, org_name, hs_focus, target_countries, export_status, goal, onboarded)
+                  VALUES (?,?,?,?,?,?,?,?,?)`)
+        .run(email, 'supabase:' + sbUser.id, displayName, orgName,
+             JSON.stringify(hsFocus), JSON.stringify(targetCountries),
+             exportStatus, goal, onboarded);
+      u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+    } else {
+      db.prepare(`UPDATE users SET name=COALESCE(?,name), org_name=COALESCE(?,org_name),
+                  hs_focus=?, target_countries=?, export_status=COALESCE(?,export_status),
+                  goal=COALESCE(?,goal), onboarded=? WHERE id=?`)
+        .run(displayName, orgName,
+             JSON.stringify(hsFocus.length ? hsFocus : JSON.parse(u.hs_focus || '[]')),
+             JSON.stringify(targetCountries.length ? targetCountries : JSON.parse(u.target_countries || '[]')),
+             exportStatus, goal,
+             (onboarded || u.onboarded) ? 1 : 0,
+             u.id);
+      u = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
+    }
+    SB_TOKEN_CACHE.set(accessToken, { userId: u.id, expires: Date.now() + SB_CACHE_TTL_MS });
+    return u;
+  } catch (e) {
+    console.error('[verifySupabaseToken]', e);
+    return null;
+  }
+}
+
+// Async version of getSessionUser — checks Bearer token then cookie. Serverless-safe.
+async function resolveUser(db, req) {
+  const auth = req.headers['authorization'] || req.headers['Authorization'] || '';
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (m) {
+    const u = await verifySupabaseToken(db, m[1]);
+    if (u) return u;
+  }
+  return getSessionUser(db, req);
+}
+
 // ---------- plans (Feature-by-Tier matrix, doc 03 §7) ----------
 const PLANS = {
   free:     { name: 'Free',     price: 0,      search: 20,  profile: 3,    saved: 10,  send: 5,    alerts: 0,    export: 0,     contacts: false, competitor: false, sys_templates: 3 },
@@ -152,7 +230,7 @@ function materializeAlerts(db, user) {
 }
 
 // ---------- route table ----------
-function handleApi(db, req, res, url, body) {
+async function handleApi(db, req, res, url, body) {
   const p = url.pathname.replace(/\/+$/, '') || '/';
   const q = url.searchParams;
   const method = req.method;
@@ -256,7 +334,9 @@ function handleApi(db, req, res, url, body) {
   }
 
   // ===== everything below requires auth =====
-  const user = getSessionUser(db, req);
+  // Prefer Supabase Bearer (stateless — survives serverless cold instances),
+  // fall back to local session cookie (demo user).
+  const user = await resolveUser(db, req);
   if (!user) return err(res, 401, 'Sesi tidak valid. Silakan masuk kembali.');
   const plan = PLANS[user.plan];
   const userHs = JSON.parse(user.hs_focus || '[]');
