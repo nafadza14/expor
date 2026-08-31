@@ -228,7 +228,7 @@ function shell(content) {
     <div class="sidebar-user"><span class="avatar">${esc((u.name || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase())}</span>
       <div style="min-width:0"><div class="nm">${esc(u.name)}</div><div class="em">${esc(u.org_name || u.email)}</div></div></div>
     <nav class="nav">
-      ${navItem('#/dashboard', I.home, 'Dashboard')}
+      ${navItem('#/dashboard', I.home, 'Overview')}
       ${navItem('#/discover', I.ai, 'AI Find Buyer')}
       ${navItem('#/direktori', I.grid, 'Direktori HS')}
       ${navItem('#/cari', I.search, 'Cari Buyer')}
@@ -369,7 +369,9 @@ async function requireMe() {
 async function refreshMe() {
   try {
     const prev = ME;
-    const fresh = await api('/api/me');
+    // Prefer Supabase-direct read (skips slow Vercel serverless).
+    let fresh = await loadMeFromSupabase();
+    if (!fresh) fresh = await api('/api/me');
     // Never revert an onboarded-in-this-tab user back to onboarded=false just
     // because the backend save hasn't caught up.
     if (((prev && prev.onboarded) || isStickyOnboarded()) && !fresh.onboarded) fresh.onboarded = true;
