@@ -931,19 +931,27 @@ route(/^\/dashboard$/, async (app) => {
   d.trend = Array.isArray(d.trend) ? d.trend : [];
   d.country_breakdown = Array.isArray(d.country_breakdown) ? d.country_breakdown : [];
   d.recommendations = Array.isArray(d.recommendations) ? d.recommendations : [];
-  const pl = Object.fromEntries(d.pipeline.map((p) => [p.status, p.n]));
-  const q = ME.quotas;
+  const pl = Object.fromEntries(d.pipeline.map((p) => [p.status || 'unknown', p.n || 0]));
+  const q = ME.quotas || {};
+  // Ensure each quota bucket exists with safe defaults
+  ['search', 'profile', 'send', 'export'].forEach((k) => { if (!q[k]) q[k] = { used: 0, limit: null }; });
   const quotaRow = (lbl, m) => {
+    m = m || { used: 0, limit: null };
     const pct = m.limit ? Math.min(100, (m.used / m.limit) * 100) : 0;
     return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-      <span class="muted">${lbl}</span><b class="num">${m.used}${m.limit ? ' / ' + m.limit : ' · tanpa batas'}</b></div>
+      <span class="muted">${lbl}</span><b class="num">${m.used || 0}${m.limit ? ' / ' + m.limit : ' · tanpa batas'}</b></div>
       <div class="progressbar ${pct > 80 ? 'warn' : ''}"><div style="width:${m.limit ? pct : 4}%"></div></div></div>`;
   };
+  // Safe HS code slice — handle non-string values
+  const firstHs = ME.hs_focus[0];
+  const hsQuery = (typeof firstHs === 'string' && firstHs.length >= 4) ? '?hs=' + firstHs.slice(0, 4) : '';
+  const firstName = (typeof ME.name === 'string' ? ME.name : 'User').split(' ')[0] || 'User';
+  try {
   app.innerHTML = shell(`
     <div class="hero-card" style="margin-bottom:24px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px">
-      <div><h1 style="margin-bottom:6px">Halo, ${esc(ME.name.split(' ')[0])} 👋</h1>
-      <p class="muted">Fokus Anda: ${ME.hs_focus.map((h) => `<span class="hs-code-chip">${h.replace(/^(\d{4})/, '$1.')}</span>`).join(' ')} di ${ME.target_countries.map((c) => flag(c) + ' ' + CNAME[c]).join(', ') || 'semua negara'}</p></div>
-      <button class="btn btn-primary" onclick="location.hash='#/cari${ME.hs_focus[0] ? '?hs=' + ME.hs_focus[0].slice(0, 4) : ''}'">${I.search} Cari buyer sekarang</button></div></div>
+      <div><h1 style="margin-bottom:6px">Halo, ${esc(firstName)} 👋</h1>
+      <p class="muted">Fokus Anda: ${ME.hs_focus.map((h) => `<span class="hs-code-chip">${String(h).replace(/^(\d{4})/, '$1.')}</span>`).join(' ') || '<span class="muted">belum diatur</span>'} di ${ME.target_countries.map((c) => flag(c) + ' ' + (CNAME[c] || c)).join(', ') || 'semua negara'}</p></div>
+      <button class="btn btn-primary" onclick="location.hash='#/cari${hsQuery}'">${I.search} Cari buyer sekarang</button></div></div>
     <div class="grid grid-4" style="margin-bottom:24px">
       <div class="card card-compact metric-card"><div class="lbl">Buyer tersimpan</div><div class="numeric-lg">${fmtN(d.saved)}</div><div class="caption muted-3">di semua daftar</div></div>
       <div class="card card-compact metric-card"><div class="lbl">Outreach terkirim</div><div class="numeric-lg">${fmtN(d.outreach.total || 0)}</div><div class="caption muted-3">${d.outreach.opened || 0} dibuka · ${d.outreach.replied || 0} dibalas</div></div>
@@ -962,7 +970,7 @@ route(/^\/dashboard$/, async (app) => {
         }).join('') : '<div class="empty muted">Lengkapi onboarding untuk melihat data.</div>'}
         <div style="margin-top:14px">${quotaRow('Kuota pencarian', q.search)}${quotaRow('Kuota profil lengkap', q.profile)}${quotaRow('Kuota kirim outreach', q.send)}</div></div>
     </div>
-    <div class="card"><div class="card-header"><h3>Rekomendasi buyer untuk Anda</h3><a class="btn btn-sm btn-ghost" href="#/cari${ME.hs_focus[0] ? '?hs=' + ME.hs_focus[0].slice(0, 4) : ''}">Lihat semua →</a></div>
+    <div class="card"><div class="card-header"><h3>Rekomendasi buyer untuk Anda</h3><a class="btn btn-sm btn-ghost" href="#/cari${hsQuery}">Lihat semua →</a></div>
       ${d.recommendations.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Buyer</th><th>Negara</th><th>Industri</th><th class="r">Shipment 12 bln</th><th class="r">Volume 12 bln</th><th>Skor</th><th></th></tr></thead><tbody>
       ${d.recommendations.map((b) => `<tr class="clickable" onclick="location.hash='#/buyer/${b.id}'">
         <td><b>${esc(b.name)}</b>${b.has_indonesian_supplier ? '' : ' <span class="pill pill-success" title="Belum pernah impor dari Indonesia">Untapped</span>'}</td>
@@ -972,6 +980,20 @@ route(/^\/dashboard$/, async (app) => {
         <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();saveToList(${b.id})">+ Simpan</button></td></tr>`).join('')}
       </tbody></table></div>` : '<div class="empty"><div class="ic">🔎</div><h3>Belum ada rekomendasi</h3><p class="muted">Lengkapi HS fokus & negara target di onboarding.</p></div>'}</div>`);
   bindShell();
+  } catch (renderErr) {
+    console.error('[eksporin] dashboard render failed:', renderErr);
+    // Fallback minimal dashboard so user is never stuck on error page
+    try {
+      app.innerHTML = shell(`<div class="hero-card" style="margin-bottom:24px"><h1 style="margin-bottom:6px">Halo, ${esc(firstName)} 👋</h1>
+        <p class="muted">Dashboard sedang dimuat. Beberapa data belum tersedia.</p>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="location.hash='#/discover'">${I.ai || ''} AI Find Buyer</button>
+          <button class="btn btn-secondary" onclick="location.hash='#/cari${hsQuery}'">${I.search || ''} Cari buyer</button>
+          <button class="btn btn-neutral" onclick="location.reload()">Muat ulang</button>
+        </div></div>`);
+      bindShell();
+    } catch {}
+  }
 });
 
 // ================= AI Buyer Discovery Engine =================
