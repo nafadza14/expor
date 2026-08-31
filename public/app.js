@@ -78,8 +78,33 @@ function arcGauge(value, { color = '#ef4d23', showLabels = false, min = '', max 
 let ME = null;
 
 // ================= API =================
+// Re-sync the Supabase session into a local backend cookie. Used both at boot
+// and to auto-recover from 401s on cold serverless instances (Vercel).
+async function syncSupabaseSession() {
+  if (!window.sb) return false;
+  try {
+    const { data } = await window.sb.auth.getSession();
+    if (!data || !data.session || !data.session.access_token) return false;
+    const r = await fetch('/api/auth/supabase-sync', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: data.session.access_token }),
+    });
+    return r.ok;
+  } catch (e) { console.warn('[eksporin] supabase-sync failed:', e); return false; }
+}
+
+async function rawFetch(path, opts) {
+  return fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+}
+
 async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  let res = await rawFetch(path, opts);
+  // Auto-recover from 401 on protected endpoints: if a Supabase session exists,
+  // re-sync it to the backend (creates/refreshes local session cookie), then retry once.
+  if (res.status === 401 && !path.includes('/auth/') && window.sb) {
+    const synced = await syncSupabaseSession();
+    if (synced) res = await rawFetch(path, opts);
+  }
   const ct = res.headers.get('content-type') || '';
   const data = ct.includes('json') ? await res.json() : await res.text();
   if (res.status === 401 && !path.includes('/auth/')) {
@@ -605,12 +630,14 @@ route(/^\/onboarding$/, async (app) => {
         export_status: state.export_status, goal: state.goal,
         org_name: state.org || null,
       };
-      // Persist to Supabase profile if user is a Supabase-authed session
+      // 1) Source of truth: Supabase profiles table. This must succeed.
+      let sbSaved = false;
       if (window.sb) {
         try {
-          const { data: { user: sbUser } } = await window.sb.auth.getUser();
+          const { data: sess } = await window.sb.auth.getSession();
+          const sbUser = sess && sess.session && sess.session.user;
           if (sbUser) {
-            await window.sb.from('profiles').upsert({
+            const { error } = await window.sb.from('profiles').upsert({
               id: sbUser.id,
               email: sbUser.email,
               name: ME.name,
@@ -620,13 +647,35 @@ route(/^\/onboarding$/, async (app) => {
               export_status: state.export_status,
               goal: state.goal,
               onboarded: true,
+              updated_at: new Date().toISOString(),
             }, { onConflict: 'id' });
+            if (error) throw error;
+            sbSaved = true;
           }
-        } catch (e) { console.warn('[eksporin] Supabase profile save failed:', e); }
+        } catch (e) {
+          console.error('[eksporin] Supabase profile save failed:', e);
+          const msg = (e && e.message) || 'Gagal menyimpan ke Supabase.';
+          // Common cause: profiles table not yet created — surface a helpful hint.
+          if (/relation .*profiles.* does not exist|relation "profiles" does not exist/i.test(msg)) {
+            toast('Tabel profiles belum ada di Supabase. Jalankan supabase-setup.sql dulu.', true);
+          } else if (/row.level security|RLS/i.test(msg)) {
+            toast('RLS Supabase menolak. Cek policy profiles_insert_own & profiles_update_own.', true);
+          } else {
+            toast('Gagal simpan profile: ' + msg, true);
+          }
+          return;
+        }
       }
-      // Local backend (always — buyer intel features read from here)
-      await api('/api/me/onboarding', { method: 'POST', body: payload });
-      ME = null; toast('Selamat datang di EksporIn! 🎉'); location.hash = '#/dashboard';
+      // 2) Mirror to local backend for buyer-intel features. Best-effort — the
+      // auto-recovering api() will re-sync from Supabase if the session is stale.
+      try {
+        await api('/api/me/onboarding', { method: 'POST', body: payload });
+      } catch (e) {
+        console.warn('[eksporin] Local onboarding save failed (Supabase is source of truth):', e);
+      }
+      ME = null;
+      toast(sbSaved ? 'Selamat datang di EksporIn! 🎉' : 'Onboarding tersimpan.');
+      location.hash = '#/dashboard';
     };
     $('#w-skip').onclick = finish;
     $('#w-next').onclick = async () => {
@@ -1524,18 +1573,5 @@ route(/^\/billing$/, async (app) => {
 
 // boot: if a Supabase session exists in localStorage (returning user),
 // sync it to the local backend BEFORE the router runs so protected APIs work.
-async function boot() {
-  if (window.sb) {
-    try {
-      const { data } = await window.sb.auth.getSession();
-      if (data && data.session && data.session.access_token) {
-        await fetch('/api/auth/supabase-sync', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: data.session.access_token }),
-        });
-      }
-    } catch (e) { console.warn('[eksporin] Supabase boot sync failed:', e); }
-  }
-  render();
-}
+async function boot() { await syncSupabaseSession(); render(); }
 boot();
