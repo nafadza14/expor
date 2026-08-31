@@ -208,7 +208,28 @@ async function render() {
   const app = $('#app');
   for (const [rx, fn] of routes) {
     const m = path.match(rx);
-    if (m) { try { await fn(app, m, params); } catch (e) { if (!e.handled) { console.error(e); try { app.innerHTML = shell(`<div class="empty"><div class="ic">⚠️</div><h3>Terjadi kesalahan</h3><p class="muted">${esc(e.data?.error || 'Coba muat ulang halaman.')}</p></div>`); bindShell(); } catch { app.innerHTML = `<div style="padding:60px 20px;text-align:center"><h2>Terjadi kesalahan</h2><p style="color:#737373;margin:12px 0 20px">${esc(e.data?.error || 'Coba muat ulang halaman.')}</p><button class="btn btn-primary" onclick="location.reload()">Muat ulang</button></div>`; } } } return; }
+    if (m) {
+      try { await fn(app, m, params); }
+      catch (e) {
+        if (e && e.handled) return;
+        console.error('[eksporin] route error:', e);
+        const detail = (e && (e.data?.error || e.message)) ? String(e.data?.error || e.message) : 'Coba muat ulang halaman.';
+        const stack = (e && e.stack) ? String(e.stack).split('\n').slice(0, 3).join('\n') : '';
+        const errHtml = `<div class="empty" style="padding:60px 20px;text-align:center;max-width:600px;margin:0 auto">
+          <div class="ic" style="font-size:48px">⚠️</div>
+          <h3 style="margin:12px 0">Terjadi kesalahan</h3>
+          <p class="muted" style="margin-bottom:8px">${esc(detail)}</p>
+          ${stack ? `<pre style="text-align:left;background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow:auto;max-height:120px">${esc(stack)}</pre>` : ''}
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
+            <button class="btn btn-primary" onclick="location.reload()">Muat ulang</button>
+            <button class="btn btn-neutral" onclick="location.hash='#/'">Ke Beranda</button>
+          </div>
+        </div>`;
+        try { app.innerHTML = shell(errHtml); bindShell(); }
+        catch { app.innerHTML = errHtml; }
+      }
+      return;
+    }
   }
   location.hash = '#/';
 }
@@ -953,10 +974,16 @@ route(/^\/onboarding$/, async (app) => {
 
 // ================= dashboard =================
 route(/^\/dashboard$/, async (app) => {
-  await requireMe();
+  try { await requireMe(); } catch (e) {
+    if (e && e.handled) throw e; // redirect already scheduled
+    console.error('[dashboard] requireMe failed:', e);
+    // Fall through — use whatever ME we have or make a minimal one
+    if (!ME) ME = { email: 'guest@eksporin.id', name: 'Guest', onboarded: true, hs_focus: [], target_countries: [], plan: 'free', plan_name: 'Free', quotas: {}, unread_alerts: 0 };
+  }
+  ME = ME || {};
   // Ensure ME has all required fields with safe defaults — a partial ME (from
   // cold-start Supabase sync race) must never crash the dashboard render.
-  ME.name = ME.name || (ME.email ? ME.email.split('@')[0] : 'User');
+  ME.name = ME.name || (ME.email ? String(ME.email).split('@')[0] : 'User');
   ME.hs_focus = Array.isArray(ME.hs_focus) ? ME.hs_focus : [];
   ME.target_countries = Array.isArray(ME.target_countries) ? ME.target_countries : [];
   ME.plan = ME.plan || 'free';
