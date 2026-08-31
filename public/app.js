@@ -748,15 +748,12 @@ route(/^\/onboarding$/, async (app) => {
         export_status: state.export_status, goal: state.goal,
         org_name: state.org || null,
       };
-      const nextBtn = $('#w-next'); const skipBtn = $('#w-skip');
-      if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Menyimpan…'; }
-      if (skipBtn) { skipBtn.disabled = true; }
 
-      // Cache for background retry from the dashboard boot if needed.
+      // Cache the payload FIRST so retryPendingOnboarding() can pick it up
+      // from any tab boot until it lands cleanly.
       try { localStorage.setItem('eksporin_pending_onboarding', JSON.stringify(payload)); } catch {}
 
-      // Optimistically patch ME so requireMe() on /dashboard doesn't bounce us
-      // back to the wizard even if saves haven't caught up yet.
+      // Optimistically patch ME so requireMe() on /dashboard doesn't bounce.
       if (ME) {
         ME.hs_focus = state.hs;
         ME.target_countries = state.countries;
@@ -766,68 +763,53 @@ route(/^\/onboarding$/, async (app) => {
         ME.onboarded = true;
       }
 
-      // Best-effort save to Supabase profile (source of truth).
-      let sbSaved = false, localSaved = false;
-      const errors = [];
-
-      if (window.sb) {
-        try {
-          const { data: sess } = await window.sb.auth.getSession();
-          const sbUser = sess && sess.session && sess.session.user;
-          if (sbUser) {
-            const { error } = await window.sb.from('profiles').upsert({
-              id: sbUser.id,
-              email: sbUser.email,
-              name: ME && ME.name,
-              org_name: state.org || null,
-              hs_focus: state.hs,
-              target_countries: state.countries,
-              export_status: state.export_status,
-              goal: state.goal,
-              onboarded: true,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'id' });
-            if (error) {
-              errors.push('Supabase: ' + (error.message || error.hint || JSON.stringify(error)));
-              console.error('[eksporin] SB profile upsert error:', error);
-            } else { sbSaved = true; }
-          } else {
-            errors.push('Supabase: tidak ada session');
-          }
-        } catch (e) {
-          errors.push('Supabase: ' + (e.message || String(e)));
-          console.error('[eksporin] SB profile save threw:', e);
-        }
-      }
-
-      // Best-effort save to local backend.
-      try {
-        await api('/api/me/onboarding', { method: 'POST', body: payload });
-        localSaved = true;
-      } catch (e) {
-        errors.push('Local: ' + (e.data && e.data.error || e.message || ('HTTP ' + (e.status || '?'))));
-        console.warn('[eksporin] Local onboarding save failed:', e);
-      }
-
-      // If Supabase saved, force a fresh backend sync so subsequent
-      // Bearer-authed requests see the new profile immediately.
-      if (sbSaved) {
-        try { await syncSupabaseSession(); } catch {}
-        try { localStorage.removeItem('eksporin_pending_onboarding'); } catch {}
-      } else if (localSaved) {
-        try { localStorage.removeItem('eksporin_pending_onboarding'); } catch {}
-      }
-
-      // ALWAYS proceed to dashboard — user is never stuck on the wizard.
-      // If neither save worked, show a diagnostic warning but still go.
-      if (sbSaved || localSaved) {
-        toast('Selamat datang di EksporIn! 🎉');
-      } else {
-        console.warn('[eksporin] Onboarding saves failed:', errors);
-        toast('Data onboarding belum tersimpan penuh. Lanjut ke dashboard, kami akan coba lagi otomatis.', true);
-        setTimeout(() => toast(errors.slice(0, 2).join(' | '), true), 400);
-      }
+      // Redirect to dashboard IMMEDIATELY — do not await any I/O.
+      toast('Selamat datang di EksporIn! 🎉');
       location.hash = '#/dashboard';
+
+      // Fire-and-forget saves. Timeout each so a stuck Vercel cold-start
+      // never leaves data unwritten forever — the retry loop from
+      // requireMe() will pick up any leftover in localStorage.
+      const withTimeout = (p, ms, label) => Promise.race([
+        p,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(label + ' timeout ' + ms + 'ms')), ms)),
+      ]);
+      (async () => {
+        let sbSaved = false, localSaved = false;
+        if (window.sb) {
+          try {
+            const { data: sess } = await withTimeout(window.sb.auth.getSession(), 4000, 'getSession');
+            const sbUser = sess && sess.session && sess.session.user;
+            if (sbUser) {
+              const upsertPromise = window.sb.from('profiles').upsert({
+                id: sbUser.id,
+                email: sbUser.email,
+                name: ME && ME.name,
+                org_name: state.org || null,
+                hs_focus: state.hs,
+                target_countries: state.countries,
+                export_status: state.export_status,
+                goal: state.goal,
+                onboarded: true,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'id' });
+              const { error } = await withTimeout(upsertPromise, 8000, 'SB upsert');
+              if (!error) sbSaved = true;
+              else console.warn('[eksporin] SB upsert error:', error);
+            }
+          } catch (e) { console.warn('[eksporin] SB save:', e); }
+        }
+        try {
+          await withTimeout(api('/api/me/onboarding', { method: 'POST', body: payload }), 8000, 'local save');
+          localSaved = true;
+        } catch (e) { console.warn('[eksporin] Local save:', e); }
+        if (sbSaved) {
+          try { await withTimeout(syncSupabaseSession(), 5000, 'sync'); } catch {}
+        }
+        if (sbSaved || localSaved) {
+          try { localStorage.removeItem('eksporin_pending_onboarding'); } catch {}
+        }
+      })();
     };
     $('#w-skip').onclick = finish;
     $('#w-next').onclick = async () => {
