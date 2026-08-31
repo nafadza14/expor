@@ -527,19 +527,43 @@ route(/^\/login$/, (app) => {
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const email = fd.get('email');
-    const password = fd.get('password');
+    const email = String(fd.get('email') || '').trim().toLowerCase();
+    const password = String(fd.get('password') || '');
+    const isDemo = email === 'demo@eksporin.id';
     try {
-      // Try Supabase first (primary auth path)
+      // Demo account uses local backend only (not in Supabase).
+      if (isDemo) {
+        const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
+        ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
+        return;
+      }
+      // Primary: Supabase auth
       if (window.sb) {
         const { data, error } = await window.sb.auth.signInWithPassword({ email, password });
-        if (!error && data.session) {
-          const r = await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
-          ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
+        if (error) {
+          const msg = (error.message || '').toLowerCase();
+          if (/email not confirmed|not.*verified/i.test(msg)) {
+            toast('Email Anda belum dikonfirmasi. Cek inbox untuk link konfirmasi.', true);
+          } else if (/invalid login credentials/i.test(msg)) {
+            toast('Email atau password salah.', true);
+          } else {
+            toast(error.message || 'Gagal masuk', true);
+          }
           return;
         }
+        if (!data || !data.session) {
+          toast('Login gagal — cek email konfirmasi Anda.', true);
+          return;
+        }
+        // Sync to backend (best-effort — Bearer token also auto-attaches on subsequent requests)
+        try { await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } }); } catch (e) { console.warn('[eksporin] sync warn:', e); }
+        // Fetch /api/me to determine onboarded state (uses Bearer token)
+        let onboarded = false;
+        try { const me = await api('/api/me'); onboarded = !!me.onboarded; } catch {}
+        ME = null; location.hash = onboarded ? '#/dashboard' : '#/onboarding';
+        return;
       }
-      // Fallback: local auth (demo account & pre-Supabase users)
+      // Fallback (Supabase SDK failed to load) — local backend
       const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
       ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
     } catch (err) { toast(err.data?.error || err.message || 'Gagal masuk', true); }
@@ -556,39 +580,69 @@ route(/^\/register$/, (app) => {
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const email = fd.get('email');
-    const password = fd.get('password');
-    const name = fd.get('name');
-    const org_name = fd.get('org_name') || null;
+    const email = String(fd.get('email') || '').trim().toLowerCase();
+    const password = String(fd.get('password') || '');
+    const name = String(fd.get('name') || '').trim();
+    const org_name = String(fd.get('org_name') || '').trim() || null;
+    const submitBtn = e.target.querySelector('button[type=submit], button:not([type])');
+    const origLabel = submitBtn && submitBtn.textContent;
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Mendaftar…'; }
     try {
-      if (window.sb) {
-        // Primary path: Supabase signUp
-        const { data, error } = await window.sb.auth.signUp({
-          email, password,
-          options: { data: { name, org_name } },
-        });
-        if (error) throw new Error(error.message || 'Gagal mendaftar');
-        // If email confirmation is disabled, we get a session immediately.
-        // If it's enabled, ask user to check their email.
-        if (!data.session) {
-          toast('Cek email Anda untuk konfirmasi akun, lalu masuk.', false);
-          location.hash = '#/login';
-          return;
-        }
-        // Sync to local backend
-        await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
+      if (!window.sb) {
+        // Fallback (Supabase SDK failed to load) — local backend only.
+        await api('/api/auth/register', { method: 'POST', body: { email, password, name, org_name } });
         ME = null; location.hash = '#/onboarding';
         return;
       }
-      // Fallback: local register (if Supabase SDK failed to load)
-      await api('/api/auth/register', { method: 'POST', body: { email, password, name, org_name } });
-      ME = null; location.hash = '#/onboarding';
-    } catch (err) { toast(err.data?.error || err.message || 'Gagal mendaftar', true); }
+      // Supabase signUp — this is the primary path.
+      const { data, error } = await window.sb.auth.signUp({
+        email, password,
+        options: {
+          data: { name, org_name },
+          emailRedirectTo: window.location.origin + '/',
+        },
+      });
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        if (/already registered|user already exists|already been registered/i.test(msg)) {
+          toast('Email sudah terdaftar. Silakan masuk.', true);
+          setTimeout(() => { location.hash = '#/login'; }, 800);
+        } else if (/password/i.test(msg) && /short|weak|character/i.test(msg)) {
+          toast('Password terlalu lemah. Minimal 8 karakter dengan campuran huruf & angka.', true);
+        } else if (/invalid.*email/i.test(msg)) {
+          toast('Format email tidak valid.', true);
+        } else {
+          toast(error.message || 'Gagal mendaftar', true);
+        }
+        return;
+      }
+      // If Supabase requires email confirmation, no session is returned yet.
+      if (!data || !data.session) {
+        toast('Akun dibuat. Cek email Anda untuk link konfirmasi, lalu masuk.', false);
+        setTimeout(() => { location.hash = '#/login'; }, 1200);
+        return;
+      }
+      // Session ready — sync to backend so local user + cookie exist too (best-effort).
+      try {
+        await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
+      } catch (syncErr) { console.warn('[eksporin] sync warn:', syncErr); }
+      ME = null;
+      toast('Akun berhasil dibuat! Yuk lengkapi profil.', false);
+      location.hash = '#/onboarding';
+    } catch (err) {
+      console.error('[eksporin] register error:', err);
+      toast(err.data?.error || err.message || 'Gagal mendaftar. Coba lagi.', true);
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = origLabel || 'Buat akun'; }
+    }
   });
 });
 
 // ================= onboarding wizard =================
 route(/^\/onboarding$/, async (app) => {
+  // If we just came in via email-confirmation callback, make sure the backend
+  // has an up-to-date local session before we call /api/me.
+  try { await syncSupabaseSession(); } catch {}
   try { ME = ME || await api('/api/me'); } catch { location.hash = '#/login'; return; }
   const leaves = await api('/api/hs/leaf');
   const state = { step: 0, hs: [], countries: [], export_status: null, goal: null, org: ME.org_name || '' };
