@@ -208,7 +208,7 @@ async function render() {
   const app = $('#app');
   for (const [rx, fn] of routes) {
     const m = path.match(rx);
-    if (m) { try { await fn(app, m, params); } catch (e) { if (!e.handled) { console.error(e); app.innerHTML = shell(`<div class="empty"><div class="ic">⚠️</div><h3>Terjadi kesalahan</h3><p class="muted">${esc(e.data?.error || 'Coba muat ulang halaman.')}</p></div>`); bindShell(); } } return; }
+    if (m) { try { await fn(app, m, params); } catch (e) { if (!e.handled) { console.error(e); try { app.innerHTML = shell(`<div class="empty"><div class="ic">⚠️</div><h3>Terjadi kesalahan</h3><p class="muted">${esc(e.data?.error || 'Coba muat ulang halaman.')}</p></div>`); bindShell(); } catch { app.innerHTML = `<div style="padding:60px 20px;text-align:center"><h2>Terjadi kesalahan</h2><p style="color:#737373;margin:12px 0 20px">${esc(e.data?.error || 'Coba muat ulang halaman.')}</p><button class="btn btn-primary" onclick="location.reload()">Muat ulang</button></div>`; } } } return; }
   }
   location.hash = '#/';
 }
@@ -695,12 +695,39 @@ route(/^\/register$/, (app) => {
 });
 
 // ================= onboarding wizard =================
+// Hardcoded fallback HS leaves — used when /api/hs/leaf fails (cold-start, timeout, etc.)
+const FALLBACK_HS_LEAVES = [
+  { code: '030343', description_en: 'Skipjack / stripe-bellied bonito, frozen', description_id: 'Cakalang beku' },
+  { code: '030389', description_en: 'Other fish, frozen', description_id: 'Ikan beku lainnya' },
+  { code: '030616', description_en: 'Cold-water shrimps and prawns, frozen', description_id: 'Udang air dingin beku' },
+  { code: '030617', description_en: 'Other shrimps and prawns, frozen', description_id: 'Udang beku lainnya' },
+  { code: '090111', description_en: 'Coffee, not roasted, not decaffeinated', description_id: 'Kopi biji, belum disangrai' },
+  { code: '090121', description_en: 'Coffee, roasted, not decaffeinated', description_id: 'Kopi sangrai' },
+  { code: '090411', description_en: 'Pepper, neither crushed nor ground', description_id: 'Lada utuh' },
+  { code: '090510', description_en: 'Vanilla, neither crushed nor ground', description_id: 'Vanili utuh (polong kering)' },
+  { code: '090520', description_en: 'Vanilla, crushed or ground', description_id: 'Vanili bubuk' },
+  { code: '090811', description_en: 'Nutmeg, neither crushed nor ground', description_id: 'Pala utuh' },
+  { code: '151311', description_en: 'Coconut (copra) oil, crude', description_id: 'Minyak kelapa mentah' },
+  { code: '160414', description_en: 'Tunas, skipjack, prepared/preserved', description_id: 'Tuna/cakalang olahan (kaleng)' },
+  { code: '160521', description_en: 'Shrimps and prawns, not in airtight containers', description_id: 'Udang olahan (non-kaleng)' },
+  { code: '400122', description_en: 'Technically specified natural rubber (TSNR)', description_id: 'Karet alam spesifikasi teknis (TSNR/SIR)' },
+  { code: '441231', description_en: 'Plywood of tropical wood', description_id: 'Kayu lapis kayu tropis' },
+  { code: '460212', description_en: 'Basketwork of rattan', description_id: 'Anyaman rotan' },
+  { code: '940161', description_en: 'Seats with wooden frames, upholstered', description_id: 'Kursi rangka kayu, berlapis' },
+  { code: '940169', description_en: 'Seats with wooden frames, other', description_id: 'Kursi rangka kayu lainnya' },
+  { code: '940330', description_en: 'Wooden furniture for offices', description_id: 'Perabot kayu untuk kantor' },
+  { code: '940350', description_en: 'Wooden furniture for bedrooms', description_id: 'Perabot kayu untuk kamar tidur' },
+  { code: '940360', description_en: 'Other wooden furniture', description_id: 'Perabot kayu lainnya' },
+];
 route(/^\/onboarding$/, async (app) => {
   // If we just came in via email-confirmation callback, make sure the backend
   // has an up-to-date local session before we call /api/me.
   try { await syncSupabaseSession(); } catch {}
-  try { ME = ME || await api('/api/me'); } catch { location.hash = '#/login'; return; }
-  const leaves = await api('/api/hs/leaf');
+  try { ME = ME || await api('/api/me', { timeout: 20000 }); } catch { location.hash = '#/login'; return; }
+  // Fetch HS leaf codes with fallback — onboarding must never break even if API is down
+  let leaves;
+  try { leaves = await api('/api/hs/leaf', { timeout: 20000 }); } catch (e) { console.warn('[eksporin] /api/hs/leaf failed, using fallback:', e); }
+  if (!Array.isArray(leaves) || !leaves.length) leaves = FALLBACK_HS_LEAVES;
   const state = { step: 0, hs: [], countries: [], export_status: null, goal: null, org: ME.org_name || '' };
   const COUNTRY_OPTS = ['US', 'JP', 'NL', 'AE', 'AU'];
   const draw = () => {

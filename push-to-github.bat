@@ -6,7 +6,7 @@ echo   Pushing EksporIn ke GitHub...
 echo ========================================
 echo.
 git add -A
-git commit -m "feat: Convix-inspired UI redesign + AI Buyer Discovery Engine 4-step pipeline"
+git commit -m "fix: onboarding wizard resilience - fallback HS codes, timeout, error handling"
 git push -u origin main --force
 echo.
 if %errorlevel%==0 (
