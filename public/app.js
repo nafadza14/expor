@@ -566,37 +566,133 @@ route(/^\/$/, async (app) => {
         <div class="overline" style="text-align:center;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--orange)">Fitur Utama</div>
         <h2 style="text-align:center;font-size:28px;margin-bottom:8px">Semua yang Anda butuhkan untuk ekspor</h2>
         <p class="muted" style="text-align:center;max-width:520px;margin:0 auto 40px">Dari pencarian buyer sampai kirim pesan pertama, dalam satu platform.</p>
-        <div class="grid grid-3" style="gap:20px">
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">🤖</div>
-            <h3 style="margin-bottom:8px">AI Buyer Discovery</h3>
-            <p class="muted body-sm">Deskripsikan komoditas dalam bahasa alami. AI memetakan HS code, mencari importir aktif, meng-enrich kontak, dan memberi skor prioritas.</p>
-          </div>
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">📊</div>
-            <h3 style="margin-bottom:8px">Direktori HS Code</h3>
-            <p class="muted body-sm">Telusuri buyer per kategori produk dengan data volume, nilai, dan negara asal. Drill-down dari bab sampai sub-heading 6-digit.</p>
-          </div>
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">🚢</div>
-            <h3 style="margin-bottom:8px">Shipment Explorer</h3>
-            <p class="muted body-sm">Telusuri data bill of lading lintas buyer untuk analisis mendalam. Filter per HS code, negara, eksportir, dan periode.</p>
-          </div>
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">🎯</div>
-            <h3 style="margin-bottom:8px">Match Score 0-100</h3>
-            <p class="muted body-sm">Setiap buyer mendapat skor berdasarkan aktivitas impor, pertumbuhan, kecocokan produk, dan ketersediaan kontak.</p>
-          </div>
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">👤</div>
-            <h3 style="margin-bottom:8px">Kontak Decision Maker</h3>
-            <p class="muted body-sm">Nama, email terverifikasi, dan profil LinkedIn dari Procurement Manager, Sourcing Director, dan posisi kunci lainnya.</p>
-          </div>
-          <div class="card" style="padding:28px;text-align:center">
-            <div style="font-size:36px;margin-bottom:12px">✉️</div>
-            <h3 style="margin-bottom:8px">Template Outreach</h3>
-            <p class="muted body-sm">Template multi-bahasa siap kirim dengan variabel otomatis. Lacak open rate dan reply rate dari dashboard.</p>
-          </div>
+        <div class="feature-grid">
+          ${[
+            {
+              title: 'AI Buyer Discovery',
+              desc: 'Deskripsikan komoditas dalam bahasa alami. AI memetakan HS code, mencari importir aktif, dan memberi skor prioritas.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <rect x="24" y="24" width="152" height="52" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.2"/>
+                <circle cx="46" cy="50" r="8" fill="#ffdfca"/>
+                <path d="M42 50 L46 54 L50 46" stroke="#ef4d23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <rect x="60" y="42" width="90" height="6" rx="3" fill="#e8dfd6"/>
+                <rect x="60" y="54" width="60" height="5" rx="2.5" fill="#f0e6dc"/>
+                <path d="M100 78 L100 96" stroke="#ef4d23" stroke-width="1.6" stroke-dasharray="3 3"/>
+                <path d="M100 90 L96 86 M100 90 L104 86" stroke="#ef4d23" stroke-width="1.6" stroke-linecap="round"/>
+                <g transform="translate(160 90)">
+                  <path d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" fill="#ef4d23"/>
+                </g>
+              </svg>`,
+              icon: 'sparkle',
+            },
+            {
+              title: 'Direktori HS Code',
+              desc: 'Telusuri buyer per kategori produk dengan data volume, nilai, dan negara asal. Drill-down dari bab sampai sub-heading 6-digit.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <rect x="24" y="22" width="152" height="14" rx="4" fill="#ffe9d8"/>
+                <text x="34" y="32" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">HS 0901</text>
+                <rect x="130" y="26" width="30" height="6" rx="3" fill="#ef4d23"/>
+                <rect x="24" y="42" width="70" height="30" rx="6" fill="#fff" stroke="#f4c9a8" stroke-width="1"/>
+                <rect x="30" y="48" width="20" height="4" rx="2" fill="#ffe0c9"/>
+                <text x="30" y="62" fill="#282828" font-size="7" font-weight="700" font-family="system-ui">4,240 buyer</text>
+                <rect x="106" y="42" width="70" height="30" rx="6" fill="#fff" stroke="#f4c9a8" stroke-width="1"/>
+                <rect x="112" y="48" width="20" height="4" rx="2" fill="#ffe0c9"/>
+                <text x="112" y="62" fill="#282828" font-size="7" font-weight="700" font-family="system-ui">218k ton</text>
+                <rect x="24" y="80" width="152" height="18" rx="6" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
+                <circle cx="36" cy="89" r="4" fill="#ef4d23"/>
+                <rect x="46" y="86" width="80" height="4" rx="2" fill="#e8dfd6"/>
+                <rect x="46" y="92" width="50" height="3" rx="1.5" fill="#f0e6dc"/>
+              </svg>`,
+              icon: 'grid',
+            },
+            {
+              title: 'Shipment Explorer',
+              desc: 'Telusuri data bill of lading lintas buyer untuk analisis mendalam. Filter per HS code, negara, eksportir, dan periode.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <path d="M20 96 Q100 88 180 96" stroke="#f4c9a8" stroke-width="1" fill="none" stroke-dasharray="2 3"/>
+                <rect x="60" y="52" width="80" height="30" rx="3" fill="#ef4d23"/>
+                <rect x="66" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
+                <rect x="86" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
+                <rect x="106" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
+                <rect x="126" y="42" width="14" height="14" rx="1.5" fill="#c53d18"/>
+                <path d="M40 82 L60 82 L64 74 L136 74 L140 82 L160 82 L156 92 L44 92 Z" fill="#fff" stroke="#282828" stroke-width="1.4"/>
+                <rect x="90" y="30" width="4" height="14" fill="#282828"/>
+                <path d="M94 30 L94 40 L108 36 Z" fill="#ef4d23"/>
+                <text x="18" y="28" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">🇮🇩 → 🇺🇸</text>
+              </svg>`,
+              icon: 'ship',
+            },
+            {
+              title: 'Match Score 0–100',
+              desc: 'Setiap buyer mendapat skor berdasarkan aktivitas impor, pertumbuhan, kecocokan produk, dan ketersediaan kontak.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <path d="M40 100 A60 60 0 0 1 160 100" stroke="#f4d0b0" stroke-width="8" fill="none" stroke-linecap="round"/>
+                <path d="M40 100 A60 60 0 0 1 148 62" stroke="#ef4d23" stroke-width="8" fill="none" stroke-linecap="round"/>
+                <text x="100" y="94" text-anchor="middle" fill="#282828" font-size="22" font-weight="700" font-family="system-ui">87</text>
+                <rect x="76" y="18" width="48" height="14" rx="7" fill="#ef4d23"/>
+                <text x="100" y="28" text-anchor="middle" fill="#fff" font-size="8" font-weight="700" font-family="system-ui">HOT LEAD</text>
+              </svg>`,
+              icon: 'target',
+            },
+            {
+              title: 'Kontak Decision Maker',
+              desc: 'Nama, email terverifikasi, dan profil LinkedIn dari Procurement Manager, Sourcing Director, dan posisi kunci lainnya.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <rect x="24" y="30" width="152" height="26" rx="8" fill="#fff" stroke="#f4c9a8" stroke-width="1.2"/>
+                <circle cx="40" cy="43" r="7" fill="#ffdfca"/>
+                <text x="40" y="46" text-anchor="middle" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">JT</text>
+                <rect x="54" y="37" width="80" height="4" rx="2" fill="#282828"/>
+                <rect x="54" y="45" width="60" height="3" rx="1.5" fill="#a99a8c"/>
+                <g transform="translate(148 43)">
+                  <circle r="6" fill="#4d8c35"/>
+                  <path d="M-2.5 0 L-0.5 2 L3 -2" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </g>
+                <rect x="24" y="64" width="152" height="26" rx="8" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
+                <circle cx="40" cy="77" r="7" fill="#ffdfca"/>
+                <text x="40" y="80" text-anchor="middle" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">MK</text>
+                <rect x="54" y="71" width="70" height="4" rx="2" fill="#282828"/>
+                <rect x="54" y="79" width="50" height="3" rx="1.5" fill="#a99a8c"/>
+                <g transform="translate(148 77)">
+                  <circle r="6" fill="#4d8c35"/>
+                  <path d="M-2.5 0 L-0.5 2 L3 -2" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </g>
+              </svg>`,
+              icon: 'user',
+            },
+            {
+              title: 'Template Outreach',
+              desc: 'Template multi-bahasa siap kirim dengan variabel otomatis. Lacak open rate dan reply rate dari dashboard.',
+              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+                <rect x="30" y="30" width="140" height="60" rx="8" fill="#fff" stroke="#f4c9a8" stroke-width="1.4"/>
+                <path d="M30 38 L100 68 L170 38" stroke="#ef4d23" stroke-width="1.6" fill="none"/>
+                <rect x="46" y="46" width="60" height="3" rx="1.5" fill="#e8dfd6"/>
+                <rect x="46" y="52" width="80" height="3" rx="1.5" fill="#e8dfd6"/>
+                <rect x="46" y="58" width="50" height="3" rx="1.5" fill="#e8dfd6"/>
+                <g transform="translate(154 96)">
+                  <circle r="10" fill="#ef4d23"/>
+                  <path d="M-4 0 L-1 3 L4 -3" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </g>
+                <text x="24" y="106" fill="#4d8c35" font-size="8" font-weight="700" font-family="system-ui">EN · ES · ZH · JA</text>
+              </svg>`,
+              icon: 'mail',
+            },
+          ].map((f) => `
+            <article class="feature-card">
+              <div class="feature-panel">${f.panel}</div>
+              <div class="feature-copy">
+                <h3>${f.title}</h3>
+                <p>${f.desc}</p>
+                <span class="feature-corner">${{
+                  sparkle: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1 L9.4 6.6 L15 8 L9.4 9.4 L8 15 L6.6 9.4 L1 8 L6.6 6.6 Z"/></svg>',
+                  grid: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.4"/><rect x="9" y="1" width="6" height="6" rx="1.4"/><rect x="1" y="9" width="6" height="6" rx="1.4"/><rect x="9" y="9" width="6" height="6" rx="1.4"/></svg>',
+                  ship: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 11 L14 11 L13 14 L3 14 Z"/><rect x="5" y="6" width="6" height="4" rx="0.5"/><rect x="7" y="2" width="2" height="4"/></svg>',
+                  target: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>',
+                  user: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14 Q2 9 8 9 Q14 9 14 14 Z"/></svg>',
+                  mail: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4 L8 9 L14.5 4"/></svg>',
+                }[f.icon]}</span>
+              </div>
+            </article>
+          `).join('')}
         </div>
       </div>
     </section>

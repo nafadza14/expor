@@ -144,9 +144,96 @@ textarea.input { height: auto; min-height: 90px; resize: vertical; }
 .bell .dot { position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); border: 2px solid #fff; }
 .content { padding: 24px 32px 64px; max-width: 1440px; width: 100%; margin: 0 auto; }
 
-/* ---------- cards ---------- */
-.card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-xl); padding: 24px; box-shadow: var(--shadow-xs); }
+/* ---------- cards (warm peach aesthetic) ---------- */
+.card {
+  background: #fff;
+  border: 1px solid rgba(255, 233, 218, 0.96);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow:
+    4px 14px 24px rgba(44, 35, 29, 0.06),
+    0 2px 6px rgba(44, 35, 29, 0.03);
+}
 .card-compact { padding: 18px; }
+
+/* ---------- Falcon-style feature cards (landing) ---------- */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.feature-card {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(255, 233, 218, 0.96);
+  border-radius: 20px;
+  box-shadow:
+    4px 14px 24px rgba(44, 35, 29, 0.08),
+    0 2px 6px rgba(44, 35, 29, 0.03);
+  transition: transform .2s ease, box-shadow .2s ease;
+  min-height: 320px;
+}
+.feature-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    6px 20px 32px rgba(44, 35, 29, 0.12),
+    0 3px 8px rgba(44, 35, 29, 0.04);
+}
+.feature-panel {
+  margin: 12px 12px 0;
+  border-radius: 16px 16px 12px 12px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 50% 75%, rgba(255, 225, 207, 0.35), transparent 50%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 243, 0.94));
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.feature-copy {
+  position: relative;
+  padding: 22px 24px 22px;
+}
+.feature-copy h3 {
+  margin: 0 0 8px;
+  color: #292929;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.feature-copy p {
+  margin: 0;
+  color: #777;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+  padding-right: 36px;
+}
+.feature-corner {
+  position: absolute;
+  right: 20px;
+  bottom: 22px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffdfca;
+  color: #ef4d23;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.feature-corner svg { width: 14px; height: 14px; }
+@media (max-width: 1100px) {
+  .feature-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .feature-grid { grid-template-columns: 1fr; }
+}
 .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .metric-card .lbl { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
 .metric-card .delta-up { color: var(--success-text); font-size: 12px; font-weight: 600; }
@@ -344,7 +431,30 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .dash-preview-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 640px) { .dash-preview-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; } }
 @media (min-width: 1024px) { .dash-preview-grid { grid-template-columns: repeat(3, 1fr); } }
-.preview-card { background: #fff; border-radius: 16px; padding: 20px; }
+.preview-card {
+  background: #fff;
+  border: 1px solid rgba(255, 233, 218, 0.96);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow:
+    4px 14px 20px rgba(44, 35, 29, 0.08),
+    0 2px 4px rgba(44, 35, 29, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+.preview-card::before {
+  content: '';
+  position: absolute;
+  inset: 12px 12px auto 12px;
+  height: 40%;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(255, 225, 207, 0.25), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 243, 0.7));
+  z-index: 0;
+  pointer-events: none;
+}
+.preview-card > * { position: relative; z-index: 1; }
 .preview-card .pc-header { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 10px; }
 .preview-card .pc-header .label { color: var(--orange); font-weight: 600; }
 .preview-card .pc-header .muted { color: #737373; }
