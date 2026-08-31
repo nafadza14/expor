@@ -107,7 +107,12 @@ async function rawFetch(path, opts) {
   // without relying on a persistent session cookie.
   const tok = await currentSbToken();
   if (tok) headers['Authorization'] = 'Bearer ' + tok;
-  return fetch(path, { credentials: 'same-origin', ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  // Abort after 12s so a stuck serverless function can never freeze the UI.
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), opts.timeout || 12000);
+  try {
+    return await fetch(path, { credentials: 'same-origin', ...opts, headers, signal: ac.signal, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  } finally { clearTimeout(t); }
 }
 
 async function api(path, opts = {}) {
@@ -763,6 +768,10 @@ route(/^\/onboarding$/, async (app) => {
         ME.onboarded = true;
       }
 
+      // Show a visible loading state IMMEDIATELY so the user never wonders
+      // whether the click registered while the dashboard route is loading.
+      app.innerHTML = '<div class="boot-splash"><div class="spinner"></div><p style="margin-top:20px;color:#737373;font-size:14px">Membuka dashboard…</p></div>';
+
       // Redirect to dashboard IMMEDIATELY — do not await any I/O.
       toast('Selamat datang di EksporIn! 🎉');
       location.hash = '#/dashboard';
@@ -827,8 +836,31 @@ route(/^\/onboarding$/, async (app) => {
 // ================= dashboard =================
 route(/^\/dashboard$/, async (app) => {
   await requireMe();
-  const d = await api('/api/dashboard');
-  await refreshMe();
+  // Render the shell with placeholders immediately so the user sees the app
+  // structure even if /api/dashboard is slow on a Vercel cold instance.
+  app.innerHTML = shell(`<div class="hero-card" style="margin-bottom:24px;text-align:center;padding:40px">
+    <div class="spinner" style="margin:0 auto 12px"></div>
+    <p class="muted">Memuat data dashboard…</p>
+  </div>`);
+  bindShell();
+  let d;
+  try {
+    d = await api('/api/dashboard');
+  } catch (e) {
+    console.warn('[eksporin] /api/dashboard failed, showing fallback:', e);
+    // Fallback: minimal dashboard so user sees SOMETHING even if backend is down.
+    d = {
+      saved: 0,
+      outreach: { total: 0, opened: 0, replied: 0 },
+      pipeline: [],
+      alerts_unread: 0,
+      trend: [],
+      country_breakdown: [],
+      recommendations: [],
+    };
+    setTimeout(() => toast('Dashboard sedang lambat merespons. Refresh halaman untuk data lengkap.', true), 300);
+  }
+  try { await refreshMe(); } catch {}
   const pl = Object.fromEntries(d.pipeline.map((p) => [p.status, p.n]));
   const q = ME.quotas;
   const quotaRow = (lbl, m) => {
