@@ -783,33 +783,50 @@ route(/^\/onboarding$/, async (app) => {
     $$('.option-card[data-goal]').forEach((el) => el.onclick = () => { state.goal = el.dataset.goal; draw(); });
     $('#w-back').onclick = () => { state.step = Math.max(0, state.step - 1); draw(); };
     const finish = async () => {
-      const payload = {
-        hs_focus: state.hs, target_countries: state.countries,
-        export_status: state.export_status, goal: state.goal,
-        org_name: state.org || null,
+      console.log('[eksporin] finish() invoked, state:', { step: state.step, hsN: state.hs.length, countriesN: state.countries.length, goal: state.goal });
+      // GUARANTEE redirect no matter what happens below. Set up a forced
+      // navigation that fires after a short delay if we somehow don't get there.
+      const forceRedirect = () => {
+        try { app.innerHTML = '<div class="boot-splash"><div class="spinner"></div><p style="margin-top:20px;color:#737373;font-size:14px">Membuka dashboard…</p></div>'; } catch {}
+        if (location.hash !== '#/dashboard') {
+          try { location.hash = '#/dashboard'; } catch {}
+          setTimeout(() => { if (location.hash !== '#/dashboard') { try { location.replace(location.pathname + '#/dashboard'); } catch {} } }, 100);
+        }
       };
+      // Immediate visual feedback so user knows click registered
+      try {
+        app.innerHTML = '<div class="boot-splash"><div class="spinner"></div><p style="margin-top:20px;color:#737373;font-size:14px">Membuka dashboard…</p></div>';
+      } catch (e) { console.error('[eksporin] splash render failed:', e); }
+
+      let payload;
+      try {
+        payload = {
+          hs_focus: Array.isArray(state.hs) ? state.hs : [],
+          target_countries: Array.isArray(state.countries) ? state.countries : [],
+          export_status: state.export_status || null,
+          goal: state.goal || null,
+          org_name: state.org || null,
+        };
+      } catch (e) { console.error('[eksporin] payload build failed:', e); payload = { hs_focus: [], target_countries: [] }; }
 
       // Cache the payload FIRST so retryPendingOnboarding() can pick it up
-      // from any tab boot until it lands cleanly.
-      try { localStorage.setItem('eksporin_pending_onboarding', JSON.stringify(payload)); } catch {}
+      try { localStorage.setItem('eksporin_pending_onboarding', JSON.stringify(payload)); } catch (e) { console.warn('[eksporin] localStorage set failed:', e); }
 
       // Optimistically patch ME so requireMe() on /dashboard doesn't bounce.
-      if (ME) {
-        ME.hs_focus = state.hs;
-        ME.target_countries = state.countries;
-        ME.export_status = state.export_status;
-        ME.goal = state.goal;
-        ME.org_name = state.org || ME.org_name;
-        ME.onboarded = true;
-      }
-
-      // Show a visible loading state IMMEDIATELY so the user never wonders
-      // whether the click registered while the dashboard route is loading.
-      app.innerHTML = '<div class="boot-splash"><div class="spinner"></div><p style="margin-top:20px;color:#737373;font-size:14px">Membuka dashboard…</p></div>';
+      try {
+        if (ME) {
+          ME.hs_focus = payload.hs_focus;
+          ME.target_countries = payload.target_countries;
+          ME.export_status = payload.export_status;
+          ME.goal = payload.goal;
+          ME.org_name = payload.org_name || ME.org_name || null;
+          ME.onboarded = true;
+        }
+      } catch (e) { console.error('[eksporin] ME patch failed:', e); }
 
       // Redirect to dashboard IMMEDIATELY — do not await any I/O.
-      toast('Selamat datang di EksporIn! 🎉');
-      location.hash = '#/dashboard';
+      try { toast('Selamat datang di EksporIn! 🎉'); } catch (e) { console.warn('[eksporin] toast failed:', e); }
+      forceRedirect();
 
       // Fire-and-forget saves. Timeout each so a stuck Vercel cold-start
       // never leaves data unwritten forever — the retry loop from
@@ -855,14 +872,20 @@ route(/^\/onboarding$/, async (app) => {
         }
       })();
     };
-    $('#w-skip').onclick = finish;
+    $('#w-skip').onclick = async () => { try { await finish(); } catch (e) { console.error('[eksporin] skip finish err:', e); location.hash = '#/dashboard'; } };
     $('#w-next').onclick = async () => {
-      if (state.step === 0) state.org = $('#w-org').value.trim();
-      // Show a friendly hint when the user hasn't selected anything on optional
-      // steps, but don't block them — they can always refine choices later.
-      if (state.step === 1 && !state.hs.length) toast('Tip: pilih HS untuk rekomendasi lebih akurat. Anda bisa lewati juga.', false);
-      if (state.step === 2 && !state.countries.length) toast('Tip: pilih negara target agar alert lebih relevan.', false);
-      if (state.step < 4) { state.step++; draw(); } else await finish();
+      try {
+        if (state.step === 0) { const el = $('#w-org'); if (el) state.org = el.value.trim(); }
+        // Show a friendly hint when the user hasn't selected anything on optional
+        // steps, but don't block them — they can always refine choices later.
+        if (state.step === 1 && !state.hs.length) toast('Tip: pilih HS untuk rekomendasi lebih akurat. Anda bisa lewati juga.', false);
+        if (state.step === 2 && !state.countries.length) toast('Tip: pilih negara target agar alert lebih relevan.', false);
+        if (state.step < 4) { state.step++; draw(); } else await finish();
+      } catch (e) {
+        console.error('[eksporin] w-next handler err:', e);
+        // Never leave the user stuck — force redirect to dashboard on catastrophic failure.
+        if (state.step === 4) { try { location.hash = '#/dashboard'; } catch {} }
+      }
     };
   };
   draw();
