@@ -697,10 +697,19 @@ route(/^\/onboarding$/, async (app) => {
         export_status: state.export_status, goal: state.goal,
         org_name: state.org || null,
       };
-      // 1) Try Supabase profiles (source of truth if the table exists). Best-effort —
-      //    if the table isn't set up yet or RLS blocks us, we log and continue so the
-      //    user is never stuck on the wizard.
+      // Disable the buttons so the user cannot double-tap and stack toasts.
+      const nextBtn = $('#w-next'); const skipBtn = $('#w-skip');
+      if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Menyimpan…'; }
+      if (skipBtn) { skipBtn.disabled = true; }
+
       let sbSaved = false;
+      let localSaved = false;
+      let lastError = null;
+
+      // 1) Save to Supabase profile — this is the source of truth. On Vercel
+      //    even if the local backend is misbehaving on cold-start, having the
+      //    profile in Supabase means every subsequent Bearer-authenticated
+      //    request will re-sync the local user from that profile.
       if (window.sb) {
         try {
           const { data: sess } = await window.sb.auth.getSession();
@@ -718,28 +727,40 @@ route(/^\/onboarding$/, async (app) => {
               onboarded: true,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'id' });
-            if (error) {
-              console.warn('[eksporin] Supabase profile save skipped:', error.message);
-            } else {
-              sbSaved = true;
-            }
+            if (error) { console.warn('[eksporin] SB profile upsert error:', error); lastError = error; }
+            else { sbSaved = true; }
           }
-        } catch (e) {
-          console.warn('[eksporin] Supabase profile save threw:', e);
-        }
+        } catch (e) { console.warn('[eksporin] SB profile save threw:', e); lastError = e; }
       }
-      // 2) Local backend save — this is what makes onboarding "stick" for the buyer
-      //    intel features (search, alerts, scoring). The auto-recovering api() will
-      //    re-sync the session from Supabase if the local cookie is stale.
+
+      // 2) Local backend save — best-effort. May fail on Vercel cold instances
+      //    where SQLite state doesn't survive between invocations.
       try {
         await api('/api/me/onboarding', { method: 'POST', body: payload });
+        localSaved = true;
       } catch (e) {
-        console.error('[eksporin] Local onboarding save failed:', e);
-        toast(e.data?.error || 'Gagal menyimpan onboarding. Coba lagi.', true);
+        console.warn('[eksporin] Local onboarding save failed (status=' + e.status + '):', e.data);
+        lastError = e;
+      }
+
+      // 3) If Supabase saved, force a fresh backend sync so subsequent
+      //    Bearer-authed requests see the new profile immediately.
+      if (sbSaved) {
+        try { await syncSupabaseSession(); } catch {}
+      }
+
+      if (!sbSaved && !localSaved) {
+        if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Selesai & buka dashboard'; }
+        if (skipBtn) { skipBtn.disabled = false; }
+        const msg = lastError && (lastError.data && lastError.data.error || lastError.message)
+          ? String(lastError.data && lastError.data.error || lastError.message)
+          : 'Gagal menyimpan onboarding. Coba lagi.';
+        toast(msg, true);
         return;
       }
+
       ME = null;
-      toast(sbSaved ? 'Selamat datang di EksporIn! 🎉' : 'Onboarding tersimpan.');
+      toast('Selamat datang di EksporIn! 🎉');
       location.hash = '#/dashboard';
     };
     $('#w-skip').onclick = finish;
