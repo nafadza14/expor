@@ -2,6 +2,10 @@
 'use strict';
 const { hashPassword, verifyPassword, createSession, getSessionUser, destroySession, sessionCookie, clearCookie } = require('./auth');
 
+// Supabase bridge config — matches public/supabase-client.js. Publishable key is safe on server too.
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dbdzmhrofgcmkdszjxxq.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_--qPH56dWsGCxUzm7Mc_Aw_2P53hp3r';
+
 // ---------- plans (Feature-by-Tier matrix, doc 03 §7) ----------
 const PLANS = {
   free:     { name: 'Free',     price: 0,      search: 20,  profile: 3,    saved: 10,  send: 5,    alerts: 0,    export: 0,     contacts: false, competitor: false, sys_templates: 3 },
@@ -178,6 +182,70 @@ function handleApi(db, req, res, url, body) {
     res.setHeader('Set-Cookie', sessionCookie(createSession(db, u.id)));
     return json(res, 200, { ok: true, onboarded: !!u.onboarded });
   }
+  // Supabase bridge: verify a Supabase access_token, upsert a local user row
+  // that mirrors the Supabase user + profile, and issue a local session cookie so
+  // the rest of the buyer-intelligence API continues to work unchanged.
+  if (route('POST', '/api/auth/supabase-sync')) {
+    return (async () => {
+      const { access_token } = body || {};
+      if (!access_token || typeof access_token !== 'string') return err(res, 400, 'access_token wajib diisi.');
+      try {
+        const uResp = await fetch(SUPABASE_URL + '/auth/v1/user', {
+          headers: { 'Authorization': 'Bearer ' + access_token, 'apikey': SUPABASE_ANON_KEY },
+        });
+        if (!uResp.ok) return err(res, 401, 'Token Supabase tidak valid.');
+        const sbUser = await uResp.json();
+        if (!sbUser || !sbUser.email) return err(res, 401, 'User Supabase tidak ditemukan.');
+
+        // Fetch profile row (RLS ensures user only sees their own)
+        let profile = {};
+        try {
+          const pResp = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(sbUser.id)}&select=*`, {
+            headers: { 'Authorization': 'Bearer ' + access_token, 'apikey': SUPABASE_ANON_KEY, 'Accept': 'application/json' },
+          });
+          if (pResp.ok) { const arr = await pResp.json(); if (Array.isArray(arr) && arr[0]) profile = arr[0]; }
+        } catch { /* profile is optional */ }
+
+        const email = sbUser.email;
+        const displayName = profile.name || (sbUser.user_metadata && sbUser.user_metadata.name) || email.split('@')[0];
+        const orgName = profile.org_name || (sbUser.user_metadata && sbUser.user_metadata.org_name) || null;
+        const hsFocus = Array.isArray(profile.hs_focus) ? profile.hs_focus : [];
+        const targetCountries = Array.isArray(profile.target_countries) ? profile.target_countries : [];
+        const exportStatus = profile.export_status || null;
+        const goal = profile.goal || null;
+        const onboarded = profile.onboarded ? 1 : 0;
+
+        let u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+        if (!u) {
+          db.prepare(`INSERT INTO users (email, password_hash, name, org_name, hs_focus, target_countries, export_status, goal, onboarded)
+                      VALUES (?,?,?,?,?,?,?,?,?)`)
+            .run(email, 'supabase:' + sbUser.id, displayName, orgName,
+                 JSON.stringify(hsFocus), JSON.stringify(targetCountries),
+                 exportStatus, goal, onboarded);
+          u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+        } else {
+          // Sync profile → local (Supabase profile is source of truth for these fields)
+          db.prepare(`UPDATE users SET name=COALESCE(?,name), org_name=COALESCE(?,org_name),
+                      hs_focus=?, target_countries=?, export_status=COALESCE(?,export_status),
+                      goal=COALESCE(?,goal), onboarded=? WHERE id=?`)
+            .run(displayName, orgName,
+                 JSON.stringify(hsFocus.length ? hsFocus : JSON.parse(u.hs_focus || '[]')),
+                 JSON.stringify(targetCountries.length ? targetCountries : JSON.parse(u.target_countries || '[]')),
+                 exportStatus, goal,
+                 (onboarded || u.onboarded) ? 1 : 0,
+                 u.id);
+          u = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
+        }
+
+        res.setHeader('Set-Cookie', sessionCookie(createSession(db, u.id)));
+        return json(res, 200, { ok: true, onboarded: !!u.onboarded, email });
+      } catch (e) {
+        console.error('[supabase-sync]', e);
+        return err(res, 500, 'Gagal sinkronisasi dengan Supabase.');
+      }
+    })();
+  }
+
   if (route('POST', '/api/auth/logout')) {
     destroySession(db, req);
     res.setHeader('Set-Cookie', clearCookie());

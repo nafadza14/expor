@@ -213,7 +213,12 @@ function shell(content) {
   </div></div>`;
 }
 function bindShell() {
-  $('#nav-logout')?.addEventListener('click', async (e) => { e.preventDefault(); await api('/api/auth/logout', { method: 'POST' }); ME = null; location.hash = '#/'; });
+  $('#nav-logout')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (window.sb) { try { await window.sb.auth.signOut(); } catch {} }
+    await api('/api/auth/logout', { method: 'POST' });
+    ME = null; location.hash = '#/';
+  });
   $('#global-search')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
       const v = e.target.value.trim();
@@ -484,10 +489,22 @@ route(/^\/login$/, (app) => {
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const email = fd.get('email');
+    const password = fd.get('password');
     try {
-      const r = await api('/api/auth/login', { method: 'POST', body: { email: fd.get('email'), password: fd.get('password') } });
+      // Try Supabase first (primary auth path)
+      if (window.sb) {
+        const { data, error } = await window.sb.auth.signInWithPassword({ email, password });
+        if (!error && data.session) {
+          const r = await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
+          ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
+          return;
+        }
+      }
+      // Fallback: local auth (demo account & pre-Supabase users)
+      const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
       ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
-    } catch (err) { toast(err.data?.error || 'Gagal masuk', true); }
+    } catch (err) { toast(err.data?.error || err.message || 'Gagal masuk', true); }
   });
 });
 route(/^\/register$/, (app) => {
@@ -501,10 +518,34 @@ route(/^\/register$/, (app) => {
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const email = fd.get('email');
+    const password = fd.get('password');
+    const name = fd.get('name');
+    const org_name = fd.get('org_name') || null;
     try {
-      await api('/api/auth/register', { method: 'POST', body: Object.fromEntries(fd) });
+      if (window.sb) {
+        // Primary path: Supabase signUp
+        const { data, error } = await window.sb.auth.signUp({
+          email, password,
+          options: { data: { name, org_name } },
+        });
+        if (error) throw new Error(error.message || 'Gagal mendaftar');
+        // If email confirmation is disabled, we get a session immediately.
+        // If it's enabled, ask user to check their email.
+        if (!data.session) {
+          toast('Cek email Anda untuk konfirmasi akun, lalu masuk.', false);
+          location.hash = '#/login';
+          return;
+        }
+        // Sync to local backend
+        await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
+        ME = null; location.hash = '#/onboarding';
+        return;
+      }
+      // Fallback: local register (if Supabase SDK failed to load)
+      await api('/api/auth/register', { method: 'POST', body: { email, password, name, org_name } });
       ME = null; location.hash = '#/onboarding';
-    } catch (err) { toast(err.data?.error || 'Gagal mendaftar', true); }
+    } catch (err) { toast(err.data?.error || err.message || 'Gagal mendaftar', true); }
   });
 });
 
@@ -559,7 +600,32 @@ route(/^\/onboarding$/, async (app) => {
     $$('.option-card[data-goal]').forEach((el) => el.onclick = () => { state.goal = el.dataset.goal; draw(); });
     $('#w-back').onclick = () => { state.step = Math.max(0, state.step - 1); draw(); };
     const finish = async () => {
-      await api('/api/me/onboarding', { method: 'POST', body: { hs_focus: state.hs, target_countries: state.countries, export_status: state.export_status, goal: state.goal, org_name: state.org || null } });
+      const payload = {
+        hs_focus: state.hs, target_countries: state.countries,
+        export_status: state.export_status, goal: state.goal,
+        org_name: state.org || null,
+      };
+      // Persist to Supabase profile if user is a Supabase-authed session
+      if (window.sb) {
+        try {
+          const { data: { user: sbUser } } = await window.sb.auth.getUser();
+          if (sbUser) {
+            await window.sb.from('profiles').upsert({
+              id: sbUser.id,
+              email: sbUser.email,
+              name: ME.name,
+              org_name: state.org || null,
+              hs_focus: state.hs,
+              target_countries: state.countries,
+              export_status: state.export_status,
+              goal: state.goal,
+              onboarded: true,
+            }, { onConflict: 'id' });
+          }
+        } catch (e) { console.warn('[eksporin] Supabase profile save failed:', e); }
+      }
+      // Local backend (always — buyer intel features read from here)
+      await api('/api/me/onboarding', { method: 'POST', body: payload });
       ME = null; toast('Selamat datang di EksporIn! 🎉'); location.hash = '#/dashboard';
     };
     $('#w-skip').onclick = finish;
@@ -1456,5 +1522,20 @@ route(/^\/billing$/, async (app) => {
   });
 });
 
-// boot
-render();
+// boot: if a Supabase session exists in localStorage (returning user),
+// sync it to the local backend BEFORE the router runs so protected APIs work.
+async function boot() {
+  if (window.sb) {
+    try {
+      const { data } = await window.sb.auth.getSession();
+      if (data && data.session && data.session.access_token) {
+        await fetch('/api/auth/supabase-sync', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: data.session.access_token }),
+        });
+      }
+    } catch (e) { console.warn('[eksporin] Supabase boot sync failed:', e); }
+  }
+  render();
+}
+boot();

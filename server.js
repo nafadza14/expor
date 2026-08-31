@@ -36,7 +36,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       if (!db) db = await getDb();
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null;
-      return handleApi(db, req, res, url, body || {});
+      return await handleApi(db, req, res, url, body || {});
     }
     // static files (SPA)
     let file = url.pathname === '/' ? '/index.html' : url.pathname;
