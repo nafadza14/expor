@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    return handleApi(db, req, res, url, body || {});
+    return await handleApi(db, req, res, url, body || {});
   } catch (e) {
     console.error('[eksporin] API error:', e.message, e.stack);
     if (!res.headersSent) {

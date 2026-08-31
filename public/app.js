@@ -306,10 +306,56 @@ async function retryPendingOnboarding() {
 // backend save didn't persist (Vercel serverless cold-start re-seeds DB).
 function isStickyOnboarded() { try { return localStorage.getItem('eksporin_onboarded') === '1'; } catch { return false; } }
 function setStickyOnboarded() { try { localStorage.setItem('eksporin_onboarded', '1'); } catch {} }
+// Read user profile directly from Supabase — avoids Vercel serverless
+// cold-start latency on the /api/me call. Returns a ME-shaped object.
+async function loadMeFromSupabase() {
+  if (!window.sb) return null;
+  try {
+    const { data: sess } = await window.sb.auth.getSession();
+    const sbUser = sess && sess.session && sess.session.user;
+    if (!sbUser) return null;
+    let profile = {};
+    try {
+      const { data, error } = await window.sb.from('profiles').select('*').eq('id', sbUser.id).maybeSingle();
+      if (!error && data) profile = data;
+    } catch (e) { console.warn('[eksporin] SB profile read:', e); }
+    const plan = profile.plan || 'free';
+    const planNames = { free: 'Free', starter: 'Starter', growth: 'Growth', business: 'Business' };
+    return {
+      id: sbUser.id,
+      email: sbUser.email,
+      name: profile.name || (sbUser.user_metadata && sbUser.user_metadata.name) || sbUser.email.split('@')[0],
+      org_name: profile.org_name || null,
+      plan,
+      plan_name: planNames[plan] || 'Free',
+      onboarded: !!profile.onboarded,
+      hs_focus: Array.isArray(profile.hs_focus) ? profile.hs_focus : [],
+      target_countries: Array.isArray(profile.target_countries) ? profile.target_countries : [],
+      export_status: profile.export_status || null,
+      goal: profile.goal || null,
+      quotas: {
+        search: { used: 0, limit: 20 },
+        profile: { used: 0, limit: 3 },
+        send: { used: 0, limit: 5 },
+        export: { used: 0, limit: 0 },
+      },
+      contacts_visible: false,
+      saved: { used: 0, limit: 10 },
+      unread_alerts: 0,
+      _fromSupabase: true,
+    };
+  } catch (e) { console.warn('[eksporin] loadMeFromSupabase:', e); return null; }
+}
+
 async function requireMe() {
   if (!ME) {
-    try { ME = await api('/api/me'); }
-    catch { location.hash = '#/login'; throw { handled: true }; }
+    // Prefer direct Supabase read (fast, bypasses Vercel serverless cold start).
+    ME = await loadMeFromSupabase();
+    if (!ME) {
+      // Fallback for demo account (lives only in local backend).
+      try { ME = await api('/api/me'); }
+      catch { location.hash = '#/login'; throw { handled: true }; }
+    }
   }
   // Preserve optimistic onboarded=true when a save is still pending, OR when
   // the user completed onboarding in a previous session (sticky flag).
@@ -733,10 +779,14 @@ const FALLBACK_HS_LEAVES = [
   { code: '940360', description_en: 'Other wooden furniture', description_id: 'Perabot kayu lainnya' },
 ];
 route(/^\/onboarding$/, async (app) => {
-  // If we just came in via email-confirmation callback, make sure the backend
-  // has an up-to-date local session before we call /api/me.
-  try { await syncSupabaseSession(); } catch {}
-  try { ME = ME || await api('/api/me', { timeout: 20000 }); } catch { location.hash = '#/login'; return; }
+  // Read user from Supabase directly — no dependency on local backend cold start.
+  if (!ME) {
+    ME = await loadMeFromSupabase();
+  }
+  if (!ME) {
+    // Demo account fallback (local backend only).
+    try { ME = await api('/api/me', { timeout: 20000 }); } catch { location.hash = '#/login'; return; }
+  }
   // Fetch HS leaf codes with fallback — onboarding must never break even if API is down
   let leaves;
   try { leaves = await api('/api/hs/leaf', { timeout: 20000 }); } catch (e) { console.warn('[eksporin] /api/hs/leaf failed, using fallback:', e); }
