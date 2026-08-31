@@ -42,8 +42,37 @@ const I = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   logoW: '<svg viewBox="0 0 32 32" fill="none"><path d="M8 22 L14 12 L18 17 L24 8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M16 15H8a5 5 0 0 0-5 5v1h18v-1a5 5 0 0 0-5-5z"/><circle cx="19" cy="5" r="2.5" fill="currentColor" stroke="none"/><path d="M19 3v4M17 5h4" stroke="white" stroke-width="1.2"/></svg>',
+  ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>',
+  chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>',
+  trendUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m23 6-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
+  trendDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m23 18-9.5-9.5-5 5L1 6"/><path d="M17 18h6v-6"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12h16M4 6h16M4 18h16"/></svg>',
 };
+
+// EksporIn logo SVG (8-petal flower, orange)
+const LOGO_SVG = `<svg viewBox="0 0 32 32" width="32" height="32"><circle cx="16" cy="6" r="3.5" fill="#ef4d23"/><circle cx="16" cy="26" r="3.5" fill="#ef4d23"/><circle cx="6" cy="16" r="3.5" fill="#ef4d23"/><circle cx="26" cy="16" r="3.5" fill="#ef4d23"/><circle cx="8.9" cy="8.9" r="3.5" fill="#ef4d23"/><circle cx="23.1" cy="23.1" r="3.5" fill="#ef4d23"/><circle cx="23.1" cy="8.9" r="3.5" fill="#ef4d23"/><circle cx="8.9" cy="23.1" r="3.5" fill="#ef4d23"/><circle cx="16" cy="16" r="3.5" fill="#ef4d23"/></svg>`;
+
+// Arc gauge (Convix-style tick marks)
+function arcGauge(value, { color = '#ef4d23', showLabels = false, min = '', max = '' } = {}) {
+  const ticks = 40;
+  const active = Math.round((value / 100) * ticks);
+  const cx = 100, cy = 100, r = 80;
+  let lines = '';
+  for (let i = 0; i < ticks; i++) {
+    const angle = Math.PI + (i / (ticks - 1)) * Math.PI;
+    const x1 = cx + (r - 10) * Math.cos(angle);
+    const y1 = cy + (r - 10) * Math.sin(angle);
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    const c = i < active ? color : '#d4d4d8';
+    lines += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/>`;
+  }
+  let html = `<div class="arc-gauge"><svg viewBox="0 0 200 120" style="max-width:220px;width:100%">${lines}
+    <text x="100" y="105" text-anchor="middle" font-size="22" font-weight="600" fill="currentColor">${value}%</text></svg>`;
+  if (showLabels) html += `<div class="arc-gauge-labels"><span>${esc(min)}</span><span>${esc(max)}</span></div>`;
+  html += '</div>';
+  return html;
+}
 
 // state
 let ME = null;
@@ -113,14 +142,8 @@ function barChart(points, { w = 640, hgt = 190, color = 'var(--viz-1)', labelKey
 }
 function gauge(score) {
   if (score == null) return '<div class="muted">N/A</div>';
-  const r = 44, c = 2 * Math.PI * r, frac = score / 100;
-  const col = score >= 80 ? '#B91C1C' : score >= 60 ? '#B45309' : score >= 40 ? '#1D4ED8' : '#94A3B8';
-  return `<svg viewBox="0 0 110 110" width="110" height="110">
-    <circle cx="55" cy="55" r="${r}" fill="none" stroke="var(--border-subtle)" stroke-width="10"/>
-    <circle cx="55" cy="55" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round"
-      stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 55 55)"/>
-    <text x="55" y="52" text-anchor="middle" font-size="26" font-weight="700" fill="var(--text-primary)">${score}</text>
-    <text x="55" y="70" text-anchor="middle" font-size="10" fill="var(--text-secondary)">EksporIn Score</text></svg>`;
+  const col = score >= 80 ? '#B91C1C' : score >= 60 ? '#ef4d23' : score >= 40 ? '#B45309' : '#9a9a9a';
+  return arcGauge(score, { color: col, showLabels: false });
 }
 function scoreBars(components) {
   const rows = [['Aktivitas impor', components.activity, '30%'], ['Pertumbuhan', components.growth, '20%'], ['Kecocokan produk', components.product_fit, '25%'], ['Kontak tersedia', components.reachability, '15%'], ['Belum dari RI', components.untapped, '10%']];
@@ -156,7 +179,7 @@ function navItem(href, icon, label, badge = 0) {
 }
 function shell(content) {
   const u = ME;
-  const planPill = { free: 'pill-neutral', starter: 'pill-info', growth: 'pill-success', business: 'pill-violet' }[u.plan] || 'pill-neutral';
+  const planPill = { free: 'pill-neutral', starter: 'pill-orange', growth: 'pill-success', business: 'pill-violet' }[u.plan] || 'pill-neutral';
   return `<div class="app-shell">
   <aside class="sidebar">
     <div class="sidebar-brand"><span class="logo">${I.logoW}</span>EksporIn</div>
@@ -209,34 +232,107 @@ async function refreshMe() { ME = await api('/api/me'); }
 route(/^\/$/, async (app) => {
   try { ME = await api('/api/me'); if (ME) { location.hash = '#/dashboard'; return; } } catch { /* not logged in */ }
   app.innerHTML = `
-  <nav class="landing-nav"><div class="sidebar-brand" style="padding:0"><span class="logo">${I.logoW}</span>EksporIn</div>
-    <div style="display:flex;gap:10px"><a class="btn btn-ghost" href="#/login">Masuk</a><a class="btn btn-primary" href="#/register">Daftar gratis</a></div></nav>
-  <section class="landing-hero">
-    <span class="pill pill-info" style="margin-bottom:16px">🇮🇩 Dibuat untuk UKM eksportir Indonesia</span>
-    <h1>Temukan buyer luar negeri dari data bea cukai — bukan tebak-tebakan</h1>
-    <p>Direktori importir global terorganisir per HS code, lengkap dengan riwayat shipment, skor prioritas, dan template outreach. Harga 1/20 dari Panjiva.</p>
-    <div style="display:flex;gap:12px;justify-content:center"><a class="btn btn-lg btn-primary" href="#/register">Mulai gratis — tanpa kartu kredit</a><a class="btn btn-lg btn-neutral" href="#/login">Coba akun demo</a></div>
-    <p class="caption" style="margin-top:14px;color:var(--text-tertiary)">Akun demo: demo@eksporin.id · demo1234</p>
-  </section>
-  <section class="landing-feats">
-    ${[['📦', 'Direktori per HS Code', 'Telusuri ribuan importir aktif per kategori produk — kopi, furnitur, seafood, rempah, dan lainnya.'],
-      ['🎯', 'EksporIn Score', 'Skor 0–100 per buyer berdasarkan aktivitas, pertumbuhan, kecocokan produk, dan ketersediaan kontak.'],
-      ['🚢', 'Riwayat Shipment', 'Data bill of lading level: tanggal, volume, pelabuhan, nilai, dan siapa pemasok kompetitor Anda.'],
-      ['✉️', 'Outreach Toolkit', 'Template email 5+ bahasa dengan variabel otomatis. Lacak terkirim, dibuka, dan dibalas.']]
-      .map(([ic, t, d]) => `<div class="card"><div style="font-size:28px;margin-bottom:10px">${ic}</div><h3 style="margin-bottom:6px">${t}</h3><p class="muted body-sm">${d}</p></div>`).join('')}
-  </section>`;
+  <div class="landing-wrap">
+    <div class="landing-hero-container">
+      <video class="landing-video" autoplay loop muted playsinline preload="auto" disableremoteplayback
+        webkit-playsinline="true" x5-playsinline="true"
+        poster="https://images.unsplash.com/photo-1557683316-973673baf926?w=1600&q=60">
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260424_064411_9e9d7f84-9277-41f4-ab10-59172d89e6be.mp4" type="video/mp4">
+      </video>
+      <div class="landing-video-overlay"></div>
+      <div class="landing-fg">
+        <!-- Floating pill navbar -->
+        <div class="pill-nav-wrap">
+          <div class="pill-nav">
+            <div class="logo" style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px">
+              ${LOGO_SVG} EksporIn
+            </div>
+            <div class="pill-nav-links">
+              <a href="#/"><span class="dot"></span> Home</a>
+              <a href="#/login">Features</a>
+              <a href="#/register">About</a>
+            </div>
+            <a class="pill-nav-cta" href="#/register">
+              Mulai gratis
+              <span class="arrow-circle"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Hero content -->
+        <div class="hero-content">
+          <div class="hero-badge"><span class="dot"></span> EksporIn Platform</div>
+          <h1 class="hero-headline">
+            Shaping <span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">Exporters</span><br>
+            of tomorrow
+          </h1>
+          <p class="hero-sub">Platform Intelijen Buyer Global untuk Eksportir Indonesia. Data customs, AI scoring, kontak decision maker — semua dalam satu dashboard.</p>
+          <a class="hero-cta" href="#/register">
+            Mulai Gratis
+            <span class="arrow-circle"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
+          </a>
+          <p class="caption" style="margin-top:14px;color:var(--text-tertiary)">Demo: demo@eksporin.id / demo1234 — <a href="#/login" style="color:var(--text-secondary)">Masuk sekarang</a></p>
+        </div>
+
+        <!-- Dashboard preview tray -->
+        <div class="dash-preview-wrap">
+          <div class="dash-preview-tray">
+            <div class="dash-preview-grid">
+              <div class="preview-card">
+                <div class="pc-header"><span class="label">Buyer Aktif</span><span class="muted">Bulan Ini</span></div>
+                <div class="pc-big">6,896</div>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
+                  <span class="pill pill-success" style="font-size:11px;padding:2px 6px">+12.3%</span>
+                  <span class="pc-small">vs bulan lalu</span>
+                </div>
+                ${arcGauge(92, { color: '#ef4d23', showLabels: true, min: '5.2K', max: '7.5K' })}
+                <div class="toggle-pill" style="margin-top:10px">
+                  <button class="active">Importir</button><button>Shipment</button>
+                </div>
+              </div>
+              <div class="preview-card" style="display:flex;flex-direction:column;gap:12px">
+                <div class="pc-header"><span class="label">Pencarian AI</span><span class="muted">Discovery Engine</span></div>
+                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Komoditas</label>
+                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center">Vanili kering grade A <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#9a9a9a" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Target negara</label>
+                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center">Amerika Serikat <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#9a9a9a" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
+                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Leads ditemukan</label>
+                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:6px"><span style="color:var(--orange);font-weight:600">#</span> 24</div></div>
+                <div style="display:flex;gap:6px;margin-top:auto">
+                  <span style="background:#ef4d23;color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:500;flex:1;text-align:center">Cari Buyer</span>
+                  <span style="text-decoration:underline;color:var(--text-secondary);font-size:12px;display:flex;align-items:center;cursor:pointer">Reset</span>
+                </div>
+              </div>
+              <div class="preview-card">
+                <div class="pc-header"><span class="label">Match Score</span><span class="muted">hari ini</span></div>
+                <div class="pc-big">0</div>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
+                  <span class="pill pill-neutral" style="font-size:11px;padding:2px 6px">- 0</span>
+                  <span class="pc-small">vs kemarin</span>
+                </div>
+                ${arcGauge(68, { color: '#9ca3af' })}
+                <div class="toggle-pill" style="margin-top:10px">
+                  <button class="active">Hot Leads</button><button>Pipeline</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
 });
 
 // ================= auth =================
 function authHero() {
   return `<div class="auth-hero">
-    <div class="sidebar-brand" style="padding:0;color:#fff"><span class="logo" style="background:rgba(255,255,255,.2)">${I.logoW}</span>EksporIn</div>
+    <div style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:#fff">${LOGO_SVG.replace(/#ef4d23/g, 'rgba(255,255,255,.85)')} EksporIn</div>
     <h1>Pipeline buyer global Anda dimulai dari sini.</h1>
     <p>Data customs jutaan shipment, diorganisir agar UKM Indonesia bisa menemukan buyer yang tepat dalam hitungan menit — bukan 40 jam per minggu.</p>
-    <ul><li>✅ &nbsp;Direktori buyer per HS code dengan filter negara & volume</li>
-    <li>✅ &nbsp;Skor prioritas otomatis per buyer</li>
-    <li>✅ &nbsp;Template outreach multi-bahasa siap kirim</li>
-    <li>✅ &nbsp;Alert saat buyer baru muncul di produk Anda</li></ul></div>`;
+    <ul><li>✅ &nbsp;AI Buyer Discovery Engine — cari buyer pakai bahasa alami</li>
+    <li>✅ &nbsp;Skor prioritas otomatis per buyer (0–100)</li>
+    <li>✅ &nbsp;Kontak decision maker ter-enrich + email terverifikasi</li>
+    <li>✅ &nbsp;Template outreach multi-bahasa siap kirim</li></ul></div>`;
 }
 route(/^\/login$/, (app) => {
   app.innerHTML = `<div class="auth-page">${authHero()}<div class="auth-form-side"><div class="auth-card card">
@@ -301,7 +397,7 @@ route(/^\/onboarding$/, async (app) => {
         ${[['find_buyers', 'Cari buyer baru', 'Temukan & hubungi importir potensial'], ['market_analysis', 'Analisis pasar', 'Pahami tren demand & harga per negara'], ['competitor_intel', 'Intel kompetitor', 'Lihat ke mana kompetitor mengekspor']].map(([v, t, d]) => `
         <div class="option-card ${state.goal === v ? 'selected' : ''}" data-goal="${v}"><div><b>${t}</b><div class="caption muted">${d}</div></div></div>`).join('')}`,
     ];
-    app.innerHTML = `<div class="wizard"><div class="sidebar-brand" style="padding:0 0 20px"><span class="logo">${I.logoW}</span>EksporIn</div>
+    app.innerHTML = `<div class="wizard"><div style="display:flex;align-items:center;gap:10px;padding:0 0 20px;font-weight:700;font-size:18px">${LOGO_SVG} EksporIn</div>
       <div class="wizard-steps">${[0, 1, 2, 3, 4].map((i) => `<div class="${i <= state.step ? 'done' : ''}"></div>`).join('')}</div>
       <div class="card">${steps[state.step]()}
       <div style="display:flex;justify-content:space-between;margin-top:24px">
@@ -390,33 +486,68 @@ route(/^\/discover$/, async (app) => {
   await requireMe();
   let loading = false;
   let result = null;
+  let pipelineStep = 0;
+
+  const PIPELINE = [
+    { icon: '🧠', name: 'Input Interpretation & HS Mapping', desc: 'LLM memetakan input ke HS Code 6-digit, sinonim kargo internasional, dan target industri buyer.' },
+    { icon: '🚢', name: 'Trade Records & Company Retrieval', desc: 'Query database B/L (US Customs feeds) untuk mengambil daftar entitas importir (Consignee).' },
+    { icon: '👤', name: 'Decision Maker Enrichment', desc: 'Hit API enrichment untuk mencari PIC dengan jabatan relevan (Procurement, Sourcing, Supply Chain).' },
+    { icon: '🎯', name: 'Scoring & Final Synthesis', desc: 'LLM memberikan Match Score (0-100) dan Outreach Angle yang dipersonalisasi.' },
+  ];
 
   const draw = () => {
     app.innerHTML = shell(`
-      <div class="hero-card" style="margin-bottom:24px;border-left:4px solid var(--primary-600)">
+      <!-- Hero search card -->
+      <div class="hero-card" style="margin-bottom:24px">
         <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-          <div style="font-size:36px">🤖</div>
-          <div style="flex:1"><h1 style="margin-bottom:4px">AI Buyer Discovery Engine</h1>
-          <p class="muted">Deskripsikan produk ekspor Anda dalam bahasa alami — AI akan memetakan HS code, mencari importir aktif, meng-enrich kontak decision maker, dan memberikan skor kecocokan + angle outreach.</p></div>
+          <div style="width:52px;height:52px;border-radius:16px;background:var(--orange);display:flex;align-items:center;justify-content:center">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="white" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          </div>
+          <div style="flex:1">
+            <h1 style="margin-bottom:4px;letter-spacing:-.02em">AI Buyer <span class="serif-italic">Discovery</span> Engine</h1>
+            <p class="muted body-sm">Deskripsikan komoditas ekspor Anda — AI akan menjalankan pipeline 4-step: HS mapping, trade retrieval, contact enrichment, dan lead scoring.</p>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;margin-top:16px">
-          <input class="input" id="ai-query" placeholder="Contoh: Vanili kering grade A, kopi arabica Gayo, udang vannamei beku, furnitur jati Jepara…" style="flex:1;font-size:15px;padding:12px 16px" value="">
-          <button class="btn btn-primary btn-lg" id="ai-go" ${loading ? 'disabled' : ''}>${loading ? '⏳ Menganalisis...' : '🔍 Cari Buyer'}</button>
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <input class="input" id="ai-query" placeholder="Contoh: Vanili polong kering grade A untuk ekspor…" style="flex:1;font-size:15px;padding:12px 18px;border-radius:var(--radius-full)" value="">
+          <button class="btn btn-primary btn-lg" id="ai-go" style="padding:12px 28px" ${loading ? 'disabled' : ''}>${loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;margin-right:6px"></span> Menganalisis...' : I.search + ' Cari Buyer'}</button>
         </div>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          ${['Vanili polong kering grade A', 'Kopi arabica Gayo', 'Udang vannamei beku', 'Furnitur jati Jepara', 'Lada hitam Muntok', 'Minyak kelapa mentah', 'Kayu manis cassia', 'Kakao biji fermentasi'].map((s) => `<button class="btn btn-sm btn-ghost ai-suggest">${s}</button>`).join('')}
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          ${['Vanili polong kering grade A', 'Kopi arabica Gayo', 'Udang vannamei beku', 'Furnitur jati Jepara', 'Lada hitam Muntok', 'Minyak kelapa mentah', 'Kayu manis cassia', 'Kakao biji fermentasi'].map((s) => `<button class="btn btn-sm btn-neutral ai-suggest" style="border-radius:var(--radius-full)">${s}</button>`).join('')}
         </div>
       </div>
-      ${loading ? '<div class="card" style="text-align:center;padding:48px"><div class="spinner"></div><p class="muted" style="margin-top:16px">Menjalankan 4-step pipeline: HS mapping → trade records → contact enrichment → scoring...</p></div>' : ''}
+
+      ${loading ? `
+      <!-- Pipeline progress animation -->
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="margin-bottom:16px">Pipeline sedang berjalan...</h3>
+        <div class="pipeline-steps">
+          ${PIPELINE.map((p, i) => `
+            <div class="pipeline-step ${i < pipelineStep ? 'done' : i === pipelineStep ? 'active' : ''}">
+              <div class="step-num">${i < pipelineStep ? '✓' : i + 1}</div>
+              <div class="caption" style="font-weight:600">${esc(p.name.split(' & ')[0])}</div>
+              <div class="caption muted-3" style="margin-top:4px">${i < pipelineStep ? 'Selesai' : i === pipelineStep ? 'Memproses...' : 'Menunggu'}</div>
+              ${i < 3 ? '<div class="pipeline-connector"></div>' : ''}
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+
       ${result ? renderDiscoverResult(result) : !loading ? `
-        <div class="grid grid-4" style="margin-bottom:24px">
-          ${[
-            ['1️⃣', 'HS Code Mapping', 'AI memetakan deskripsi produk ke kode HS 6-digit, sinonim kargo, dan target industri buyer.'],
-            ['2️⃣', 'Trade Records', 'Query database Bill of Lading (B/L) untuk menemukan importir aktif beserta volume & frekuensi.'],
-            ['3️⃣', 'Contact Enrichment', 'Pencarian PIC (Procurement, Sourcing) dengan email terverifikasi dan profil LinkedIn.'],
-            ['4️⃣', 'Scoring & Pitch', 'Match Score 0-100 dan angle outreach yang dipersonalisasi per buyer.'],
-          ].map(([ic, t, d]) => `<div class="card card-compact"><div style="font-size:24px;margin-bottom:8px">${ic}</div><h3 style="margin-bottom:6px">${t}</h3><p class="muted body-sm">${d}</p></div>`).join('')}
-        </div>` : ''}`);
+      <!-- 4-step pipeline explanation cards -->
+      <div class="grid grid-4" style="margin-bottom:24px">
+        ${PIPELINE.map((p, i) => `
+          <div class="card card-compact" style="text-align:center">
+            <div style="font-size:28px;margin-bottom:8px">${p.icon}</div>
+            <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--orange-light);color:var(--orange);font-size:13px;font-weight:700;margin-bottom:6px">${i + 1}</div>
+            <h4 style="margin-bottom:6px">${esc(p.name)}</h4>
+            <p class="muted body-sm">${esc(p.desc)}</p>
+          </div>`).join('')}
+      </div>
+      <div class="card" style="text-align:center;padding:40px">
+        <div style="font-size:48px;margin-bottom:12px">🔍</div>
+        <h2 style="margin-bottom:8px">Mulai Pencarian Buyer</h2>
+        <p class="muted" style="max-width:480px;margin:0 auto">Masukkan deskripsi komoditas di atas — bahasa Indonesia atau Inggris. AI akan otomatis memetakan ke HS code dan menemukan buyer aktif.</p>
+      </div>` : ''}`);
     bindShell();
 
     $('#ai-go')?.addEventListener('click', runDiscover);
@@ -429,12 +560,15 @@ route(/^\/discover$/, async (app) => {
   const runDiscover = async () => {
     const q = $('#ai-query')?.value?.trim();
     if (!q) return toast('Masukkan deskripsi produk', true);
-    loading = true; result = null; draw();
+    loading = true; result = null; pipelineStep = 0; draw();
+    // Simulate pipeline steps
+    const stepTimer = setInterval(() => { if (pipelineStep < 3) { pipelineStep++; draw(); } }, 800);
     try {
       result = await api('/api/discover', { method: 'POST', body: { query: q } });
     } catch (e) {
       toast(e.data?.error || 'Gagal menjalankan discovery', true);
     }
+    clearInterval(stepTimer);
     loading = false; draw();
   };
   draw();
@@ -443,89 +577,95 @@ route(/^\/discover$/, async (app) => {
 function renderDiscoverResult(r) {
   const interp = r.interpretation;
   return `
-    <!-- Pipeline Steps -->
+    <!-- Pipeline completed -->
     <div class="card" style="margin-bottom:16px">
-      <div class="card-header"><h3>🔄 Pipeline Execution</h3><span class="pill pill-success">Selesai</span></div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
-        ${r.pipeline_steps.map((s) => `<div style="padding:12px;border-radius:10px;background:var(--bg-surface-alt)">
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><b class="body-sm">Step ${s.step}</b><span class="pill pill-success body-sm">✓</span></div>
-          <div class="caption muted">${esc(s.name)}</div>
-          <div class="caption" style="margin-top:4px;color:var(--primary-600)">${esc(s.result)}</div>
-        </div>`).join('')}
+      <div class="card-header"><h3>Pipeline Execution</h3><span class="pill pill-success">4/4 Selesai</span></div>
+      <div class="pipeline-steps" style="margin-top:12px">
+        ${r.pipeline_steps.map((s, i) => `
+          <div class="pipeline-step done">
+            <div class="step-num">✓</div>
+            <div class="caption" style="font-weight:600">${esc(s.name)}</div>
+            <div class="caption" style="margin-top:4px;color:var(--orange)">${esc(s.result)}</div>
+            ${i < 3 ? '<div class="pipeline-connector" style="background:var(--success-text)"></div>' : ''}
+          </div>`).join('')}
       </div>
     </div>
 
-    <!-- Interpretation -->
+    <!-- Interpretation + Summary -->
     <div class="grid grid-2" style="margin-bottom:16px">
       <div class="card">
-        <h3 style="margin-bottom:12px">🎯 Interpretasi AI</h3>
-        <div style="display:flex;gap:24px;flex-wrap:wrap">
-          <div><div class="caption muted-3">HS Code</div><span class="hs-code-chip" style="font-size:16px">${esc(interp.hs_code_6_digit)}</span></div>
-          <div><div class="caption muted-3">Deskripsi</div><b>${esc(interp.hs_code_description)}</b></div>
+        <h3 style="margin-bottom:14px">Interpretasi AI</h3>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+          <div><div class="caption muted-3">HS Code</div><span class="hs-code-chip" style="font-size:16px;margin-top:4px;display:inline-block">${esc(interp.hs_code_6_digit)}</span></div>
+          <div style="flex:1"><div class="caption muted-3">Deskripsi</div><b style="margin-top:4px;display:inline-block">${esc(interp.hs_code_description)}</b></div>
         </div>
-        <div style="margin-top:14px"><div class="caption muted-3">Target Industri</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.target_industry_segments.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
-        <div style="margin-top:10px"><div class="caption muted-3">Jabatan PIC Target</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.buyer_job_titles_to_target.map((s) => `<span class="pill pill-info">${esc(s)}</span>`).join('')}</div></div>
-        ${interp.trade_manifest_keywords?.length ? `<div style="margin-top:10px"><div class="caption muted-3">Kata Kunci Kargo B/L</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.trade_manifest_keywords.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>` : ''}
+        <div style="margin-bottom:10px"><div class="caption muted-3" style="margin-bottom:4px">Target Industri</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.target_industry_segments.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
+        <div style="margin-bottom:10px"><div class="caption muted-3" style="margin-bottom:4px">Jabatan PIC Target</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.buyer_job_titles_to_target.map((s) => `<span class="pill pill-orange">${esc(s)}</span>`).join('')}</div></div>
+        ${interp.trade_manifest_keywords?.length ? `<div><div class="caption muted-3" style="margin-bottom:4px">Kata Kunci Kargo B/L</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.trade_manifest_keywords.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card">
-        <h3 style="margin-bottom:12px">📊 Ringkasan</h3>
-        <div class="grid grid-2" style="gap:16px">
-          <div class="metric-card card-compact"><div class="lbl">Total Leads</div><div class="numeric-lg">${r.total_leads}</div></div>
-          <div class="metric-card card-compact"><div class="lbl">Hot/Warm Leads</div><div class="numeric-lg">${r.leads.filter((l) => l.scoring.match_score >= 60).length}</div></div>
-          <div class="metric-card card-compact"><div class="lbl">Kontak Ditemukan</div><div class="numeric-lg">${r.leads.reduce((a, l) => a + l.decision_makers.length, 0)}</div></div>
-          <div class="metric-card card-compact"><div class="lbl">Negara</div><div class="numeric-lg">${new Set(r.leads.map((l) => l.company.country)).size}</div></div>
+        <h3 style="margin-bottom:14px">Ringkasan Pencarian</h3>
+        <div class="grid grid-2" style="gap:12px">
+          <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
+            <div class="numeric-lg" style="color:var(--orange)">${r.total_leads}</div><div class="caption muted">Total Leads</div></div>
+          <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
+            <div class="numeric-lg" style="color:var(--danger-text)">${r.leads.filter((l) => l.scoring.match_score >= 60).length}</div><div class="caption muted">Hot/Warm</div></div>
+          <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
+            <div class="numeric-lg" style="color:var(--success-text)">${r.leads.reduce((a, l) => a + l.decision_makers.length, 0)}</div><div class="caption muted">Kontak</div></div>
+          <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
+            <div class="numeric-lg">${new Set(r.leads.map((l) => l.company.country)).size}</div><div class="caption muted">Negara</div></div>
         </div>
       </div>
     </div>
 
-    <!-- Leads Table -->
+    <!-- Leads -->
     <div class="card">
-      <div class="card-header"><h3>🏆 Leads Siap Eksekusi</h3>
+      <div class="card-header"><h3>Leads Siap Eksekusi</h3>
         <div style="display:flex;gap:8px;align-items:center">
           <span class="caption muted">${r.total_leads} buyer ditemukan</span>
-          ${r.leads.length ? `<button class="btn btn-sm btn-secondary" onclick="batchSaveLeads([${r.leads.map((l) => l.company.id).join(',')}])">💾 Simpan semua ke daftar</button>` : ''}
+          ${r.leads.length ? `<button class="btn btn-sm btn-primary" onclick="batchSaveLeads([${r.leads.map((l) => l.company.id).join(',')}])">Simpan semua</button>` : ''}
         </div></div>
-      <div id="leads-list">${r.leads.map((lead, idx) => `
-        <div class="lead-card" style="border:1px solid var(--border-subtle);border-radius:12px;padding:20px;margin-bottom:12px;${lead.scoring.match_score >= 80 ? 'border-left:4px solid #B91C1C;background:var(--bg-surface-alt)' : lead.scoring.match_score >= 60 ? 'border-left:4px solid #B45309' : ''}">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div id="leads-list">${r.leads.map((lead) => `
+        <div class="lead-card ${lead.scoring.match_score >= 80 ? 'hot' : lead.scoring.match_score >= 60 ? 'warm' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
             <div style="flex:1;min-width:280px">
-              <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
-                <span class="muted num">#${lead.rank}</span>
+              <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+                <span style="width:28px;height:28px;border-radius:50%;background:var(--bg-surface-alt);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary)">${lead.rank}</span>
                 <h3 style="margin:0"><a href="#/buyer/${lead.company.id}" style="color:inherit">${esc(lead.company.name)}</a></h3>
                 ${scorePill(lead.scoring.match_score, lead.scoring.score_label)}
                 ${!lead.trade_data.has_indonesian_supplier ? '<span class="pill pill-success">Untapped</span>' : ''}
               </div>
               <p class="muted body-sm">${flag(lead.company.country)} ${esc(lead.company.country_name)} · ${esc(lead.company.city || '')} · ${esc(lead.company.industry || '')} · ${esc(lead.company.company_tier)}</p>
-              <div style="display:flex;gap:20px;margin-top:10px;flex-wrap:wrap">
+              <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap">
                 <div><span class="caption muted-3">Shipment/tahun</span><br><b class="num">${fmtN(lead.trade_data.shipments_12mo)}</b></div>
                 <div><span class="caption muted-3">Volume 12 bln</span><br><b class="num">${fmtKg(lead.trade_data.volume_12mo_kg)}</b></div>
                 <div><span class="caption muted-3">Nilai 12 bln</span><br><b class="num">${fmtUSD(lead.trade_data.value_12mo_usd)}</b></div>
-                <div><span class="caption muted-3">Growth YoY</span><br><b class="num ${(lead.trade_data.yoy_percent || 0) >= 0 ? 'delta-up' : 'delta-down'}" style="color:${(lead.trade_data.yoy_percent || 0) >= 0 ? 'var(--secondary-600)' : 'var(--danger-text)'}">${(lead.trade_data.yoy_percent || 0) >= 0 ? '↑' : '↓'} ${Math.abs(lead.trade_data.yoy_percent || 0)}%</b></div>
+                <div><span class="caption muted-3">Growth YoY</span><br><b class="num" style="color:${(lead.trade_data.yoy_percent || 0) >= 0 ? 'var(--success-text)' : 'var(--danger-text)'}">${(lead.trade_data.yoy_percent || 0) >= 0 ? '↑' : '↓'} ${Math.abs(lead.trade_data.yoy_percent || 0)}%</b></div>
               </div>
             </div>
             <div style="min-width:280px">
-              <div class="caption muted-3" style="margin-bottom:6px">👤 Decision Makers</div>
+              <div class="caption muted-3" style="margin-bottom:6px">Decision Makers</div>
               ${lead.decision_makers.map((dm) => `
                 <div style="padding:8px 0;border-bottom:1px dotted var(--border-subtle)">
                   <b class="body-sm">${esc(dm.full_name)}</b> <span class="caption muted">— ${esc(dm.job_title)}</span>
                   <div style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap">
                     ${dm.email ? `<span class="caption" title="${dm.email_status}">✉️ ${esc(dm.email)} ${dm.email_status === 'verified' ? '<span class="pill pill-success" style="font-size:9px">verified</span>' : ''}</span>` : ''}
-                    ${dm.linkedin_url ? `<a class="caption" href="${esc(dm.linkedin_url)}" target="_blank">💼 LinkedIn</a>` : ''}
+                    ${dm.linkedin_url ? `<a class="caption" href="${esc(dm.linkedin_url)}" target="_blank" style="color:var(--orange)">LinkedIn</a>` : ''}
                   </div>
                 </div>`).join('')}
             </div>
           </div>
-          <div style="margin-top:14px;padding:12px;border-radius:8px;background:var(--primary-50, #EFF6FF);border:1px solid var(--primary-100, #DBEAFE)">
-            <div class="caption muted-3" style="margin-bottom:4px">🎯 Outreach Angle</div>
+          <div class="lead-pitch">
+            <div class="caption muted-3" style="margin-bottom:4px">Outreach Angle</div>
             <p class="body-sm" style="line-height:20px;margin:0">${esc(lead.scoring.customized_pitch_angle)}</p>
           </div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-primary btn-sm" onclick="location.hash='#/buyer/${lead.company.id}'">Lihat Profil Lengkap</button>
-            <button class="btn btn-secondary btn-sm" onclick="saveToList(${lead.company.id})">+ Simpan ke Daftar</button>
-            <button class="btn btn-neutral btn-sm" onclick="composeTo(${lead.company.id})">✉️ Kirim Outreach</button>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-primary btn-sm" onclick="location.hash='#/buyer/${lead.company.id}'">Lihat Profil</button>
+            <button class="btn btn-secondary btn-sm" onclick="saveToList(${lead.company.id})">+ Simpan</button>
+            <button class="btn btn-neutral btn-sm" onclick="composeTo(${lead.company.id})">Kirim Outreach</button>
           </div>
         </div>`).join('')}
       </div>

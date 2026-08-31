@@ -6,7 +6,7 @@ echo   Pushing EksporIn ke GitHub...
 echo ========================================
 echo.
 git add -A
-git commit -m "fix: use sql.js asm.js build (no WASM file) + fix root URL rewrite"
+git commit -m "feat: Convix-inspired UI redesign + AI Buyer Discovery Engine 4-step pipeline"
 git push -u origin main --force
 echo.
 if %errorlevel%==0 (

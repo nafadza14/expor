@@ -688,9 +688,9 @@ function handleApi(db, req, res, url, body) {
       // Fallback: search by text across HS codes in DB
       const hsMatch = db.prepare("SELECT * FROM hs_codes WHERE description_en LIKE ? OR description_id LIKE ? LIMIT 1").get('%' + query + '%', '%' + query + '%');
       if (hsMatch) {
-        matched = { hs: hsMatch.code.slice(0, 4), desc_en: hsMatch.description_en, desc_id: hsMatch.description_id, industry: ['General Trade'], titles: ['Procurement Manager'] };
+        matched = { hs: hsMatch.code.slice(0, 4), desc_en: hsMatch.description_en, desc_id: hsMatch.description_id, industry: ['General Trade'], titles: ['Procurement Manager', 'Sourcing Director', 'Category Buyer'], cargo_keywords: [query.toUpperCase()] };
       } else {
-        matched = { hs: '0901', desc_en: query, desc_id: query, industry: ['General Trade'], titles: ['Procurement Manager'] };
+        matched = { hs: '0901', desc_en: query, desc_id: query, industry: ['General Trade'], titles: ['Procurement Manager', 'Sourcing Director'], cargo_keywords: [query.toUpperCase()] };
       }
     }
 

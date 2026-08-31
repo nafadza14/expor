@@ -1,6 +1,7 @@
 node_modules/
 data/
 .vercel/
+.claude/
 *.db
 *.db-shm
 *.db-wal
