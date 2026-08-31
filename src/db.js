@@ -1,6 +1,6 @@
-// EksporIn — database bootstrap (sql.js, Vercel-compatible, pure JS/WASM)
+// EksporIn — database bootstrap (sql.js asm.js build, Vercel-compatible, pure JS — no WASM file needed)
 'use strict';
-const initSqlJs = require('sql.js');
+const initSqlJs = require('sql.js/dist/sql-asm.js');
 
 // ---------- Compatibility wrapper: sql.js → better-sqlite3 API ----------
 class StatementCompat {

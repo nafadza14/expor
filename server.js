@@ -16,7 +16,7 @@ const MIME = {
   '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2',
 };
 
-const db = getDb();
+let db = null;
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -34,6 +34,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (url.pathname.startsWith('/api/')) {
+      if (!db) db = await getDb();
       const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : null;
       return handleApi(db, req, res, url, body || {});
     }

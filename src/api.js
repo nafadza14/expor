@@ -665,17 +665,22 @@ function handleApi(db, req, res, url, body) {
     // Step 1: HS Code Mapping (simulated LLM)
     const qLower = query.toLowerCase();
     const HS_MAP = [
-      { keywords: ['vanili', 'vanilla', 'vanila'], hs: '0905', desc_en: 'Vanilla beans', desc_id: 'Vanili', industry: ['Food & Beverage', 'Flavoring', 'Confectionery'], titles: ['Procurement Manager', 'Sourcing Director', 'Category Buyer'] },
-      { keywords: ['kopi', 'coffee', 'arabica', 'robusta', 'gayo'], hs: '0901', desc_en: 'Coffee', desc_id: 'Kopi', industry: ['Coffee Roasters', 'Specialty Coffee', 'FMCG'], titles: ['Head of Sourcing', 'Green Coffee Buyer', 'Purchasing Manager'] },
-      { keywords: ['lada', 'pepper', 'merica'], hs: '0904', desc_en: 'Pepper', desc_id: 'Lada', industry: ['Spices', 'Food Ingredients'], titles: ['Procurement Manager', 'Sourcing Director'] },
-      { keywords: ['pala', 'nutmeg'], hs: '0908', desc_en: 'Nutmeg', desc_id: 'Pala', industry: ['Spices', 'Essential Oils'], titles: ['Category Buyer', 'Supply Chain Manager'] },
-      { keywords: ['udang', 'shrimp', 'prawn', 'vannamei'], hs: '0306', desc_en: 'Shrimps and prawns', desc_id: 'Udang', industry: ['Seafood', 'Frozen Foods'], titles: ['Seafood Buyer', 'Procurement Lead'] },
+      { keywords: ['vanili', 'vanilla', 'vanila', 'vanilla bean', 'vanili kering', 'vanili polong', 'tahitian', 'planifolia'], hs: '0905', desc_en: 'Vanilla beans', desc_id: 'Vanili', industry: ['Food & Beverage', 'Flavoring', 'Confectionery', 'Extract Manufacturing'], titles: ['Procurement Manager', 'Sourcing Director', 'Head of Purchasing', 'Supply Chain Director', 'Category Buyer'], cargo_keywords: ['VANILLA BEANS', 'VANILLA PODS', 'DRIED VANILLA', 'VANILLA EXTRACT', 'CURED VANILLA'] },
+      { keywords: ['kopi', 'coffee', 'arabica', 'robusta', 'gayo', 'toraja', 'flores', 'java', 'luwak', 'green bean'], hs: '0901', desc_en: 'Coffee', desc_id: 'Kopi', industry: ['Coffee Roasters', 'Specialty Coffee', 'FMCG'], titles: ['Head of Sourcing', 'Green Coffee Buyer', 'Purchasing Manager'] },
+      { keywords: ['lada', 'pepper', 'merica', 'lada hitam', 'lada putih', 'muntok'], hs: '0904', desc_en: 'Pepper', desc_id: 'Lada', industry: ['Spices', 'Food Ingredients'], titles: ['Procurement Manager', 'Sourcing Director'] },
+      { keywords: ['pala', 'nutmeg', 'fuli', 'mace'], hs: '0908', desc_en: 'Nutmeg', desc_id: 'Pala', industry: ['Spices', 'Essential Oils'], titles: ['Category Buyer', 'Supply Chain Manager'] },
+      { keywords: ['kayu manis', 'cinnamon', 'cassia', 'cinnamomum'], hs: '0906', desc_en: 'Cinnamon', desc_id: 'Kayu manis', industry: ['Spices', 'Food & Beverage', 'Bakery Ingredients'], titles: ['Procurement Manager', 'Category Buyer', 'Sourcing Director'] },
+      { keywords: ['cengkeh', 'clove', 'cloves'], hs: '0907', desc_en: 'Cloves', desc_id: 'Cengkeh', industry: ['Spices', 'Cigarette Manufacturing', 'Essential Oils'], titles: ['Procurement Manager', 'Sourcing Director'] },
+      { keywords: ['udang', 'shrimp', 'prawn', 'vannamei', 'lobster', 'kepiting', 'crab'], hs: '0306', desc_en: 'Shrimps and prawns', desc_id: 'Udang', industry: ['Seafood', 'Frozen Foods'], titles: ['Seafood Buyer', 'Procurement Lead'] },
       { keywords: ['tuna', 'cakalang', 'skipjack', 'ikan'], hs: '0303', desc_en: 'Fish, frozen', desc_id: 'Ikan beku', industry: ['Seafood', 'Marine Foods'], titles: ['Purchasing Manager', 'Import Director'] },
-      { keywords: ['kelapa', 'coconut', 'kopra', 'coco'], hs: '1513', desc_en: 'Coconut oil', desc_id: 'Minyak kelapa', industry: ['Agri-food', 'Oils & Fats'], titles: ['Commodity Trader', 'Procurement Manager'] },
-      { keywords: ['karet', 'rubber', 'sir'], hs: '4001', desc_en: 'Natural rubber', desc_id: 'Karet alam', industry: ['Rubber', 'Industrial Materials'], titles: ['Purchasing Manager', 'Technical Buyer'] },
-      { keywords: ['kayu', 'wood', 'plywood', 'timber'], hs: '4412', desc_en: 'Plywood', desc_id: 'Kayu lapis', industry: ['Wood products', 'Building Materials'], titles: ['Procurement Lead', 'Import Manager'] },
-      { keywords: ['rotan', 'rattan', 'anyaman', 'basket'], hs: '4602', desc_en: 'Basketwork of rattan', desc_id: 'Anyaman rotan', industry: ['Home & living', 'Decor'], titles: ['Product Sourcing Manager', 'Buyer'] },
-      { keywords: ['furni', 'furniture', 'mebel', 'kursi', 'meja', 'teak', 'jati'], hs: '9403', desc_en: 'Furniture', desc_id: 'Perabot', industry: ['Furniture', 'Interiors'], titles: ['Sourcing Director', 'Category Manager', 'Import Director'] },
+      { keywords: ['kelapa', 'coconut', 'kopra', 'coco', 'santan', 'coconut oil'], hs: '1513', desc_en: 'Coconut oil', desc_id: 'Minyak kelapa', industry: ['Agri-food', 'Oils & Fats'], titles: ['Commodity Trader', 'Procurement Manager'] },
+      { keywords: ['kakao', 'cocoa', 'cokelat', 'chocolate', 'cacao'], hs: '1801', desc_en: 'Cocoa beans', desc_id: 'Biji kakao', industry: ['Chocolate Manufacturing', 'Confectionery', 'Food Processing'], titles: ['Cocoa Buyer', 'Procurement Manager', 'Sourcing Director'] },
+      { keywords: ['sawit', 'palm oil', 'cpo', 'palm', 'minyak sawit'], hs: '1511', desc_en: 'Palm oil', desc_id: 'Minyak sawit', industry: ['Oils & Fats', 'FMCG', 'Oleochemicals'], titles: ['Commodity Trader', 'Procurement Manager', 'Supply Chain Director'] },
+      { keywords: ['karet', 'rubber', 'sir', 'latex'], hs: '4001', desc_en: 'Natural rubber', desc_id: 'Karet alam', industry: ['Rubber', 'Industrial Materials'], titles: ['Purchasing Manager', 'Technical Buyer'] },
+      { keywords: ['kayu', 'wood', 'plywood', 'timber', 'kayu lapis'], hs: '4412', desc_en: 'Plywood', desc_id: 'Kayu lapis', industry: ['Wood products', 'Building Materials'], titles: ['Procurement Lead', 'Import Manager'] },
+      { keywords: ['rotan', 'rattan', 'anyaman', 'basket', 'kerajinan'], hs: '4602', desc_en: 'Basketwork of rattan', desc_id: 'Anyaman rotan', industry: ['Home & living', 'Decor'], titles: ['Product Sourcing Manager', 'Buyer'] },
+      { keywords: ['furni', 'furniture', 'mebel', 'kursi', 'meja', 'teak', 'jati', 'jepara', 'mahogany'], hs: '9403', desc_en: 'Furniture', desc_id: 'Perabot', industry: ['Furniture', 'Interiors'], titles: ['Sourcing Director', 'Category Manager', 'Import Director'] },
+      { keywords: ['tekstil', 'textile', 'garmen', 'garment', 'kain', 'fabric', 'batik'], hs: '6204', desc_en: 'Garments & textiles', desc_id: 'Tekstil & garmen', industry: ['Fashion', 'Textile Manufacturing', 'Retail'], titles: ['Sourcing Manager', 'Merchandiser', 'Import Director'] },
     ];
 
     let matched = HS_MAP.find((m) => m.keywords.some((k) => qLower.includes(k)));
@@ -691,11 +696,12 @@ function handleApi(db, req, res, url, body) {
 
     // Step 2: Trade Records & Company Retrieval
     const buyers = db.prepare(`
-      SELECT DISTINCT b.*, bh.shipment_count, bh.total_value_usd as hs_value
+      SELECT b.*, SUM(bh.shipment_count) as shipment_count, SUM(bh.total_value_usd) as hs_value
       FROM buyers b
       JOIN buyer_hs bh ON bh.buyer_id = b.id
       WHERE bh.hs_code LIKE ?
-      ORDER BY b.base_score DESC, bh.total_value_usd DESC
+      GROUP BY b.id
+      ORDER BY b.base_score DESC, hs_value DESC
       LIMIT 20
     `).all(matched.hs + '%');
 
@@ -779,21 +785,24 @@ function handleApi(db, req, res, url, body) {
 
     results.sort((a, b) => b.scoring.match_score - a.scoring.match_score);
 
+    const verifiedContacts = results.reduce((a, r) => a + r.decision_makers.filter((dm) => dm.email_status === 'verified').length, 0);
+    const totalContacts = results.reduce((a, r) => a + r.decision_makers.length, 0);
+
     return json(res, 200, {
       query,
       interpretation: {
         hs_code_6_digit: matched.hs,
         hs_code_description: matched.desc_en,
         description_id: matched.desc_id,
-        trade_manifest_keywords: matched.keywords || [query],
+        trade_manifest_keywords: matched.cargo_keywords || matched.keywords || [query],
         target_industry_segments: matched.industry,
         buyer_job_titles_to_target: matched.titles,
       },
       pipeline_steps: [
         { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
-        { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan` },
-        { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${results.reduce((a, r) => a + r.decision_makers.length, 0)} kontak terverifikasi` },
-        { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 60).length} hot/warm leads` },
+        { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan dari ${new Set(buyers.map((b) => b.country)).size} negara` },
+        { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${totalContacts} kontak ditemukan, ${verifiedContacts} email terverifikasi` },
+        { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 80).length} hot leads, ${results.filter((r) => r.scoring.match_score >= 60 && r.scoring.match_score < 80).length} warm leads` },
       ],
       total_leads: results.length,
       leads: results,

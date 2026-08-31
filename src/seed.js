@@ -31,6 +31,9 @@ const HS = [
   ['090121', '0901', 6, 'Coffee, roasted, not decaffeinated', 'Kopi sangrai, tidak dekafeinasi'],
   ['0904', '09', 4, 'Pepper; dried capsicum', 'Lada; cabai kering'],
   ['090411', '0904', 6, 'Pepper, neither crushed nor ground', 'Lada utuh'],
+  ['0905', '09', 4, 'Vanilla beans', 'Vanili'],
+  ['090510', '0905', 6, 'Vanilla, neither crushed nor ground', 'Vanili utuh (polong kering)'],
+  ['090520', '0905', 6, 'Vanilla, crushed or ground', 'Vanili bubuk'],
   ['0908', '09', 4, 'Nutmeg, mace and cardamoms', 'Pala, fuli, dan kapulaga'],
   ['090811', '0908', 6, 'Nutmeg, neither crushed nor ground', 'Pala utuh'],
   ['15', null, 2, 'Animal or vegetable fats and oils', 'Lemak dan minyak hewani/nabati'],
@@ -70,6 +73,8 @@ const HS_PROFILE = {
   '090111': ['Coffee', 'KG', [3.2, 6.8], 'GREEN COFFEE BEANS ARABICA GRADE 1'],
   '090121': ['Coffee', 'KG', [8.0, 15.0], 'ROASTED COFFEE BEANS'],
   '090411': ['Spices', 'KG', [4.5, 8.0], 'BLACK PEPPER WHOLE MUNTOK'],
+  '090510': ['Spices', 'KG', [45.0, 120.0], 'VANILLA BEANS GRADE A WHOLE PODS'],
+  '090520': ['Spices', 'KG', [30.0, 75.0], 'VANILLA POWDER GROUND'],
   '090811': ['Spices', 'KG', [9.0, 14.0], 'NUTMEG WHOLE ABCD GRADE'],
   '151311': ['Agri-food', 'KG', [1.1, 1.9], 'CRUDE COCONUT OIL IN FLEXITANK'],
   '160414': ['Seafood', 'CTN', [4.0, 6.5], 'CANNED SKIPJACK TUNA IN BRINE'],
@@ -116,7 +121,7 @@ const NAME_PARTS = {
 const MID = {
   Coffee: ['Coffee', 'Coffee Roasters', 'Coffee Importers', 'Bean', 'Roastery', 'Specialty Coffee'],
   Seafood: ['Seafood', 'Marine Foods', 'Fisheries', 'Ocean Products', 'Frozen Foods'],
-  Spices: ['Spice', 'Spices & Herbs', 'Ingredients', 'Flavors'],
+  Spices: ['Spice', 'Spices & Herbs', 'Ingredients', 'Flavors', 'Vanilla & Spice'],
   'Agri-food': ['Commodities', 'Agri Products', 'Food Ingredients', 'Oils & Fats'],
   Rubber: ['Rubber', 'Polymer', 'Industrial Materials'],
   'Wood products': ['Timber', 'Panel Products', 'Building Materials', 'Wood'],
@@ -124,7 +129,7 @@ const MID = {
   Furniture: ['Furniture', 'Furnishings', 'Interiors', 'Living Concepts', 'Home Collections'],
 };
 const EXPORTER_NAMES = {
-  ID: ['PT Sinar Jaya Ekspor', 'PT Nusantara Agro Lestari', 'CV Java Prima Abadi', 'PT Sumatra Highland Coffee', 'PT Bahari Makmur Sejati', 'PT Rotan Cirebon Kreasi', 'PT Jepara Furni Craft', 'CV Toraja Coffee Estate', 'PT Karet Alam Sentosa', 'PT Kayu Lapis Kalimantan', 'PT Gayo Mountain Export', 'CV Bali Artisan Works', 'PT Udang Windu Perkasa', 'PT Rempah Maluku Jaya', 'PT Kelapa Hijau Industri', 'CV Solo Furniture Legacy', 'PT Mina Bahari Nusantara', 'PT Anugerah Lada Bangka', 'PT Tuna Bitung Samudra', 'CV Semarang Wood Works'],
+  ID: ['PT Sinar Jaya Ekspor', 'PT Nusantara Agro Lestari', 'CV Java Prima Abadi', 'PT Sumatra Highland Coffee', 'PT Bahari Makmur Sejati', 'PT Rotan Cirebon Kreasi', 'PT Jepara Furni Craft', 'CV Toraja Coffee Estate', 'PT Karet Alam Sentosa', 'PT Kayu Lapis Kalimantan', 'PT Gayo Mountain Export', 'CV Bali Artisan Works', 'PT Udang Windu Perkasa', 'PT Rempah Maluku Jaya', 'PT Kelapa Hijau Industri', 'CV Solo Furniture Legacy', 'PT Mina Bahari Nusantara', 'PT Anugerah Lada Bangka', 'PT Tuna Bitung Samudra', 'CV Semarang Wood Works', 'PT Vanili Papua Mulia', 'CV Sulawesi Vanilla Estate'],
   VN: ['Saigon Trading JSC', 'Mekong Seafood Corp', 'Highland Coffee Vietnam Ltd', 'Binh Duong Furniture Co', 'Vinacafe Export JSC', 'Hai Phong Marine Products'],
   BR: ['Santos Cafe Exportadora', 'Cerrado Coffee Trading', 'Brasil Graos SA'],
   CO: ['Cafetera Andina SAS', 'Colombia Premium Coffee SA'],
@@ -239,7 +244,7 @@ function seed(db) {
       // supplier mix: preferred exporter countries per industry
       const prefOrigins = {
         Coffee: ['BR', 'CO', 'VN', 'ET', 'ID'], Seafood: ['VN', 'IN', 'EC', 'TH', 'CN', 'ID'],
-        Spices: ['VN', 'IN', 'ID'], 'Agri-food': ['MY', 'TH', 'ID'], Rubber: ['TH', 'VN', 'ID'],
+        Spices: ['VN', 'IN', 'ID', 'ET'], 'Agri-food': ['MY', 'TH', 'ID'], Rubber: ['TH', 'VN', 'ID'],
         'Wood products': ['CN', 'MY', 'VN', 'ID'], 'Home & living': ['VN', 'CN', 'ID'], Furniture: ['VN', 'CN', 'MY', 'ID'],
       }[industry];
       const buysFromIndonesia = rnd() < 0.42;

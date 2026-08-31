@@ -404,7 +404,7 @@ route(/^\/discover$/, async (app) => {
           <button class="btn btn-primary btn-lg" id="ai-go" ${loading ? 'disabled' : ''}>${loading ? '⏳ Menganalisis...' : '🔍 Cari Buyer'}</button>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          ${['Vanili polong kering', 'Kopi arabica Gayo', 'Udang vannamei beku', 'Furnitur jati', 'Lada hitam Muntok', 'Minyak kelapa mentah'].map((s) => `<button class="btn btn-sm btn-ghost ai-suggest">${s}</button>`).join('')}
+          ${['Vanili polong kering grade A', 'Kopi arabica Gayo', 'Udang vannamei beku', 'Furnitur jati Jepara', 'Lada hitam Muntok', 'Minyak kelapa mentah', 'Kayu manis cassia', 'Kakao biji fermentasi'].map((s) => `<button class="btn btn-sm btn-ghost ai-suggest">${s}</button>`).join('')}
         </div>
       </div>
       ${loading ? '<div class="card" style="text-align:center;padding:48px"><div class="spinner"></div><p class="muted" style="margin-top:16px">Menjalankan 4-step pipeline: HS mapping → trade records → contact enrichment → scoring...</p></div>' : ''}
@@ -467,6 +467,8 @@ function renderDiscoverResult(r) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.target_industry_segments.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
         <div style="margin-top:10px"><div class="caption muted-3">Jabatan PIC Target</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.buyer_job_titles_to_target.map((s) => `<span class="pill pill-info">${esc(s)}</span>`).join('')}</div></div>
+        ${interp.trade_manifest_keywords?.length ? `<div style="margin-top:10px"><div class="caption muted-3">Kata Kunci Kargo B/L</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${interp.trade_manifest_keywords.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card">
         <h3 style="margin-bottom:12px">📊 Ringkasan</h3>
@@ -482,7 +484,10 @@ function renderDiscoverResult(r) {
     <!-- Leads Table -->
     <div class="card">
       <div class="card-header"><h3>🏆 Leads Siap Eksekusi</h3>
-        <span class="caption muted">${r.total_leads} buyer ditemukan untuk "${esc(r.query)}"</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="caption muted">${r.total_leads} buyer ditemukan</span>
+          ${r.leads.length ? `<button class="btn btn-sm btn-secondary" onclick="batchSaveLeads([${r.leads.map((l) => l.company.id).join(',')}])">💾 Simpan semua ke daftar</button>` : ''}
+        </div></div>
       <div id="leads-list">${r.leads.map((lead, idx) => `
         <div class="lead-card" style="border:1px solid var(--border-subtle);border-radius:12px;padding:20px;margin-bottom:12px;${lead.scoring.match_score >= 80 ? 'border-left:4px solid #B91C1C;background:var(--bg-surface-alt)' : lead.scoring.match_score >= 60 ? 'border-left:4px solid #B45309' : ''}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
@@ -675,6 +680,29 @@ window.saveToList = async (buyerId) => {
       if (!listId) return toast('Pilih atau buat daftar dulu', true);
       await api(`/api/lists/${listId}/buyers`, { method: 'POST', body: { buyer_id: buyerId } });
       closeModal(); toast('Buyer disimpan ✓');
+    } catch (e) { if (!e.handled) toast(e.data?.error || 'Gagal menyimpan', true); }
+  };
+};
+
+window.batchSaveLeads = async (buyerIds) => {
+  const lists = await api('/api/lists');
+  modal(`<h2 style="margin-bottom:16px">Simpan ${buyerIds.length} buyer ke daftar</h2>
+    ${lists.length ? `<div class="field"><label>Pilih daftar</label><select class="input" id="sl-list">
+      ${lists.map((l) => `<option value="${l.id}">${esc(l.name)} (${l.buyer_count})</option>`).join('')}</select></div>` : '<p class="muted body-sm" style="margin-bottom:12px">Anda belum punya daftar — buat dulu di bawah.</p>'}
+    <div class="field"><label>Atau buat daftar baru</label><input class="input" id="sl-new" placeholder="mis. Leads Vanili Discovery"></div>
+    <button class="btn btn-primary" id="sl-save" style="width:100%">Simpan ${buyerIds.length} buyer</button>`);
+  $('#sl-save').onclick = async () => {
+    try {
+      let listId = $('#sl-list')?.value;
+      const newName = $('#sl-new').value.trim();
+      if (newName) { const nl = await api('/api/lists', { method: 'POST', body: { name: newName } }); listId = nl.id; }
+      if (!listId) return toast('Pilih atau buat daftar dulu', true);
+      let saved = 0;
+      for (const bid of buyerIds) {
+        try { await api(`/api/lists/${listId}/buyers`, { method: 'POST', body: { buyer_id: bid } }); saved++; }
+        catch (e) { if (e.status === 402) { toast(e.data?.error || 'Kuota simpan habis', true); break; } }
+      }
+      closeModal(); toast(`${saved} buyer berhasil disimpan`);
     } catch (e) { if (!e.handled) toast(e.data?.error || 'Gagal menyimpan', true); }
   };
 };
