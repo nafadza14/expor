@@ -47,6 +47,7 @@ const I = {
   trendUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m23 6-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
   trendDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m23 18-9.5-9.5-5 5L1 6"/><path d="M17 18h6v-6"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12h16M4 6h16M4 18h16"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 };
 
 // EksporIn logo SVG (8-petal flower, orange)
@@ -271,6 +272,7 @@ function shell(content) {
       ${navItem('#/outreach', I.send, 'Outreach')}
       ${navItem('#/alerts', I.bell, 'Notifikasi', u.unread_alerts)}
       <div class="nav-sep overline">Akun</div>
+      ${navItem('#/settings', I.settings, 'Settings & Profile')}
       ${navItem('#/billing', I.card, 'Paket & Tagihan')}
       <a class="nav-item" href="#" id="nav-logout">${I.out}<span>Keluar</span></a>
     </nav>
@@ -755,13 +757,94 @@ route(/^\/$/, async (app) => {
 // ================= auth =================
 function authHero() {
   return `<div class="auth-hero">
-    <div style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:#fff">${LOGO_SVG.replace(/#ef4d23/g, 'rgba(255,255,255,.85)')} EksporIn</div>
-    <h1>Pipeline buyer global Anda dimulai dari sini.</h1>
-    <p>Data customs jutaan shipment, diorganisir agar UKM Indonesia bisa menemukan buyer yang tepat dalam hitungan menit, bukan 40 jam per minggu.</p>
-    <ul><li>✅ &nbsp;AI Buyer Discovery Engine: cari buyer pakai bahasa alami</li>
-    <li>✅ &nbsp;Skor prioritas otomatis per buyer (0–100)</li>
-    <li>✅ &nbsp;Kontak decision maker ter-enrich + email terverifikasi</li>
-    <li>✅ &nbsp;Template outreach multi-bahasa siap kirim</li></ul></div>`;
+    <div class="auth-brand">${LOGO_SVG} <span>EksporIn</span></div>
+    <div class="auth-illustration">
+      <svg viewBox="0 0 420 320" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:420px;height:auto">
+        <defs>
+          <linearGradient id="ai-panel-a" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#fff8f3"/>
+          </linearGradient>
+          <radialGradient id="ai-panel-glow" cx="50%" cy="75%" r="55%">
+            <stop offset="0%" stop-color="#ffe1cf" stop-opacity=".55"/>
+            <stop offset="100%" stop-color="#ffe1cf" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="420" height="320" rx="20" fill="url(#ai-panel-a)"/>
+        <rect x="0" y="0" width="420" height="320" rx="20" fill="url(#ai-panel-glow)"/>
+
+        <g transform="translate(30 30)">
+          <rect x="0" y="0" width="200" height="90" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
+          <circle cx="26" cy="30" r="12" fill="#ffdfca"/>
+          <path d="M20 30 L25 35 L34 25" stroke="#ef4d23" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <rect x="46" y="22" width="130" height="6" rx="3" fill="#282828"/>
+          <rect x="46" y="34" width="90" height="4" rx="2" fill="#a99a8c"/>
+          <rect x="14" y="54" width="60" height="10" rx="5" fill="#ffe0c9"/>
+          <text x="44" y="62" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">HS 0905</text>
+          <rect x="80" y="54" width="66" height="10" rx="5" fill="#ffe0c9"/>
+          <text x="113" y="62" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">Vanili A</text>
+          <rect x="14" y="72" width="60" height="6" rx="3" fill="#ffdfca"/>
+          <rect x="80" y="72" width="90" height="6" rx="3" fill="#ffdfca"/>
+        </g>
+
+        <g transform="translate(250 60)">
+          <rect x="0" y="0" width="150" height="90" rx="12" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
+          <text x="16" y="22" fill="#777" font-size="10" font-weight="600" font-family="system-ui">Match Score</text>
+          <path d="M18 76 A50 50 0 0 1 132 76" stroke="#f4d0b0" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <path d="M18 76 A50 50 0 0 1 118 42" stroke="#ef4d23" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <text x="75" y="72" text-anchor="middle" fill="#282828" font-size="22" font-weight="700" font-family="system-ui">87</text>
+        </g>
+
+        <g transform="translate(30 160)">
+          <rect x="0" y="0" width="240" height="130" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
+          <text x="16" y="24" fill="#282828" font-size="11" font-weight="700" font-family="system-ui">Buyer per negara</text>
+          <text x="16" y="46" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇺🇸 US</text>
+          <rect x="72" y="40" width="140" height="6" rx="3" fill="#ffdfca"/>
+          <rect x="72" y="40" width="128" height="6" rx="3" fill="#ef4d23"/>
+          <text x="216" y="46" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">20</text>
+          <text x="16" y="66" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇳🇱 NL</text>
+          <rect x="72" y="60" width="140" height="6" rx="3" fill="#ffdfca"/>
+          <rect x="72" y="60" width="70" height="6" rx="3" fill="#ef4d23"/>
+          <text x="216" y="66" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">10</text>
+          <text x="16" y="86" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇯🇵 JP</text>
+          <rect x="72" y="80" width="140" height="6" rx="3" fill="#ffdfca"/>
+          <rect x="72" y="80" width="60" height="6" rx="3" fill="#ef4d23"/>
+          <text x="216" y="86" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">9</text>
+          <text x="16" y="106" fill="#282828" font-size="9" font-weight="600" font-family="system-ui">🇦🇪 AE</text>
+          <rect x="72" y="100" width="140" height="6" rx="3" fill="#ffdfca"/>
+          <rect x="72" y="100" width="46" height="6" rx="3" fill="#ef4d23"/>
+          <text x="216" y="106" text-anchor="end" fill="#282828" font-size="9" font-weight="700" font-family="system-ui">7</text>
+        </g>
+
+        <g transform="translate(290 175)">
+          <rect x="0" y="0" width="110" height="110" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.5"/>
+          <rect x="14" y="16" width="82" height="10" rx="3" fill="#ffe0c9"/>
+          <text x="55" y="24" text-anchor="middle" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">✉ Outreach</text>
+          <path d="M14 38 L14 90 L96 90 L96 38 Z" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
+          <path d="M14 38 L55 66 L96 38" stroke="#ef4d23" stroke-width="1.5" fill="none"/>
+          <g transform="translate(88 82)">
+            <circle r="10" fill="#4d8c35"/>
+            <path d="M-4 0 L-1 3 L4 -3" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </g>
+          <text x="14" y="106" fill="#777" font-size="7" font-weight="600" font-family="system-ui">EN · ES · ZH</text>
+        </g>
+
+        <g transform="translate(280 20)">
+          <path d="M10 -4 L12 4 L20 6 L12 8 L10 16 L8 8 L0 6 L8 4 Z" fill="#ef4d23" opacity=".85"/>
+        </g>
+      </svg>
+    </div>
+    <div class="auth-copy">
+      <h1>Buyer luar negeri, tinggal <span class="serif-italic">satu klik</span></h1>
+      <p>Data bea cukai, skor prioritas, dan kontak decision maker. Diorganisir agar UKM Indonesia bisa menemukan buyer tepat dalam hitungan menit.</p>
+      <ul class="auth-checklist">
+        <li><span class="chk-dot"></span>AI Buyer Discovery, cari pakai bahasa alami</li>
+        <li><span class="chk-dot"></span>Skor prioritas otomatis 0–100 per buyer</li>
+        <li><span class="chk-dot"></span>Kontak decision maker terverifikasi</li>
+        <li><span class="chk-dot"></span>Template outreach multi-bahasa siap kirim</li>
+      </ul>
+    </div>
+  </div>`;
 }
 route(/^\/login$/, (app) => {
   app.innerHTML = `<div class="auth-page">${authHero()}<div class="auth-form-side"><div class="auth-card card">
@@ -1981,6 +2064,185 @@ route(/^\/alerts$/, async (app) => {
     await api('/api/alerts/read', { method: 'POST', body: { id: +el.dataset.id } });
     if (el.dataset.buyer) location.hash = '#/buyer/' + el.dataset.buyer; else { await refreshMe(); render(); }
   });
+});
+
+// ================= settings & profile =================
+route(/^\/settings$/, async (app) => {
+  await requireMe();
+  const COUNTRY_OPTS = ['US', 'JP', 'NL', 'AE', 'AU'];
+  const COUNTRY_LABEL = { US: '🇺🇸 Amerika Serikat', JP: '🇯🇵 Jepang', NL: '🇳🇱 Belanda', AE: '🇦🇪 Uni Emirat Arab', AU: '🇦🇺 Australia' };
+  const STATUS_OPTS = [
+    ['never', 'Belum pernah ekspor', 'Sedang mempersiapkan ekspor pertama'],
+    ['occasional', 'Pernah beberapa kali', 'Sudah 1–5 kali ekspor, biasanya via broker'],
+    ['regular', 'Rutin ekspor', 'Ekspor berkala ke satu atau lebih negara'],
+  ];
+  const GOAL_OPTS = [
+    ['find_buyers', 'Cari buyer baru', 'Temukan & hubungi importir potensial'],
+    ['market_analysis', 'Analisis pasar', 'Pahami tren demand & harga per negara'],
+    ['competitor_intel', 'Intel kompetitor', 'Lihat ke mana kompetitor mengekspor'],
+  ];
+
+  // Load HS leaf codes (with fallback so the page still works if backend is slow)
+  let leaves;
+  try { leaves = await api('/api/hs/leaf', { timeout: 15000 }); } catch { leaves = FALLBACK_HS_LEAVES; }
+  if (!Array.isArray(leaves) || !leaves.length) leaves = FALLBACK_HS_LEAVES;
+
+  const state = {
+    name: ME.name || '',
+    org: ME.org_name || '',
+    hs: Array.isArray(ME.hs_focus) ? [...ME.hs_focus] : [],
+    countries: Array.isArray(ME.target_countries) ? [...ME.target_countries] : [],
+    export_status: ME.export_status || null,
+    goal: ME.goal || null,
+  };
+
+  const draw = () => {
+    app.innerHTML = shell(`
+      <h1 style="margin-bottom:6px">Settings & Profile</h1>
+      <p class="muted" style="margin-bottom:24px">Ubah preferensi onboarding kapan saja. Perubahan akan langsung mempengaruhi rekomendasi buyer & alert.</p>
+
+      <div class="grid grid-2" style="align-items:start">
+        <div class="card">
+          <h3 style="margin-bottom:16px">Profil Anda</h3>
+          <div class="field">
+            <label>Nama lengkap</label>
+            <input class="input" id="s-name" value="${esc(state.name)}" placeholder="Nama lengkap Anda">
+          </div>
+          <div class="field">
+            <label>Nama usaha</label>
+            <input class="input" id="s-org" value="${esc(state.org)}" placeholder="PT / CV / UD nama usaha">
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input class="input" value="${esc(ME.email || '')}" disabled style="background:var(--bg-surface-alt)">
+            <div class="help">Email tidak bisa diubah. Hubungi support kalau perlu ganti.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:16px">Status ekspor Anda</h3>
+          ${STATUS_OPTS.map(([v, t, d]) => `
+            <div class="option-card ${state.export_status === v ? 'selected' : ''}" data-status="${v}">
+              <div><b>${t}</b><div class="caption muted">${d}</div></div>
+            </div>`).join('')}
+
+          <h3 style="margin:24px 0 16px">Tujuan utama</h3>
+          ${GOAL_OPTS.map(([v, t, d]) => `
+            <div class="option-card ${state.goal === v ? 'selected' : ''}" data-goal="${v}">
+              <div><b>${t}</b><div class="caption muted">${d}</div></div>
+            </div>`).join('')}
+        </div>
+
+        <div class="card" style="grid-column:1/-1">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+            <h3>Produk yang Anda ekspor</h3>
+            <span class="caption muted">${state.hs.length} / 5 dipilih</span>
+          </div>
+          <p class="muted body-sm" style="margin-bottom:14px">Pilih 1–5 kode HS. Ini menentukan rekomendasi & alert Anda.</p>
+          <div style="max-height:320px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+            ${leaves.map((l) => `
+              <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
+                <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+                <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="card" style="grid-column:1/-1">
+          <h3 style="margin-bottom:12px">Negara target</h3>
+          <p class="muted body-sm" style="margin-bottom:14px">Pilih pasar yang ingin Anda masuki (boleh lebih dari satu).</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
+            ${COUNTRY_OPTS.map((c) => `
+              <div class="option-card ${state.countries.includes(c) ? 'selected' : ''}" data-country="${c}" style="margin-bottom:0">
+                <b>${COUNTRY_LABEL[c]}</b>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:24px;position:sticky;bottom:16px">
+        <button class="btn btn-neutral" id="s-reset">Batal perubahan</button>
+        <button class="btn btn-primary" id="s-save">Simpan preferensi</button>
+      </div>
+    `);
+    bindShell();
+
+    // Bind interactions
+    $('#s-name').oninput = (e) => { state.name = e.target.value; };
+    $('#s-org').oninput = (e) => { state.org = e.target.value; };
+    $$('.option-card[data-status]').forEach((el) => el.onclick = () => { state.export_status = el.dataset.status; draw(); });
+    $$('.option-card[data-goal]').forEach((el) => el.onclick = () => { state.goal = el.dataset.goal; draw(); });
+    $$('.option-card[data-country]').forEach((el) => el.onclick = () => {
+      const c = el.dataset.country;
+      state.countries = state.countries.includes(c) ? state.countries.filter((x) => x !== c) : [...state.countries, c];
+      draw();
+    });
+    $$('.option-card[data-hs]').forEach((el) => el.onclick = () => {
+      const c = el.dataset.hs;
+      if (state.hs.includes(c)) state.hs = state.hs.filter((x) => x !== c);
+      else if (state.hs.length < 5) state.hs = [...state.hs, c];
+      else return toast('Maksimal 5 kode HS. Hapus salah satu dulu.', true);
+      draw();
+    });
+    $('#s-reset').onclick = () => {
+      state.name = ME.name || '';
+      state.org = ME.org_name || '';
+      state.hs = Array.isArray(ME.hs_focus) ? [...ME.hs_focus] : [];
+      state.countries = Array.isArray(ME.target_countries) ? [...ME.target_countries] : [];
+      state.export_status = ME.export_status || null;
+      state.goal = ME.goal || null;
+      draw();
+      toast('Perubahan dibatalkan.');
+    };
+    $('#s-save').onclick = async () => {
+      const btn = $('#s-save');
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = 'Menyimpan…';
+      const payload = {
+        hs_focus: state.hs, target_countries: state.countries,
+        export_status: state.export_status, goal: state.goal,
+        org_name: state.org || null,
+      };
+      let sbSaved = false, localSaved = false;
+      if (window.sb) {
+        try {
+          const { data: sess } = await window.sb.auth.getSession();
+          const sbUser = sess && sess.session && sess.session.user;
+          if (sbUser) {
+            const { error } = await window.sb.from('profiles').upsert({
+              id: sbUser.id, email: sbUser.email,
+              name: state.name || null,
+              org_name: state.org || null,
+              hs_focus: state.hs, target_countries: state.countries,
+              export_status: state.export_status, goal: state.goal,
+              onboarded: true,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' });
+            if (!error) sbSaved = true;
+          }
+        } catch (e) { console.warn('[settings] SB upsert:', e); }
+      }
+      try {
+        await api('/api/me/onboarding', { method: 'POST', body: payload });
+        localSaved = true;
+      } catch (e) { console.warn('[settings] Local save:', e); }
+      if (sbSaved) { try { await syncSupabaseSession(); } catch {} }
+      if (ME) {
+        ME.name = state.name || ME.name;
+        ME.org_name = state.org || null;
+        ME.hs_focus = state.hs;
+        ME.target_countries = state.countries;
+        ME.export_status = state.export_status;
+        ME.goal = state.goal;
+      }
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      if (sbSaved || localSaved) toast('Preferensi tersimpan ✓');
+      else toast('Gagal menyimpan sepenuhnya. Coba lagi.', true);
+    };
+  };
+  draw();
 });
 
 // ================= billing =================
