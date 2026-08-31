@@ -1,4 +1,4 @@
-// EksporIn — database bootstrap (node:sqlite for local preview)
+// EksporIn | database bootstrap (node:sqlite for local preview)
 'use strict';
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');

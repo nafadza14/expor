@@ -1,4 +1,4 @@
-// EksporIn — REST API (all routes under /api)
+// EksporIn | REST API (all routes under /api)
 'use strict';
 const { hashPassword, verifyPassword, createSession, getSessionUser, destroySession, sessionCookie, clearCookie } = require('./auth');
 
@@ -73,7 +73,7 @@ function renderTemplate(db, tpl, buyer, user) {
   let note = '';
   if (buyer.last_shipment_date) {
     const d = new Date(buyer.last_shipment_date);
-    note = ` — most recently in ${['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()]} ${d.getFullYear()}`;
+    note = `, most recently in ${['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()]} ${d.getFullYear()}`;
   }
   const vars = {
     buyer_name: buyer.name, buyer_country: COUNTRY_NAMES[buyer.country] || buyer.country,
@@ -116,7 +116,7 @@ function materializeAlerts(db, user) {
     for (const r of rows) {
       if (!prefixes.includes(r.hs_code.slice(0, 4))) continue;
       ins.run(user.id, `nb:${r.id}`, 'new_buyer', `Buyer baru: ${r.name}`,
-        `Importir baru terdeteksi di HS ${r.hs_code} (${COUNTRY_NAMES[r.country] || r.country}). Belum banyak yang menghubungi — peluang first-mover.`, r.id, r.hs_code);
+        `Importir baru terdeteksi di HS ${r.hs_code} (${COUNTRY_NAMES[r.country] || r.country}). Belum banyak yang menghubungi. Peluang first-mover.`, r.id, r.hs_code);
     }
   }
   // 2) activity on saved buyers (shipment in last 21 days)
@@ -302,7 +302,7 @@ function handleApi(db, req, res, url, body) {
     // facets
     const facet = (key) => {
       const mmap = {};
-      for (const r of rows) { const k = r[key] || '—'; mmap[k] = (mmap[k] || 0) + 1; }
+      for (const r of rows) { const k = r[key] || '-'; mmap[k] = (mmap[k] || 0) + 1; }
       return Object.entries(mmap).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ value: k, count: n }));
     };
     return json(res, 200, { total, page: pageN, per, results: pageRows, facets: { country: facet('country'), size: facet('size_bucket') }, quota: quotaCheck(db, user, 'search') });
@@ -381,11 +381,11 @@ function handleApi(db, req, res, url, body) {
     }
     const idSup = sup.find((s) => s.country === 'ID');
     insights.push(idSup
-      ? `Sudah pernah impor dari Indonesia (${Math.round((idSup.n / totalN) * 100)}% dari shipment) — pintu masuk lebih mudah, tonjolkan diferensiasi kualitas dan harga.`
-      : `Belum pernah impor dari Indonesia — peluang untapped. Gunakan angle keunggulan origin Indonesia dan tawarkan sampel gratis.`);
+      ? `Sudah pernah impor dari Indonesia (${Math.round((idSup.n / totalN) * 100)}% dari shipment). Pintu masuk lebih mudah, tonjolkan diferensiasi kualitas dan harga.`
+      : `Belum pernah impor dari Indonesia. Peluang untapped, gunakan angle keunggulan origin Indonesia dan tawarkan sampel gratis.`);
     if (b.yoy_percent !== null) insights.push(b.yoy_percent >= 0
-      ? `Volume impor tumbuh ${b.yoy_percent}% YoY — buyer sedang ekspansi, kemungkinan mencari pemasok tambahan.`
-      : `Volume impor turun ${Math.abs(b.yoy_percent)}% YoY — mungkin sedang konsolidasi pemasok; tawarkan harga kompetitif.`);
+      ? `Volume impor tumbuh ${b.yoy_percent}% YoY. Buyer sedang ekspansi, kemungkinan mencari pemasok tambahan.`
+      : `Volume impor turun ${Math.abs(b.yoy_percent)}% YoY. Mungkin sedang konsolidasi pemasok; tawarkan harga kompetitif.`);
     if (monthly.length >= 3) {
       const peak = monthly.slice(0, 2).map((x) => MONTHS_ID[x.mo - 1]).join(' & ');
       insights.push(`Puncak aktivitas impor di bulan ${peak}. Mulai outreach 2–3 bulan sebelumnya agar masuk siklus pembelian.`);
@@ -443,7 +443,7 @@ function handleApi(db, req, res, url, body) {
       ${q.get('buyer_id') ? 'WHERE s.buyer_id = ?' : ''} ORDER BY s.shipment_date DESC LIMIT ?`)
       .all(...(q.get('buyer_id') ? [q.get('buyer_id')] : []), Math.min(limit, 10000));
     const head = Object.keys(rows[0] || { info: '' });
-    const csv = [`# EksporIn export — ${user.email} — ${new Date().toISOString()} (watermarked)`, head.join(','),
+    const csv = [`# EksporIn export | ${user.email} | ${new Date().toISOString()} (watermarked)`, head.join(','),
       ...rows.map((r) => head.map((h) => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
     bumpUsage(db, user.id, 'export', rows.length);
     res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="eksporin-shipments.csv"' });
@@ -743,8 +743,8 @@ function handleApi(db, req, res, url, body) {
       const matchScore = Math.min(100, Math.max(10, 30 + activityBonus + growthBonus + volumeBonus + untappedBonus + Math.floor(r() * 10)));
 
       const angles = {
-        high_growth: `${b.name} menunjukkan pertumbuhan impor ${b.yoy_percent || 0}% YoY — timing tepat untuk masuk sebagai pemasok baru dengan penawaran harga FOB kompetitif dan sampel gratis.`,
-        untapped: `${b.name} belum pernah impor dari Indonesia. Ini peluang first-mover — tonjolkan keunggulan origin Indonesia, sertifikasi, dan tawarkan trial shipment.`,
+        high_growth: `${b.name} menunjukkan pertumbuhan impor ${b.yoy_percent || 0}% YoY. Timing tepat untuk masuk sebagai pemasok baru dengan penawaran harga FOB kompetitif dan sampel gratis.`,
+        untapped: `${b.name} belum pernah impor dari Indonesia. Ini peluang first-mover: tonjolkan keunggulan origin Indonesia, sertifikasi, dan tawarkan trial shipment.`,
         existing: `${b.name} sudah familiar dengan pemasok Indonesia. Diferensiasi lewat kualitas konsisten, lead time lebih pendek, dan harga yang bersaing.`,
         volume: `${b.name} mengimpor volume besar (${Math.round(b.volume_12mo_kg / 1000)} ton/tahun). Tawarkan kontrak jangka panjang dengan harga volume discount.`,
       };

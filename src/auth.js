@@ -1,4 +1,4 @@
-// EksporIn — auth: scrypt password hashing + cookie sessions
+// EksporIn | auth: scrypt password hashing + cookie sessions
 'use strict';
 const { scryptSync, randomBytes, timingSafeEqual } = require('node:crypto');
 

@@ -1,4 +1,4 @@
-// EksporIn — database bootstrap (sql.js asm.js build, Vercel-compatible, pure JS — no WASM file needed)
+// EksporIn | database bootstrap (sql.js asm.js build, Vercel-compatible, pure JS, no WASM file needed)
 'use strict';
 const initSqlJs = require('sql.js/dist/sql-asm.js');
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// EksporIn — Global Buyer Intelligence Platform untuk Eksportir Indonesia
+// EksporIn | Global Buyer Intelligence Platform untuk Eksportir Indonesia
 // Zero-dependency full-stack server. Jalankan: node server.js
 'use strict';
 const http = require('node:http');
@@ -45,7 +45,7 @@ const server = http.createServer(async (req, res) => {
     if (!full.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
     if (!fs.existsSync(full) || fs.statSync(full).isDirectory()) full = path.join(PUBLIC_DIR, 'index.html'); // SPA fallback
     const ext = path.extname(full);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600' });
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     fs.createReadStream(full).pipe(res);
   } catch (e) {
     console.error(e);
@@ -57,7 +57,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log('');
   console.log('  ┌────────────────────────────────────────────────────┐');
-  console.log('  │  EksporIn — Global Buyer Intelligence Platform     │');
+  console.log('  │  EksporIn | Global Buyer Intelligence Platform     │');
   console.log(`  │  ➜  http://localhost:${PORT}                          │`);
   console.log('  │                                                    │');
   console.log('  │  Akun demo:  demo@eksporin.id  /  demo1234         │');

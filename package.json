@@ -1,7 +1,7 @@
 {
   "name": "eksporin",
   "version": "1.0.0",
-  "description": "EksporIn — Global Buyer Intelligence Platform untuk Eksportir Indonesia",
+  "description": "EksporIn | Global Buyer Intelligence Platform untuk Eksportir Indonesia",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

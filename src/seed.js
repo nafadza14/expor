@@ -1,4 +1,4 @@
-// EksporIn — deterministic demo-data seeder
+// EksporIn | deterministic demo-data seeder
 'use strict';
 const { scryptSync, randomBytes } = require('node:crypto');
 
@@ -340,35 +340,35 @@ function seed(db) {
     // ---------- system outreach templates ----------
     const insTpl = db.prepare('INSERT INTO templates (user_id,category,language,channel,name,subject,body) VALUES (NULL,?,?,?,?,?,?)');
     const T = [
-      ['first_touch', 'en', 'email', 'First touch — introduction (EN)',
+      ['first_touch', 'en', 'email', 'First touch: introduction (EN)',
         'Partnership inquiry: {{hs_description}} supply from Indonesia',
-        `Dear {{buyer_name}} team,\n\nMy name is {{user_name}} from {{org_name}}, an Indonesian exporter of {{hs_description}} (HS {{hs_code}}).\n\nWe noticed {{buyer_name}} actively imports this product{{last_shipment_note}}. Indonesia offers competitive advantages: consistent harvest quality, direct-trade pricing, and established export logistics to {{buyer_country}}.\n\nWe would love to send you our product catalog and a free sample. Would you be open to a short call next week?\n\nBest regards,\n{{user_name}}\n{{org_name}} — Indonesia`],
+        `Dear {{buyer_name}} team,\n\nMy name is {{user_name}} from {{org_name}}, an Indonesian exporter of {{hs_description}} (HS {{hs_code}}).\n\nWe noticed {{buyer_name}} actively imports this product{{last_shipment_note}}. Indonesia offers competitive advantages: consistent harvest quality, direct-trade pricing, and established export logistics to {{buyer_country}}.\n\nWe would love to send you our product catalog and a free sample. Would you be open to a short call next week?\n\nBest regards,\n{{user_name}}\n{{org_name}}, Indonesia`],
       ['followup_1', 'en', 'email', 'Follow-up #1 (EN)',
         'Re: {{hs_description}} supply from Indonesia',
-        `Hello {{buyer_name}} team,\n\nFollowing up on my previous note — I understand you are busy. To make it easy, here is a one-line summary:\n\n{{org_name}} (Indonesia) supplies {{hs_description}} with export-grade certification, and we'd like to offer you a free sample shipment.\n\nIf this is relevant, just reply "interested" and I will handle the rest.\n\nBest,\n{{user_name}}`],
-      ['followup_2', 'en', 'email', 'Follow-up #2 — break-up (EN)',
+        `Hello {{buyer_name}} team,\n\nFollowing up on my previous note. I understand you are busy. To make it easy, here is a one-line summary:\n\n{{org_name}} (Indonesia) supplies {{hs_description}} with export-grade certification, and we'd like to offer you a free sample shipment.\n\nIf this is relevant, just reply "interested" and I will handle the rest.\n\nBest,\n{{user_name}}`],
+      ['followup_2', 'en', 'email', 'Follow-up #2: break-up (EN)',
         'Should I close your file?',
-        `Hi {{buyer_name}} team,\n\nI haven't heard back, so I assume the timing isn't right for new {{hs_description}} suppliers. I'll close your file for now.\n\nIf demand picks up — especially before peak season — feel free to reach out. We keep dedicated allocation for {{buyer_country}} buyers.\n\nRegards,\n{{user_name}}, {{org_name}}`],
+        `Hi {{buyer_name}} team,\n\nI haven't heard back, so I assume the timing isn't right for new {{hs_description}} suppliers. I'll close your file for now.\n\nIf demand picks up, especially before peak season, feel free to reach out. We keep dedicated allocation for {{buyer_country}} buyers.\n\nRegards,\n{{user_name}}, {{org_name}}`],
       ['meeting_request', 'en', 'email', 'Meeting request (EN)',
         '15-minute call re: {{hs_description}} supply',
-        `Dear {{buyer_name}} team,\n\nWould you have 15 minutes this week for a short video call? I'd like to show you our {{hs_description}} (HS {{hs_code}}) specifications, pricing FOB Indonesian ports, and lead times to {{buyer_country}}.\n\nYou can pick any time here, or simply reply with a slot that suits you.\n\nThank you,\n{{user_name}} — {{org_name}}`],
-      ['first_touch', 'en', 'whatsapp', 'First touch — WhatsApp (EN)', null,
+        `Dear {{buyer_name}} team,\n\nWould you have 15 minutes this week for a short video call? I'd like to show you our {{hs_description}} (HS {{hs_code}}) specifications, pricing FOB Indonesian ports, and lead times to {{buyer_country}}.\n\nYou can pick any time here, or simply reply with a slot that suits you.\n\nThank you,\n{{user_name}}, {{org_name}}`],
+      ['first_touch', 'en', 'whatsapp', 'First touch: WhatsApp (EN)', null,
         `Hello {{buyer_name}}! This is {{user_name}} from {{org_name}}, Indonesia 🇮🇩. We export {{hs_description}} (HS {{hs_code}}) and currently supply buyers in {{buyer_country}}. May I send you our catalog and FOB price list? Thank you!`],
       ['first_touch', 'es', 'email', 'Primer contacto (ES)',
         'Suministro de {{hs_description}} desde Indonesia',
-        `Estimado equipo de {{buyer_name}}:\n\nSoy {{user_name}} de {{org_name}}, exportador indonesio de {{hs_description}} (HS {{hs_code}}).\n\nSabemos que {{buyer_name}} importa este producto regularmente. Nos gustaría enviarles nuestro catálogo y una muestra gratuita.\n\n¿Tendría disponibilidad para una breve llamada la próxima semana?\n\nSaludos cordiales,\n{{user_name}} — {{org_name}}, Indonesia`],
+        `Estimado equipo de {{buyer_name}}:\n\nSoy {{user_name}} de {{org_name}}, exportador indonesio de {{hs_description}} (HS {{hs_code}}).\n\nSabemos que {{buyer_name}} importa este producto regularmente. Nos gustaría enviarles nuestro catálogo y una muestra gratuita.\n\n¿Tendría disponibilidad para una breve llamada la próxima semana?\n\nSaludos cordiales,\n{{user_name}}, {{org_name}}, Indonesia`],
       ['first_touch', 'ar', 'email', 'الاتصال الأول (AR)',
         'استفسار شراكة: توريد {{hs_description}} من إندونيسيا',
-        `السادة فريق {{buyer_name}} المحترمين،\n\nأنا {{user_name}} من شركة {{org_name}}، مُصدِّر إندونيسي لمنتج {{hs_description}} (HS {{hs_code}}).\n\nنعلم أن شركتكم تستورد هذا المنتج بانتظام، ويسعدنا إرسال الكتالوج وعينة مجانية.\n\nهل يمكننا ترتيب مكالمة قصيرة الأسبوع القادم؟\n\nمع خالص التحية،\n{{user_name}} — {{org_name}}`],
+        `السادة فريق {{buyer_name}} المحترمين،\n\nأنا {{user_name}} من شركة {{org_name}}، مُصدِّر إندونيسي لمنتج {{hs_description}} (HS {{hs_code}}).\n\nنعلم أن شركتكم تستورد هذا المنتج بانتظام، ويسعدنا إرسال الكتالوج وعينة مجانية.\n\nهل يمكننا ترتيب مكالمة قصيرة الأسبوع القادم؟\n\nمع خالص التحية،\n{{user_name}}, {{org_name}}`],
       ['first_touch', 'zh', 'email', '首次联系 (ZH)',
         '来自印度尼西亚的{{hs_description}}供应合作咨询',
-        `尊敬的{{buyer_name}}团队：\n\n我是{{org_name}}的{{user_name}}，我们是印度尼西亚的{{hs_description}}（HS {{hs_code}}）出口商。\n\n我们了解到贵司定期进口该产品。我们希望向您发送产品目录和免费样品。\n\n下周是否方便安排一次简短的通话？\n\n此致敬礼\n{{user_name}} — {{org_name}}（印度尼西亚）`],
+        `尊敬的{{buyer_name}}团队：\n\n我是{{org_name}}的{{user_name}}，我们是印度尼西亚的{{hs_description}}（HS {{hs_code}}）出口商。\n\n我们了解到贵司定期进口该产品。我们希望向您发送产品目录和免费样品。\n\n下周是否方便安排一次简短的通话？\n\n此致敬礼\n{{user_name}}，{{org_name}}（印度尼西亚）`],
       ['first_touch', 'ja', 'email', '初回コンタクト (JA)',
         'インドネシア産{{hs_description}}のご提案',
-        `{{buyer_name}} ご担当者様\n\nインドネシアの輸出企業 {{org_name}} の {{user_name}} と申します。弊社は {{hs_description}}（HS {{hs_code}}）を輸出しております。\n\n貴社が本製品を定期的に輸入されていると伺い、カタログと無料サンプルをお送りしたくご連絡いたしました。\n\n来週、15分ほどオンラインでお話しできれば幸いです。\n\n何卒よろしくお願い申し上げます。\n{{user_name}} — {{org_name}}`],
+        `{{buyer_name}} ご担当者様\n\nインドネシアの輸出企業 {{org_name}} の {{user_name}} と申します。弊社は {{hs_description}}（HS {{hs_code}}）を輸出しております。\n\n貴社が本製品を定期的に輸入されていると伺い、カタログと無料サンプルをお送りしたくご連絡いたしました。\n\n来週、15分ほどオンラインでお話しできれば幸いです。\n\n何卒よろしくお願い申し上げます。\n{{user_name}}, {{org_name}}`],
       ['sample_response', 'en', 'email', 'Sample request response (EN)',
-        'Your sample of {{hs_description}} — shipping details',
-        `Dear {{buyer_name}} team,\n\nThank you for your interest in our {{hs_description}}. We will dispatch the sample within 3 working days via DHL Express, at no cost to you.\n\nCould you confirm the delivery address and the specification you want us to match (grade, moisture, packaging)?\n\nBest regards,\n{{user_name}} — {{org_name}}`],
+        'Your sample of {{hs_description}}: shipping details',
+        `Dear {{buyer_name}} team,\n\nThank you for your interest in our {{hs_description}}. We will dispatch the sample within 3 working days via DHL Express, at no cost to you.\n\nCould you confirm the delivery address and the specification you want us to match (grade, moisture, packaging)?\n\nBest regards,\n{{user_name}}, {{org_name}}`],
     ];
     for (const t of T) insTpl.run(...t);
 

@@ -1,4 +1,4 @@
-/* EksporIn SPA — vanilla JS, zero dependencies */
+/* EksporIn SPA | vanilla JS, zero dependencies */
 'use strict';
 
 // ================= helpers =================
@@ -6,12 +6,12 @@ const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf = new Intl.NumberFormat('id-ID');
-const fmtN = (n) => n == null ? '—' : nf.format(Math.round(n));
-const fmtUSD = (n) => n == null ? '—' : '$' + nf.format(Math.round(n));
-const fmtKg = (n) => n == null ? '—' : (n >= 1e6 ? nf.format(+(n / 1e6).toFixed(1)) + ' rb ton' : n >= 1000 ? nf.format(Math.round(n / 1000)) + ' ton' : nf.format(Math.round(n)) + ' kg');
+const fmtN = (n) => n == null ? '-' : nf.format(Math.round(n));
+const fmtUSD = (n) => n == null ? '-' : '$' + nf.format(Math.round(n));
+const fmtKg = (n) => n == null ? '-' : (n >= 1e6 ? nf.format(+(n / 1e6).toFixed(1)) + ' rb ton' : n >= 1000 ? nf.format(Math.round(n / 1000)) + ' ton' : nf.format(Math.round(n)) + ' kg');
 const fmtIDR = (n) => 'Rp ' + nf.format(n);
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s.slice(0, 10)); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
+const fmtDate = (s) => { if (!s) return '-'; const d = new Date(s.slice(0, 10)); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
 const FLAG = { US: '🇺🇸', JP: '🇯🇵', NL: '🇳🇱', AE: '🇦🇪', AU: '🇦🇺', ID: '🇮🇩', VN: '🇻🇳', BR: '🇧🇷', CO: '🇨🇴', IN: '🇮🇳', TH: '🇹🇭', CN: '🇨🇳', MY: '🇲🇾', EC: '🇪🇨', ET: '🇪🇹' };
 const CNAME = { US: 'Amerika Serikat', JP: 'Jepang', NL: 'Belanda', AE: 'Uni Emirat Arab', AU: 'Australia', ID: 'Indonesia', VN: 'Vietnam', BR: 'Brasil', CO: 'Kolombia', IN: 'India', TH: 'Thailand', CN: 'Tiongkok', MY: 'Malaysia', EC: 'Ekuador', ET: 'Ethiopia' };
 const flag = (c) => FLAG[c] || '🌐';
@@ -150,7 +150,7 @@ function scoreBars(components) {
   return `<div class="score-bars">${rows.map(([lbl, v, w]) => `
     <div class="sb-row"><span class="muted">${lbl} <span class="muted-3">(${w})</span></span>
     <div class="sb-track"><div class="sb-fill" style="width:${v ?? 0}%;background:${(v ?? 0) >= 70 ? 'var(--viz-2)' : (v ?? 0) >= 40 ? 'var(--viz-1)' : 'var(--viz-3)'}"></div></div>
-    <b class="num">${v ?? '—'}</b></div>`).join('')}</div>`;
+    <b class="num">${v ?? '-'}</b></div>`).join('')}</div>`;
 }
 
 // ================= router =================
@@ -231,8 +231,18 @@ async function refreshMe() { ME = await api('/api/me'); }
 // ================= landing =================
 route(/^\/$/, async (app) => {
   try { ME = await api('/api/me'); if (ME) { location.hash = '#/dashboard'; return; } } catch { /* not logged in */ }
+  const FLOWER = `<svg class="flower-logo" viewBox="0 0 32 32" fill="#ef4d23">${Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4;return `<circle cx="${(16+10*Math.cos(a)).toFixed(2)}" cy="${(16+10*Math.sin(a)).toFixed(2)}" r="3.5"/>`;}).join('')}<circle cx="16" cy="16" r="3.5"/></svg>`;
+  const CHEVRON_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const CHEVRON_RIGHT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+  const CART_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>';
+  const MENU_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>';
+  const X_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+  const TREND_DOWN = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>';
+  const TREND_UP = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>';
+
   app.innerHTML = `
   <div class="landing-wrap">
+    <!-- Hero container (clipped) -->
     <div class="landing-hero-container">
       <video class="landing-video" autoplay loop muted playsinline preload="auto" disableremoteplayback
         webkit-playsinline="true" x5-playsinline="true"
@@ -243,19 +253,29 @@ route(/^\/$/, async (app) => {
       <div class="landing-fg">
         <!-- Floating pill navbar -->
         <div class="pill-nav-wrap">
-          <div class="pill-nav">
-            <div class="logo" style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px">
-              ${LOGO_SVG} EksporIn
-            </div>
+          <div class="pill-nav" id="pillNav">
+            <div class="pill-logo">${FLOWER}<span>EksporIn</span></div>
             <div class="pill-nav-links">
-              <a href="#/"><span class="dot"></span> Home</a>
-              <a href="#/login">Features</a>
-              <a href="#/register">About</a>
+              <a href="#/" class="active"><span class="dot"></span> Home</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'})">Fitur</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'})">Tentang</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'})" class="chev">Halaman ${CHEVRON_DOWN}</a>
             </div>
-            <a class="pill-nav-cta" href="#/register">
-              Mulai gratis
-              <span class="arrow-circle"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
-            </a>
+            <div class="pill-nav-right">
+              <a href="#/login" class="pill-signin">Masuk</a>
+              <a href="#/register" class="pill-cta">
+                <span class="cta-full">Akses awal</span><span class="cta-short">Akses</span>
+                <span class="arrow-circle">${CHEVRON_RIGHT}</span>
+              </a>
+              <button class="pill-menu" onclick="document.getElementById('pillMenuPanel').classList.toggle('open')" aria-label="Menu">${MENU_ICON}</button>
+            </div>
+            <div class="pill-menu-panel" id="pillMenuPanel">
+              <a href="#/" class="active"><span class="dot"></span> Home</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Fitur</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Tentang</a>
+              <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Halaman</a>
+              <a href="#/login">Masuk</a>
+            </div>
           </div>
         </div>
 
@@ -263,55 +283,70 @@ route(/^\/$/, async (app) => {
         <div class="hero-content">
           <div class="hero-badge"><span class="dot"></span> EksporIn Platform</div>
           <h1 class="hero-headline">
-            Shaping <span style="font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">Exporters</span><br>
-            of tomorrow
+            Shaping <span class="serif-italic">Exporters</span><br>of tomorrow
           </h1>
-          <p class="hero-sub">Platform Intelijen Buyer Global untuk Eksportir Indonesia. Data customs, AI scoring, kontak decision maker — semua dalam satu dashboard.</p>
+          <p class="hero-sub">Platform intelijen buyer global untuk eksportir Indonesia. Data bea cukai, skor prioritas, dan kontak decision maker dalam satu dashboard.</p>
           <a class="hero-cta" href="#/register">
-            Mulai Gratis
-            <span class="arrow-circle"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></span>
+            <span>Mulai Gratis</span>
+            <span class="arrow-circle">${CHEVRON_RIGHT}</span>
           </a>
-          <p class="caption" style="margin-top:14px;color:var(--text-tertiary)">Demo: demo@eksporin.id / demo1234 — <a href="#/login" style="color:var(--text-secondary)">Masuk sekarang</a></p>
+          <p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>
         </div>
 
         <!-- Dashboard preview tray -->
         <div class="dash-preview-wrap">
           <div class="dash-preview-tray">
             <div class="dash-preview-grid">
+              <!-- Card 1: Buyer aktif -->
               <div class="preview-card">
                 <div class="pc-header"><span class="label">Buyer Aktif</span><span class="muted">Bulan Ini</span></div>
-                <div class="pc-big">6,896</div>
-                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
-                  <span class="pill pill-success" style="font-size:11px;padding:2px 6px">+12.3%</span>
-                  <span class="pc-small">vs bulan lalu</span>
+                <div class="pc-big">6.896</div>
+                <div class="pc-row">
+                  <span class="pc-pill-danger">${TREND_DOWN} -3.382 (33%)</span>
                 </div>
-                ${arcGauge(92, { color: '#ef4d23', showLabels: true, min: '5.2K', max: '7.5K' })}
-                <div class="toggle-pill" style="margin-top:10px">
-                  <button class="active">Importir</button><button>Shipment</button>
-                </div>
-              </div>
-              <div class="preview-card" style="display:flex;flex-direction:column;gap:12px">
-                <div class="pc-header"><span class="label">Pencarian AI</span><span class="muted">Discovery Engine</span></div>
-                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Komoditas</label>
-                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center">Vanili kering grade A <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#9a9a9a" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
-                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Target negara</label>
-                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center">Amerika Serikat <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#9a9a9a" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div></div>
-                <div class="field" style="margin-bottom:0"><label style="font-size:11px;color:var(--text-tertiary)">Leads ditemukan</label>
-                  <div style="border:1px solid #e5e5e5;border-radius:8px;padding:8px 12px;font-size:13px;display:flex;align-items:center;gap:6px"><span style="color:var(--orange);font-weight:600">#</span> 24</div></div>
-                <div style="display:flex;gap:6px;margin-top:auto">
-                  <span style="background:#ef4d23;color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:500;flex:1;text-align:center">Cari Buyer</span>
-                  <span style="text-decoration:underline;color:var(--text-secondary);font-size:12px;display:flex;align-items:center;cursor:pointer">Reset</span>
+                <div class="pc-small">Dibanding bulan lalu</div>
+                <div class="pc-target-label">Target bulan tercapai</div>
+                ${arcGauge(92, { color: '#ef4d23', showLabels: true, min: '389K', max: '425K' })}
+                <div class="toggle-pill">
+                  <button class="active">Impresi</button><button>Klik</button>
                 </div>
               </div>
+
+              <!-- Card 2: Form -->
+              <div class="preview-card preview-form">
+                <div class="pc-form-group">
+                  <label>Tampilkan data untuk</label>
+                  <button class="pc-select">Bulan ini ${CHEVRON_DOWN}</button>
+                </div>
+                <div class="pc-form-group">
+                  <label>Bandingkan periode</label>
+                  <button class="pc-select">Month-to-date (MTD) ${CHEVRON_DOWN}</button>
+                </div>
+                <div class="pc-form-group">
+                  <label>Target buyer (bulan ini)</label>
+                  <div class="pc-input"><span class="pc-hash">#</span><span>10</span></div>
+                </div>
+                <div class="pc-form-group">
+                  <label>Target buyer (tahun ini)</label>
+                  <div class="pc-input"><span class="pc-hash">#</span><span>100</span></div>
+                </div>
+                <div class="pc-form-footer">
+                  <button class="pc-save">Simpan</button>
+                  <a class="pc-cancel">Batal</a>
+                  <button class="pc-x" aria-label="Tutup">${X_ICON}</button>
+                </div>
+              </div>
+
+              <!-- Card 3: Match Score -->
               <div class="preview-card">
                 <div class="pc-header"><span class="label">Match Score</span><span class="muted">hari ini</span></div>
                 <div class="pc-big">0</div>
-                <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
-                  <span class="pill pill-neutral" style="font-size:11px;padding:2px 6px">- 0</span>
-                  <span class="pc-small">vs kemarin</span>
+                <div class="pc-row">
+                  <span class="pc-pill-neutral">${TREND_UP} 0</span>
                 </div>
+                <div class="pc-small">Dibanding kemarin</div>
                 ${arcGauge(68, { color: '#9ca3af' })}
-                <div class="toggle-pill" style="margin-top:10px">
+                <div class="toggle-pill">
                   <button class="active">Hot Leads</button><button>Pipeline</button>
                 </div>
               </div>
@@ -320,6 +355,100 @@ route(/^\/$/, async (app) => {
         </div>
       </div>
     </div>
+
+    <!-- Features -->
+    <section class="landing-section" id="features">
+      <div class="landing-section-inner">
+        <div class="overline" style="text-align:center;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--orange)">Fitur Utama</div>
+        <h2 style="text-align:center;font-size:28px;margin-bottom:8px">Semua yang Anda butuhkan untuk ekspor</h2>
+        <p class="muted" style="text-align:center;max-width:520px;margin:0 auto 40px">Dari pencarian buyer sampai kirim pesan pertama, dalam satu platform.</p>
+        <div class="grid grid-3" style="gap:20px">
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">🤖</div>
+            <h3 style="margin-bottom:8px">AI Buyer Discovery</h3>
+            <p class="muted body-sm">Deskripsikan komoditas dalam bahasa alami. AI memetakan HS code, mencari importir aktif, meng-enrich kontak, dan memberi skor prioritas.</p>
+          </div>
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">📊</div>
+            <h3 style="margin-bottom:8px">Direktori HS Code</h3>
+            <p class="muted body-sm">Telusuri buyer per kategori produk dengan data volume, nilai, dan negara asal. Drill-down dari bab sampai sub-heading 6-digit.</p>
+          </div>
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">🚢</div>
+            <h3 style="margin-bottom:8px">Shipment Explorer</h3>
+            <p class="muted body-sm">Telusuri data bill of lading lintas buyer untuk analisis mendalam. Filter per HS code, negara, eksportir, dan periode.</p>
+          </div>
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">🎯</div>
+            <h3 style="margin-bottom:8px">Match Score 0-100</h3>
+            <p class="muted body-sm">Setiap buyer mendapat skor berdasarkan aktivitas impor, pertumbuhan, kecocokan produk, dan ketersediaan kontak.</p>
+          </div>
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">👤</div>
+            <h3 style="margin-bottom:8px">Kontak Decision Maker</h3>
+            <p class="muted body-sm">Nama, email terverifikasi, dan profil LinkedIn dari Procurement Manager, Sourcing Director, dan posisi kunci lainnya.</p>
+          </div>
+          <div class="card" style="padding:28px;text-align:center">
+            <div style="font-size:36px;margin-bottom:12px">✉️</div>
+            <h3 style="margin-bottom:8px">Template Outreach</h3>
+            <p class="muted body-sm">Template multi-bahasa siap kirim dengan variabel otomatis. Lacak open rate dan reply rate dari dashboard.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="landing-section" id="how" style="background:var(--bg-surface)">
+      <div class="landing-section-inner">
+        <div class="overline" style="text-align:center;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--orange)">Cara Kerja</div>
+        <h2 style="text-align:center;font-size:28px;margin-bottom:40px">4 langkah menuju buyer pertama Anda</h2>
+        <div class="grid grid-4" style="gap:20px">
+          ${[
+            ['1', 'Deskripsikan produk', 'Masukkan komoditas dalam bahasa Indonesia atau Inggris. AI langsung memetakan ke HS code 6-digit.'],
+            ['2', 'Temukan buyer', 'Pipeline AI mencari importir aktif dari database bill of lading dan meng-enrich kontak decision maker.'],
+            ['3', 'Evaluasi dan simpan', 'Lihat match score, riwayat shipment, dan outreach angle per buyer. Simpan yang potensial ke daftar.'],
+            ['4', 'Kirim outreach', 'Gunakan template multi-bahasa untuk menghubungi buyer. Lacak status pesan dari dashboard.'],
+          ].map(([n, title, desc]) => `
+            <div style="text-align:center">
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--orange);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;margin-bottom:12px">${n}</div>
+              <h4 style="margin-bottom:6px">${title}</h4>
+              <p class="muted body-sm">${desc}</p>
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <!-- Social proof -->
+    <section class="landing-section">
+      <div class="landing-section-inner">
+        <div class="grid grid-4" style="gap:20px;text-align:center">
+          <div><div class="numeric-xl" style="color:var(--orange)">200+</div><p class="muted body-sm" style="margin-top:4px">Buyer dari 5 negara</p></div>
+          <div><div class="numeric-xl" style="color:var(--orange)">50+</div><p class="muted body-sm" style="margin-top:4px">Kategori HS code</p></div>
+          <div><div class="numeric-xl" style="color:var(--orange)">10rb+</div><p class="muted body-sm" style="margin-top:4px">Data shipment</p></div>
+          <div><div class="numeric-xl" style="color:var(--orange)">4 step</div><p class="muted body-sm" style="margin-top:4px">AI Discovery pipeline</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="landing-section" id="pricing" style="background:var(--orange);color:#fff;text-align:center">
+      <div class="landing-section-inner">
+        <h2 style="color:#fff;font-size:28px;margin-bottom:8px">Siap menemukan buyer pertama Anda?</h2>
+        <p style="opacity:.9;max-width:440px;margin:0 auto 28px">Mulai dengan paket gratis, tanpa kartu kredit. Upgrade kapan saja sesuai kebutuhan bisnis Anda.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <a href="#/register" class="btn" style="background:#fff;color:var(--orange);border-radius:var(--radius-full);padding:14px 32px;font-size:16px;font-weight:600">Daftar gratis</a>
+          <a href="#/login" class="btn" style="background:rgba(255,255,255,.2);color:#fff;border-radius:var(--radius-full);padding:14px 32px;font-size:16px;font-weight:600;border:1px solid rgba(255,255,255,.3)">Masuk</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+      <div class="landing-section-inner" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:700">${LOGO_SVG} EksporIn</div>
+        <p class="caption muted-3">&copy; 2024 EksporIn. Platform intelijen buyer untuk eksportir Indonesia.</p>
+      </div>
+    </footer>
   </div>`;
 });
 
@@ -328,8 +457,8 @@ function authHero() {
   return `<div class="auth-hero">
     <div style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:#fff">${LOGO_SVG.replace(/#ef4d23/g, 'rgba(255,255,255,.85)')} EksporIn</div>
     <h1>Pipeline buyer global Anda dimulai dari sini.</h1>
-    <p>Data customs jutaan shipment, diorganisir agar UKM Indonesia bisa menemukan buyer yang tepat dalam hitungan menit — bukan 40 jam per minggu.</p>
-    <ul><li>✅ &nbsp;AI Buyer Discovery Engine — cari buyer pakai bahasa alami</li>
+    <p>Data customs jutaan shipment, diorganisir agar UKM Indonesia bisa menemukan buyer yang tepat dalam hitungan menit, bukan 40 jam per minggu.</p>
+    <ul><li>✅ &nbsp;AI Buyer Discovery Engine: cari buyer pakai bahasa alami</li>
     <li>✅ &nbsp;Skor prioritas otomatis per buyer (0–100)</li>
     <li>✅ &nbsp;Kontak decision maker ter-enrich + email terverifikasi</li>
     <li>✅ &nbsp;Template outreach multi-bahasa siap kirim</li></ul></div>`;
@@ -340,7 +469,7 @@ route(/^\/login$/, (app) => {
     <form id="f"><div class="field"><label>Email</label><input class="input" name="email" type="email" required value="demo@eksporin.id"></div>
     <div class="field"><label>Password</label><input class="input" name="password" type="password" required value="demo1234"></div>
     <button class="btn btn-primary" style="width:100%">Masuk</button></form>
-    <p class="caption muted-3" style="margin-top:14px;text-align:center">Akun demo sudah terisi — langsung klik Masuk.</p></div></div></div>`;
+    <p class="caption muted-3" style="margin-top:14px;text-align:center">Akun demo sudah terisi, langsung klik Masuk.</p></div></div></div>`;
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -505,7 +634,7 @@ route(/^\/discover$/, async (app) => {
           </div>
           <div style="flex:1">
             <h1 style="margin-bottom:4px;letter-spacing:-.02em">AI Buyer <span class="serif-italic">Discovery</span> Engine</h1>
-            <p class="muted body-sm">Deskripsikan komoditas ekspor Anda — AI akan menjalankan pipeline 4-step: HS mapping, trade retrieval, contact enrichment, dan lead scoring.</p>
+            <p class="muted body-sm">Deskripsikan komoditas ekspor Anda. AI akan menjalankan pipeline 4-step: HS mapping, trade retrieval, contact enrichment, dan lead scoring.</p>
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:18px">
@@ -546,7 +675,7 @@ route(/^\/discover$/, async (app) => {
       <div class="card" style="text-align:center;padding:40px">
         <div style="font-size:48px;margin-bottom:12px">🔍</div>
         <h2 style="margin-bottom:8px">Mulai Pencarian Buyer</h2>
-        <p class="muted" style="max-width:480px;margin:0 auto">Masukkan deskripsi komoditas di atas — bahasa Indonesia atau Inggris. AI akan otomatis memetakan ke HS code dan menemukan buyer aktif.</p>
+        <p class="muted" style="max-width:480px;margin:0 auto">Masukkan deskripsi komoditas di atas, bahasa Indonesia atau Inggris. AI akan otomatis memetakan ke HS code dan menemukan buyer aktif.</p>
       </div>` : ''}`);
     bindShell();
 
@@ -650,7 +779,7 @@ function renderDiscoverResult(r) {
               <div class="caption muted-3" style="margin-bottom:6px">Decision Makers</div>
               ${lead.decision_makers.map((dm) => `
                 <div style="padding:8px 0;border-bottom:1px dotted var(--border-subtle)">
-                  <b class="body-sm">${esc(dm.full_name)}</b> <span class="caption muted">— ${esc(dm.job_title)}</span>
+                  <b class="body-sm">${esc(dm.full_name)}</b> <span class="caption muted">· ${esc(dm.job_title)}</span>
                   <div style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap">
                     ${dm.email ? `<span class="caption" title="${dm.email_status}">✉️ ${esc(dm.email)} ${dm.email_status === 'verified' ? '<span class="pill pill-success" style="font-size:9px">verified</span>' : ''}</span>` : ''}
                     ${dm.linkedin_url ? `<a class="caption" href="${esc(dm.linkedin_url)}" target="_blank" style="color:var(--orange)">LinkedIn</a>` : ''}
@@ -686,7 +815,7 @@ route(/^\/direktori$/, async (app, m, params) => {
   }
   app.innerHTML = shell(`
     <h1 style="margin-bottom:4px">Direktori HS Code</h1>
-    <p class="muted" style="margin-bottom:20px">Telusuri buyer per kategori produk — klik untuk drill-down, atau langsung lihat buyer di level manapun.</p>
+    <p class="muted" style="margin-bottom:20px">Telusuri buyer per kategori produk. Klik untuk drill-down, atau langsung lihat buyer di level manapun.</p>
     ${crumb}
     <div class="hs-grid">${nodes.map((n) => `
       <div class="hs-card" data-code="${n.code}" data-level="${n.level}">
@@ -698,7 +827,7 @@ route(/^\/direktori$/, async (app, m, params) => {
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div><div class="caption muted-3">Buyer</div><b class="num">${fmtN(n.buyer_count)}</b></div>
           <div><div class="caption muted-3">Volume total</div><b class="num">${fmtKg(n.volume_kg)}</b></div>
-          <div><div class="caption muted-3">Top negara</div><b>${n.top_countries.map((t) => flag(t.country)).join(' ') || '—'}</b></div></div>
+          <div><div class="caption muted-3">Top negara</div><b>${n.top_countries.map((t) => flag(t.country)).join(' ') || '-'}</b></div></div>
         <div style="display:flex;gap:8px;margin-top:14px">
           ${n.level < 6 ? `<button class="btn btn-sm btn-neutral drill">Drill-down →</button>` : ''}
           <button class="btn btn-sm btn-primary see">Lihat buyer (${n.buyer_count})</button></div>
@@ -748,7 +877,7 @@ route(/^\/cari$/, async (app, m, params) => {
           <select class="input" id="f-sort" style="max-width:190px">
             ${[['score', 'Urut: Skor tertinggi'], ['volume', 'Urut: Volume 12 bln'], ['shipments', 'Urut: Frekuensi'], ['recent', 'Urut: Shipment terbaru'], ['name', 'Urut: Nama A-Z']].map(([v, l]) => `<option value="${v}" ${state.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select></div>
-        ${ME.plan === 'free' && d.total > 20 ? '<div class="banner banner-warning">🔒 Paket Free menampilkan detail 20 buyer teratas — baris selanjutnya diblur. <a href="#/billing">Upgrade</a></div>' : ''}
+        ${ME.plan === 'free' && d.total > 20 ? '<div class="banner banner-warning">🔒 Paket Free menampilkan detail 20 buyer teratas. Baris selanjutnya diblur. <a href="#/billing">Upgrade</a></div>' : ''}
         <div class="tbl-wrap"><table class="tbl"><thead><tr>
           <th>#</th><th>Buyer</th><th>Negara</th><th class="r">Volume 12 bln</th><th class="r">Frek/thn</th><th>Shipment terakhir</th><th>Skor</th><th></th></tr></thead><tbody>
           ${d.results.length ? d.results.map((b) => `<tr class="clickable ${b.blurred ? 'row-blurred' : ''}" ${b.blurred ? '' : `onclick="location.hash='#/buyer/${b.id}'"`}>
@@ -809,7 +938,7 @@ window.saveToList = async (buyerId) => {
   const lists = await api('/api/lists');
   modal(`<h2 style="margin-bottom:16px">Simpan buyer ke daftar</h2>
     ${lists.length ? `<div class="field"><label>Pilih daftar</label><select class="input" id="sl-list">
-      ${lists.map((l) => `<option value="${l.id}">${esc(l.name)} (${l.buyer_count})</option>`).join('')}</select></div>` : '<p class="muted body-sm" style="margin-bottom:12px">Anda belum punya daftar — buat dulu di bawah.</p>'}
+      ${lists.map((l) => `<option value="${l.id}">${esc(l.name)} (${l.buyer_count})</option>`).join('')}</select></div>` : '<p class="muted body-sm" style="margin-bottom:12px">Anda belum punya daftar, buat dulu di bawah.</p>'}
     <div class="field"><label>Atau buat daftar baru</label><input class="input" id="sl-new" placeholder="mis. Prospek Furnitur Jepang"></div>
     <button class="btn btn-primary" id="sl-save" style="width:100%">Simpan</button>`);
   $('#sl-save').onclick = async () => {
@@ -828,7 +957,7 @@ window.batchSaveLeads = async (buyerIds) => {
   const lists = await api('/api/lists');
   modal(`<h2 style="margin-bottom:16px">Simpan ${buyerIds.length} buyer ke daftar</h2>
     ${lists.length ? `<div class="field"><label>Pilih daftar</label><select class="input" id="sl-list">
-      ${lists.map((l) => `<option value="${l.id}">${esc(l.name)} (${l.buyer_count})</option>`).join('')}</select></div>` : '<p class="muted body-sm" style="margin-bottom:12px">Anda belum punya daftar — buat dulu di bawah.</p>'}
+      ${lists.map((l) => `<option value="${l.id}">${esc(l.name)} (${l.buyer_count})</option>`).join('')}</select></div>` : '<p class="muted body-sm" style="margin-bottom:12px">Anda belum punya daftar, buat dulu di bawah.</p>'}
     <div class="field"><label>Atau buat daftar baru</label><input class="input" id="sl-new" placeholder="mis. Leads Vanili Discovery"></div>
     <button class="btn btn-primary" id="sl-save" style="width:100%">Simpan ${buyerIds.length} buyer</button>`);
   $('#sl-save').onclick = async () => {
@@ -865,7 +994,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
       <span class="avatar avatar-lg">${esc(b.name.slice(0, 2).toUpperCase())}</span>
       <div style="flex:1;min-width:240px">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h1>${esc(b.name)}</h1>
-          ${b.has_indonesian_supplier ? '<span class="pill pill-info">Pernah impor dari 🇮🇩</span>' : '<span class="pill pill-success">Untapped — belum dari 🇮🇩</span>'}</div>
+          ${b.has_indonesian_supplier ? '<span class="pill pill-info">Pernah impor dari 🇮🇩</span>' : '<span class="pill pill-success">Untapped, belum dari 🇮🇩</span>'}</div>
         <p class="muted" style="margin:4px 0 10px">${flag(b.country)} ${esc(b.address || b.city || '')} · ${esc(b.country_name)} · ${esc(b.industry || '')} · Ukuran ${b.size_bucket}</p>
         <div style="display:flex;gap:24px;flex-wrap:wrap">
           <div><div class="caption muted-3">Total shipment</div><b class="num">${fmtN(b.total_shipments)}</b></div>
@@ -891,7 +1020,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
 
   if (tab === 'overview') {
     body.innerHTML = `<div class="grid grid-2">
-      <div class="card"><h3 style="margin-bottom:14px">Skor EksporIn — komponen</h3>${scoreBars(b.score_components)}
+      <div class="card"><h3 style="margin-bottom:14px">Skor EksporIn: komponen</h3>${scoreBars(b.score_components)}
         <p class="caption muted-3" style="margin-top:10px">Kecocokan produk dihitung dari HS fokus Anda vs produk yang diimpor buyer ini. Bobot per Buyer Scoring Engine (F4).</p></div>
       <div class="card"><h3 style="margin-bottom:14px">Kontak</h3>
         ${!b.contacts.length ? '<p class="muted">Belum ada kontak ter-enrich untuk buyer ini.</p>' : b.contacts.map((c) => `
@@ -925,7 +1054,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
           <button class="btn btn-sm btn-neutral" ${pageN >= totalPages ? 'disabled' : ''} onclick="location.hash='#/buyer/${id}?tab=shipments&p=${pageN + 1}'">→</button></div></div>`;
   } else if (tab === 'suppliers') {
     const rows = await api(`/api/buyers/${id}/suppliers`);
-    body.innerHTML = `<div class="banner banner-info">💡 Pemasok 🇮🇩 Indonesia adalah <b>kompetitor langsung Anda</b> — pelajari volume & HS code mereka.</div>
+    body.innerHTML = `<div class="banner banner-info">💡 Pemasok 🇮🇩 Indonesia adalah <b>kompetitor langsung Anda</b>. Pelajari volume & HS code mereka.</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Pemasok</th><th>Negara</th><th class="r">Shipment</th><th class="r">Volume</th><th class="r">Nilai</th><th>Periode</th><th>HS</th></tr></thead><tbody>
       ${rows.map((s, i) => `<tr style="${s.is_indonesian ? 'background:var(--primary-50)' : ''}"><td class="muted num">${i + 1}</td>
         <td><b>${esc(s.name)}</b> ${s.is_indonesian ? '<span class="pill pill-info">Kompetitor 🇮🇩</span>' : ''}</td>
@@ -997,7 +1126,7 @@ route(/^\/shipments$/, async (app, m, params) => {
     const selOpt = (opts, cur) => opts.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
     app.innerHTML = shell(`
       <h1 style="margin-bottom:4px">Shipment Explorer</h1>
-      <p class="muted" style="margin-bottom:20px">Telusuri data bill of lading lintas buyer — untuk analisis mendalam & intel kompetitor.</p>
+      <p class="muted" style="margin-bottom:20px">Telusuri data bill of lading lintas buyer untuk analisis mendalam & intel kompetitor.</p>
       <div class="card card-compact" style="margin-bottom:20px"><div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
         <input class="input" id="s-hs" placeholder="Kode HS" value="${esc(state.hs)}">
         <input class="input" id="s-buyer" placeholder="Nama buyer" value="${esc(state.buyer_q)}">
@@ -1122,10 +1251,10 @@ route(/^\/list\/(\d+)$/, async (app, m, params) => {
         <td><input type="checkbox" class="sel-buyer" value="${b.buyer_id}" style="width:16px;height:16px;accent-color:var(--primary-600)"></td>
         <td class="clickable" onclick="location.hash='#/buyer/${b.buyer_id}'"><b>${esc(b.name)}</b><div class="caption muted-3">${flag(b.country)} ${esc(b.country_name)} · ${esc(b.industry || '')}</div></td>
         <td>${statusPill(b.status)}</td>
-        <td class="body-sm">${{ low: 'Rendah', medium: 'Sedang', high: '<b style="color:var(--warning-text)">Tinggi</b>', urgent: '<b style="color:var(--danger-text)">Urgent</b>' }[b.priority] || '—'}</td>
+        <td class="body-sm">${{ low: 'Rendah', medium: 'Sedang', high: '<b style="color:var(--warning-text)">Tinggi</b>', urgent: '<b style="color:var(--danger-text)">Urgent</b>' }[b.priority] || '-'}</td>
         <td>${b.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join(' ')}</td>
         <td class="r">${scorePill(b.score, b.score_label)}</td>
-        <td class="caption num">${b.reminder_at ? '⏰ ' + fmtDate(b.reminder_at) : '—'}</td>
+        <td class="caption num">${b.reminder_at ? '⏰ ' + fmtDate(b.reminder_at) : '-'}</td>
         <td class="caption num">${fmtDate(b.last_shipment_date)}</td>
         <td><button class="btn btn-sm btn-neutral edit-b" data-bid="${b.buyer_id}">Kelola</button></td></tr>`).join('')}
       </tbody></table></div>`}`);
@@ -1155,10 +1284,10 @@ window.composeTo = async (buyerIds) => {
     const prev = await api('/api/outreach/preview', { method: 'POST', body: { template_id: tplId, buyer_id: ids[0] } });
     $('#cp-preview').innerHTML = `
       ${prev.subject ? `<div class="field"><label>Subjek</label><div class="input" style="height:auto;background:var(--bg-surface-alt)">${esc(prev.subject)}</div></div>` : ''}
-      <div class="field"><label>Isi pesan — untuk ${esc(prev.buyer_name)}${ids.length > 1 ? ` (+${ids.length - 1} buyer lain, variabel otomatis per buyer)` : ''}</label>
+      <div class="field"><label>Isi pesan untuk ${esc(prev.buyer_name)}${ids.length > 1 ? ` (+${ids.length - 1} buyer lain, variabel otomatis per buyer)` : ''}</label>
       <div class="input" style="height:auto;white-space:pre-wrap;background:var(--bg-surface-alt);max-height:260px;overflow-y:auto">${esc(prev.body)}</div></div>
       <p class="caption ${prev.contacts_visible ? 'muted' : ''}" style="margin-bottom:12px">
-        ${prev.to_email ? `📧 Tujuan: <b>${esc(prev.to_email)}</b>` : '📧 Email buyer belum tersedia — gunakan mode salin.'}
+        ${prev.to_email ? `📧 Tujuan: <b>${esc(prev.to_email)}</b>` : '📧 Email buyer belum tersedia. Gunakan mode salin.'}
         ${!prev.contacts_visible && prev.to_email ? ' <span class="masked-chip">🔒 kontak penuh di paket Growth+</span>' : ''}</p>`;
   };
   modal(`<h2 style="margin-bottom:4px">Kirim outreach</h2>
@@ -1306,7 +1435,7 @@ route(/^\/billing$/, async (app) => {
     modal(`<h2 style="margin-bottom:10px">Konfirmasi ${p.price ? 'pembayaran' : 'perubahan paket'}</h2>
       <div class="card card-compact" style="margin-bottom:16px;background:var(--bg-surface-alt)">
         <div style="display:flex;justify-content:space-between"><span>Paket ${esc(p.name)} (bulanan)</span><b class="num">${p.price ? fmtIDR(p.price) : 'Rp 0'}</b></div>
-        <div class="caption muted-3" style="margin-top:6px">Metode: Midtrans — QRIS / VA / kartu (simulasi demo)</div></div>
+        <div class="caption muted-3" style="margin-top:6px">Metode: Midtrans (QRIS / VA / kartu, simulasi demo)</div></div>
       <button class="btn btn-primary" id="pay-now" style="width:100%">${p.price ? 'Bayar & aktifkan' : 'Ganti ke Free'}</button>`);
     $('#pay-now').onclick = async () => {
       const r = await api('/api/me/plan', { method: 'POST', body: { plan: code } });
