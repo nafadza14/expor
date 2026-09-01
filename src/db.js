@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS lists (
 CREATE TABLE IF NOT EXISTS list_buyers (
   list_id INTEGER NOT NULL REFERENCES lists(id),
   buyer_id INTEGER NOT NULL REFERENCES buyers(id),
-  status TEXT NOT NULL DEFAULT 'new',
+  status TEXT NOT NULL DEFAULT 'prospect',
   priority TEXT DEFAULT 'medium',
   tags TEXT DEFAULT '[]',
   reminder_at TEXT,

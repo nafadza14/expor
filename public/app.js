@@ -21,12 +21,30 @@ const scorePill = (score, label) => {
   return `<span class="pill ${cls} num">${score} · ${label}</span>`;
 };
 const statusPill = (st) => {
-  const map = { new: ['Baru', 'pill-neutral'], contacted: ['Dihubungi', 'pill-info'], responded: ['Merespons', 'pill-violet'], negotiating: ['Negosiasi', 'pill-warning'], won: ['Deal ✓', 'pill-success'], lost: ['Batal', 'pill-danger'] };
+  const map = {
+    prospect: ['Prospect', 'pill-neutral'],
+    contacted: ['Contacted', 'pill-info'],
+    negotiating: ['Negotiating', 'pill-warning'],
+    qualified: ['Qualified', 'pill-violet'],
+    winning: ['Winning', 'pill-orange'],
+    won: ['Won ✓', 'pill-success'],
+    lost: ['Lost', 'pill-danger'],
+    // Aliases for legacy stored rows
+    new: ['Prospect', 'pill-neutral'],
+    responded: ['Qualified', 'pill-violet'],
+  };
   const [t, c] = map[st] || [st, 'pill-neutral'];
   return `<span class="pill ${c}">${t}</span>`;
 };
-const STATUSES = ['new', 'contacted', 'responded', 'negotiating', 'won', 'lost'];
-const STATUS_LBL = { new: 'Baru', contacted: 'Dihubungi', responded: 'Merespons', negotiating: 'Negosiasi', won: 'Deal', lost: 'Batal' };
+// Spec F5: 6 pipeline stages in this order. `lost` retained as a separate
+// terminal state for closed-lost deals (not part of the active pipeline).
+const STATUSES = ['prospect', 'contacted', 'negotiating', 'qualified', 'winning', 'won', 'lost'];
+const STATUS_LBL = {
+  prospect: 'Prospect', contacted: 'Contacted', negotiating: 'Negotiating',
+  qualified: 'Qualified', winning: 'Winning', won: 'Won', lost: 'Lost',
+  // Backward-compatible aliases in case any stored row still uses the old names:
+  new: 'Prospect', responded: 'Qualified',
+};
 
 // icons (Lucide-style, stroke 1.5)
 const I = {
@@ -1175,7 +1193,7 @@ route(/^\/dashboard$/, async (app) => {
     <div class="grid grid-4" style="margin-bottom:24px">
       <div class="card card-compact metric-card"><div class="lbl">Buyer tersimpan</div><div class="numeric-lg">${fmtN(d.saved)}</div><div class="caption muted-3">di semua daftar</div></div>
       <div class="card card-compact metric-card"><div class="lbl">Outreach terkirim</div><div class="numeric-lg">${fmtN(d.outreach.total || 0)}</div><div class="caption muted-3">${d.outreach.opened || 0} dibuka · ${d.outreach.replied || 0} dibalas</div></div>
-      <div class="card card-compact metric-card"><div class="lbl">Sedang negosiasi</div><div class="numeric-lg">${fmtN((pl.negotiating || 0) + (pl.responded || 0))}</div><div class="caption muted-3">${pl.won || 0} deal tercapai 🎉</div></div>
+      <div class="card card-compact metric-card"><div class="lbl">Sedang negosiasi</div><div class="numeric-lg">${fmtN((pl.negotiating || 0) + (pl.qualified || 0) + (pl.winning || 0) + (pl.responded || 0))}</div><div class="caption muted-3">${pl.won || 0} deal tercapai 🎉</div></div>
       <div class="card card-compact metric-card"><div class="lbl">Notifikasi baru</div><div class="numeric-lg">${fmtN(d.alerts_unread)}</div><div class="caption"><a href="#/alerts">Lihat semua →</a></div></div>
     </div>
     <div class="card" id="comtrade-widget" style="margin-bottom:24px">

@@ -385,7 +385,7 @@ function seed(db) {
     const listId = db.prepare('SELECT last_insert_rowid() AS id').get().id;
     const coffeeBuyers = db.prepare(`SELECT DISTINCT b.id FROM buyers b JOIN buyer_hs bh ON bh.buyer_id=b.id
       WHERE bh.hs_code IN ('090111','090121') AND b.country IN ('US','JP','NL') ORDER BY b.base_score DESC LIMIT 12`).all();
-    const statuses = ['new', 'new', 'new', 'contacted', 'contacted', 'contacted', 'responded', 'responded', 'negotiating', 'negotiating', 'won', 'lost'];
+    const statuses = ['prospect', 'prospect', 'prospect', 'contacted', 'contacted', 'contacted', 'negotiating', 'negotiating', 'qualified', 'winning', 'won', 'lost'];
     const insLB = db.prepare('INSERT INTO list_buyers (list_id,buyer_id,status,priority,tags,added_at) VALUES (?,?,?,?,?,?)');
     coffeeBuyers.forEach((row, idx) => {
       insLB.run(listId, row.id, statuses[idx % statuses.length], pick(['high', 'medium', 'low']),
