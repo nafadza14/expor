@@ -1501,6 +1501,10 @@ route(/^\/direktori$/, async (app, m, params) => {
             <div><div class="caption muted-3">Negara tujuan</div><b class="num" data-slot="countries"><span class="skeleton" style="display:inline-block;width:24px;height:12px;border-radius:6px"></span></b></div>
           </div>
           <div style="margin-top:8px"><div class="caption muted-3">Top pasar</div><b data-slot="top">…</b></div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-subtle)" data-usitc>
+            <div class="caption muted-3">🇺🇸 Bea masuk USA (USITC HTS)</div>
+            <b class="num body-sm" data-slot="usitc"><span class="skeleton" style="display:inline-block;width:80px;height:12px;border-radius:6px"></span></b>
+          </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:14px">
           ${n.level < 6 ? `<button class="btn btn-sm btn-neutral drill">Drill-down →</button>` : ''}
@@ -1519,34 +1523,47 @@ route(/^\/direktori$/, async (app, m, params) => {
   let inFlight = 0;
   const enrich = async (el) => {
     const code = el.dataset.code;
+    const stats = el.querySelector('[data-comtrade-stats]');
+    const badge = el.querySelector('[data-comtrade-badge]');
+    const seeBtn = el.querySelector('.see');
+    const usitcSlot = stats?.querySelector('[data-slot="usitc"]');
+    // Fetch Comtrade and USITC in parallel — they're independent.
+    const [comtrade, usitc] = await Promise.allSettled([
+      api('/api/comtrade/indonesia-exports?hs=' + encodeURIComponent(code), { timeout: 20000 }),
+      api('/api/usitc/hts?hs=' + encodeURIComponent(code), { timeout: 15000 }),
+    ]);
+    // Comtrade rendering
     try {
-      const r = await api('/api/comtrade/indonesia-exports?hs=' + encodeURIComponent(code), { timeout: 20000 });
-      const stats = el.querySelector('[data-comtrade-stats]');
-      const badge = el.querySelector('[data-comtrade-badge]');
-      const seeBtn = el.querySelector('.see');
+      const r = comtrade.status === 'fulfilled' ? comtrade.value : null;
       if (!r || !r.ok || !Array.isArray(r.by_country) || !r.by_country.length) {
         stats.querySelector('[data-slot="value"]').textContent = '-';
         stats.querySelector('[data-slot="volume"]').textContent = '-';
         stats.querySelector('[data-slot="countries"]').textContent = '-';
         stats.querySelector('[data-slot="top"]').innerHTML = '<span class="muted-3">Belum ada data</span>';
+      } else {
+        stats.querySelector('[data-slot="value"]').innerHTML = `<span style="color:var(--orange)">${fmtUSD(r.total_value_usd)}</span>`;
+        stats.querySelector('[data-slot="volume"]').textContent = fmtKg(r.total_net_wgt_kg);
+        stats.querySelector('[data-slot="countries"]').textContent = r.by_country.length;
+        const top5 = r.by_country.slice(0, 5).map((c) => `<span title="${esc(c.name)}: ${fmtUSD(c.value_usd)}" style="font-size:16px">${c.flag || '🏳️'}</span>`).join(' ');
+        stats.querySelector('[data-slot="top"]').innerHTML = top5;
+        if (badge) badge.innerHTML = `🌐 <span style="color:var(--success-text)">${r.year}</span>`;
+        if (seeBtn) seeBtn.textContent = `Lihat buyer (${r.by_country.length}+ negara)`;
+      }
+    } catch (e) { /* ignore */ }
+    // USITC rendering — official US import duty rate
+    try {
+      if (!usitcSlot) return;
+      const u = usitc.status === 'fulfilled' ? usitc.value : null;
+      if (!u || !u.ok || !u.summary) {
+        usitcSlot.innerHTML = '<span class="muted-3">Belum ada data tarif</span>';
         return;
       }
-      stats.querySelector('[data-slot="value"]').innerHTML = `<span style="color:var(--orange)">${fmtUSD(r.total_value_usd)}</span>`;
-      stats.querySelector('[data-slot="volume"]').textContent = fmtKg(r.total_net_wgt_kg);
-      stats.querySelector('[data-slot="countries"]').textContent = r.by_country.length;
-      const top5 = r.by_country.slice(0, 5).map((c) => `<span title="${esc(c.name)}: ${fmtUSD(c.value_usd)}" style="font-size:16px">${c.flag || '🏳️'}</span>`).join(' ');
-      stats.querySelector('[data-slot="top"]').innerHTML = top5;
-      if (badge) badge.innerHTML = `🌐 <span style="color:var(--success-text)">${r.year}</span>`;
-      if (seeBtn) seeBtn.textContent = `Lihat buyer (${r.by_country.length}+ negara)`;
-    } catch (e) {
-      const stats = el.querySelector('[data-comtrade-stats]');
-      if (stats) {
-        stats.querySelector('[data-slot="value"]').textContent = '-';
-        stats.querySelector('[data-slot="volume"]').textContent = '-';
-        stats.querySelector('[data-slot="countries"]').textContent = '-';
-        stats.querySelector('[data-slot="top"]').innerHTML = '<span class="muted-3">Data belum tersedia</span>';
-      }
-    }
+      const rate = u.summary.general_rate || 'Free';
+      const isFree = /^\s*free\s*$/i.test(rate);
+      const rateColor = isFree ? 'var(--success-text)' : 'var(--warning-text)';
+      const special = u.summary.special_rate ? ` <span class="caption muted-3" title="${esc(u.summary.special_rate)}">· ada special rate</span>` : '';
+      usitcSlot.innerHTML = `<span style="color:${rateColor}">${esc(rate)}</span> <span class="caption muted-3" title="${esc(u.summary.description || '')}">${esc(u.summary.htsno || '')}</span>${special}`;
+    } catch (e) { if (usitcSlot) usitcSlot.innerHTML = '<span class="muted-3">Tarif belum tersedia</span>'; }
   };
   const pump = async () => {
     while (queue.length && inFlight < 3) {

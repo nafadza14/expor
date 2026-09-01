@@ -80,6 +80,45 @@ const M49_MAP = {
 const COMTRADE_CACHE = new Map(); // hs → { fetchedAt, year, data }
 const COMTRADE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// USITC HTS REST — US import tariff schedule, no auth. Complements UN Comtrade
+// which only gives statistical trade volume/value — this gives actual duty rates
+// applied at US ports so users can price their FOB accordingly.
+const USITC_URL = process.env.USITC_URL || 'https://hts.usitc.gov/reststop/exportList';
+const USITC_CACHE = new Map(); // hs4 → { fetchedAt, entries }
+const USITC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // tariff schedules rarely change
+
+async function fetchUsitcHts(hs) {
+  const clean = String(hs || '').replace(/\D/g, '');
+  if (clean.length < 4) return null;
+  const heading = clean.slice(0, 4); // 4-digit heading is the smallest range with data
+  const cached = USITC_CACHE.get(heading);
+  if (cached && (Date.now() - cached.fetchedAt) < USITC_TTL_MS) return cached.entries;
+  try {
+    const url = `${USITC_URL}?from=${heading}&to=${heading}.99&format=JSON&styles=false`;
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 12000);
+    const r = await fetch(url, { signal: ac.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!Array.isArray(j) || !j.length) return null;
+    // Normalize: keep only rows with an actual htsno; add depth indent for indenting
+    const entries = j.filter((row) => row && (row.htsno || row.description)).map((row) => ({
+      htsno: row.htsno || '',
+      description: row.description || '',
+      indent: parseInt(row.indent || '0', 10) || 0,
+      units: Array.isArray(row.units) ? row.units : [],
+      general: row.general || '',
+      special: row.special || '',
+      other: row.other || '',
+      quotaQuantity: row.quotaQuantity || '',
+      additionalDuties: row.additionalDuties || '',
+    }));
+    USITC_CACHE.set(heading, { fetchedAt: Date.now(), entries });
+    return entries;
+  } catch (e) { console.warn('[usitc]', heading, e.message || e); return null; }
+}
+
 // Fetch Indonesia's export flow (partner-country breakdown) for a given HS code
 // from UN Comtrade+. Caches per HS for 24h. Returns null on any failure.
 async function fetchIndonesiaExports(hsCode) {
@@ -582,6 +621,39 @@ async function handleApi(db, req, res, url, body) {
       const data = await fetchIndonesiaExports(hs);
       if (!data) return json(res, 200, { ok: false, hs, source: 'UN Comtrade+', message: 'Belum ada data Comtrade untuk HS ini.' });
       return json(res, 200, data);
+    })();
+  }
+
+  // USITC HTS proxy — US import tariff schedule for a given HS heading.
+  // GET /api/usitc/hts?hs=0901 (2-6 digit HS accepted; auto-truncates to 4-digit)
+  if (route('GET', '/api/usitc/hts')) {
+    return (async () => {
+      const hs = q.get('hs') || '';
+      const entries = await fetchUsitcHts(hs);
+      if (!entries) return json(res, 200, { ok: false, hs, source: 'USITC HTS', message: 'Data tarif USITC belum tersedia untuk HS ini.' });
+      const heading = String(hs).replace(/\D/g, '').slice(0, 4);
+      // Filter: if user asked for a specific 6/8/10-digit code, prefer rows that
+      // start with that prefix — otherwise return the whole heading tree.
+      const cleanHs = String(hs).replace(/\D/g, '');
+      const focused = cleanHs.length > 4
+        ? entries.filter((e) => e.htsno && e.htsno.replace(/\./g, '').startsWith(cleanHs))
+        : entries;
+      const useEntries = focused.length ? focused : entries;
+      // Extract a summary: the first leaf entry with a non-empty general rate.
+      const summary = useEntries.find((e) => e.htsno && e.general) || useEntries.find((e) => e.htsno) || null;
+      return json(res, 200, {
+        ok: true, hs, heading, source: 'USITC HTS (Harmonized Tariff Schedule)',
+        summary: summary ? {
+          htsno: summary.htsno,
+          description: summary.description,
+          general_rate: summary.general || 'Free',
+          special_rate: summary.special || '',
+          other_rate: summary.other || '',
+          units: summary.units,
+        } : null,
+        entries: useEntries,
+        entry_count: useEntries.length,
+      });
     })();
   }
 
