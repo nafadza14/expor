@@ -1461,23 +1461,32 @@ route(/^\/direktori$/, async (app, m, params) => {
     crumb = `<div class="breadcrumb"><a href="#/direktori">Semua bab</a>${chain.map((c) => `<span class="sep">/</span><a href="#/direktori?parent=${c}">${c.replace(/^(\d{4})/, '$1.')}</a>`).join('')}</div>`;
   }
   app.innerHTML = shell(`
-    <h1 style="margin-bottom:4px">Direktori HS Code</h1>
-    <p class="muted" style="margin-bottom:20px">Telusuri buyer per kategori produk. Klik untuk drill-down, atau langsung lihat buyer di level manapun.</p>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div>
+        <h1 style="margin-bottom:4px">Direktori HS Code</h1>
+        <p class="muted">Telusuri kategori produk. Data ekspor real diambil langsung dari <b>UN Comtrade+</b>.</p>
+      </div>
+      <span class="pill pill-info" style="align-self:center">🌐 Live UN Comtrade</span>
+    </div>
     ${crumb}
     <div class="hs-grid">${nodes.map((n) => `
       <div class="hs-card" data-code="${n.code}" data-level="${n.level}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
           <span class="hs-code-chip">${n.code.replace(/^(\d{4})/, '$1.')}</span>
-          <span class="caption muted-3">Level ${n.level === 2 ? 'Bab' : n.level === 4 ? 'Heading' : 'Sub'}</span></div>
+          <span class="caption muted-3" data-comtrade-badge>Level ${n.level === 2 ? 'Bab' : n.level === 4 ? 'Heading' : 'Sub'}</span></div>
         <h3 style="margin-bottom:2px">${esc(n.description_id)}</h3>
         <p class="caption muted" style="margin-bottom:12px">${esc(n.description_en)}</p>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          <div><div class="caption muted-3">Buyer</div><b class="num">${fmtN(n.buyer_count)}</b></div>
-          <div><div class="caption muted-3">Volume total</div><b class="num">${fmtKg(n.volume_kg)}</b></div>
-          <div><div class="caption muted-3">Top negara</div><b>${n.top_countries.map((t) => flag(t.country)).join(' ') || '-'}</b></div></div>
+        <div class="hs-stats" data-comtrade-stats>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div><div class="caption muted-3">Nilai ekspor</div><b class="num" data-slot="value"><span class="skeleton" style="display:inline-block;width:60px;height:12px;border-radius:6px"></span></b></div>
+            <div><div class="caption muted-3">Volume</div><b class="num" data-slot="volume"><span class="skeleton" style="display:inline-block;width:52px;height:12px;border-radius:6px"></span></b></div>
+            <div><div class="caption muted-3">Negara tujuan</div><b class="num" data-slot="countries"><span class="skeleton" style="display:inline-block;width:24px;height:12px;border-radius:6px"></span></b></div>
+          </div>
+          <div style="margin-top:8px"><div class="caption muted-3">Top pasar</div><b data-slot="top">…</b></div>
+        </div>
         <div style="display:flex;gap:8px;margin-top:14px">
           ${n.level < 6 ? `<button class="btn btn-sm btn-neutral drill">Drill-down →</button>` : ''}
-          <button class="btn btn-sm btn-primary see">Lihat buyer (${n.buyer_count})</button></div>
+          <button class="btn btn-sm btn-primary see">Lihat buyer</button></div>
       </div>`).join('')}</div>`);
   bindShell();
   $$('.hs-card').forEach((el) => {
@@ -1485,6 +1494,50 @@ route(/^\/direktori$/, async (app, m, params) => {
     el.querySelector('.see')?.addEventListener('click', (e) => { e.stopPropagation(); location.hash = `#/cari?hs=${el.dataset.code}`; });
     el.addEventListener('click', () => { location.hash = el.dataset.level < 6 ? `#/direktori?parent=${el.dataset.code}` : `#/cari?hs=${el.dataset.code}`; });
   });
+
+  // Progressively enrich each visible card with real UN Comtrade data.
+  // We throttle concurrent requests (max 3 in flight) to be gentle on the API.
+  const queue = [...document.querySelectorAll('.hs-card')];
+  let inFlight = 0;
+  const enrich = async (el) => {
+    const code = el.dataset.code;
+    try {
+      const r = await api('/api/comtrade/indonesia-exports?hs=' + encodeURIComponent(code), { timeout: 20000 });
+      const stats = el.querySelector('[data-comtrade-stats]');
+      const badge = el.querySelector('[data-comtrade-badge]');
+      const seeBtn = el.querySelector('.see');
+      if (!r || !r.ok || !Array.isArray(r.by_country) || !r.by_country.length) {
+        stats.querySelector('[data-slot="value"]').textContent = '-';
+        stats.querySelector('[data-slot="volume"]').textContent = '-';
+        stats.querySelector('[data-slot="countries"]').textContent = '-';
+        stats.querySelector('[data-slot="top"]').innerHTML = '<span class="muted-3">Belum ada data</span>';
+        return;
+      }
+      stats.querySelector('[data-slot="value"]').innerHTML = `<span style="color:var(--orange)">${fmtUSD(r.total_value_usd)}</span>`;
+      stats.querySelector('[data-slot="volume"]').textContent = fmtKg(r.total_net_wgt_kg);
+      stats.querySelector('[data-slot="countries"]').textContent = r.by_country.length;
+      const top5 = r.by_country.slice(0, 5).map((c) => `<span title="${esc(c.name)}: ${fmtUSD(c.value_usd)}" style="font-size:16px">${c.flag || '🏳️'}</span>`).join(' ');
+      stats.querySelector('[data-slot="top"]').innerHTML = top5;
+      if (badge) badge.innerHTML = `🌐 <span style="color:var(--success-text)">${r.year}</span>`;
+      if (seeBtn) seeBtn.textContent = `Lihat buyer (${r.by_country.length}+ negara)`;
+    } catch (e) {
+      const stats = el.querySelector('[data-comtrade-stats]');
+      if (stats) {
+        stats.querySelector('[data-slot="value"]').textContent = '-';
+        stats.querySelector('[data-slot="volume"]').textContent = '-';
+        stats.querySelector('[data-slot="countries"]').textContent = '-';
+        stats.querySelector('[data-slot="top"]').innerHTML = '<span class="muted-3">Data belum tersedia</span>';
+      }
+    }
+  };
+  const pump = async () => {
+    while (queue.length && inFlight < 3) {
+      inFlight++;
+      const el = queue.shift();
+      enrich(el).finally(() => { inFlight--; pump(); });
+    }
+  };
+  pump();
 });
 
 // ================= search (F1) =================
