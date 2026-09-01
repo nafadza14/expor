@@ -6,6 +6,15 @@ const { hashPassword, verifyPassword, createSession, getSessionUser, destroySess
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dbdzmhrofgcmkdszjxxq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_--qPH56dWsGCxUzm7Mc_Aw_2P53hp3r';
 
+// Sumopod: payment gateway + LLM. Server-side only — never expose these keys.
+const SUMOPOD_PAY_URL = process.env.SUMOPOD_PAY_URL || 'https://api-pay.sumopod.com/api/v1/payments';
+const SUMOPOD_PAY_KEY = process.env.SUMOPOD_PAY_KEY || 'a5b0c6a03795701fa3e84f5e5a02a20fca04be43fbaad1c7857455a7134f3993';
+const SUMOPOD_AI_URL = process.env.SUMOPOD_AI_URL || 'https://ai.sumopod.com/v1/chat/completions';
+const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || 'sk-jzbEVp009nE3qAPxXvbJSg';
+// Default to gpt-4o-mini which is verified to return content on Sumopod.
+// MiniMax-M2.7-highspeed can be selected per-request via body.model when needed.
+const SUMOPOD_AI_MODEL = process.env.SUMOPOD_AI_MODEL || 'gpt-4o-mini';
+
 // Small in-memory cache: access_token -> {userId, expires} to avoid hitting Supabase
 // on every request. Serverless-safe: cache lives only within this hot instance.
 const SB_TOKEN_CACHE = new Map();
@@ -365,7 +374,126 @@ async function handleApi(db, req, res, url, body) {
     const { plan: newPlan } = body || {};
     if (!PLANS[newPlan]) return err(res, 400, 'Paket tidak dikenal.');
     db.prepare('UPDATE users SET plan=? WHERE id=?').run(newPlan, user.id);
-    return json(res, 200, { ok: true, plan: newPlan, invoice: { number: 'INV-' + Date.now(), amount_idr: PLANS[newPlan].price, status: 'paid', provider: 'midtrans (simulasi)' } });
+    return json(res, 200, { ok: true, plan: newPlan, invoice: { number: 'INV-' + Date.now(), amount_idr: PLANS[newPlan].price, status: 'paid', provider: 'sumopod (simulasi)' } });
+  }
+
+  // Sumopod payment checkout — creates a real hosted QRIS payment for a paid plan upgrade.
+  // Server returns the payment_url; client redirects the user there.
+  if (route('POST', '/api/billing/checkout')) {
+    return (async () => {
+      const { plan: newPlan, method } = body || {};
+      if (!PLANS[newPlan]) return err(res, 400, 'Paket tidak dikenal.');
+      const price = PLANS[newPlan].price;
+      if (!price) return err(res, 400, 'Paket Free tidak butuh checkout.');
+      const orderId = `EKS-${user.id}-${newPlan}-${Date.now()}`;
+      const rawOrigin = (req.headers['origin'] || '').toString();
+      const host = (req.headers['x-forwarded-host'] || req.headers['host'] || '').toString();
+      // Sumopod rejects http and localhost URLs. Fall back to a public HTTPS
+      // domain when the request comes from local dev.
+      let base;
+      if (rawOrigin.startsWith('https://') && !rawOrigin.includes('localhost') && !rawOrigin.includes('127.0.0.1')) {
+        base = rawOrigin;
+      } else if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+        base = 'https://' + host;
+      } else {
+        base = process.env.PUBLIC_BASE_URL || 'https://eksporin.vercel.app';
+      }
+      try {
+        const r = await fetch(SUMOPOD_PAY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Api-Key': SUMOPOD_PAY_KEY },
+          body: JSON.stringify({
+            order_id: orderId,
+            amount: price,
+            currency: 'IDR',
+            expires_in_hours: 24,
+            success_return_url: base + '/?paid=1&order=' + encodeURIComponent(orderId) + '&plan=' + newPlan,
+            cancel_return_url: base + '/?cancelled=1&order=' + encodeURIComponent(orderId),
+            payment_method_type_code: method || 'QRIS',
+          }),
+        });
+        const bodyText = await r.text();
+        let data; try { data = JSON.parse(bodyText); } catch { data = { raw: bodyText }; }
+        if (!r.ok) {
+          console.error('[sumopod] checkout error', r.status, bodyText);
+          return err(res, 502, 'Sumopod: ' + (data.message || data.error || bodyText.slice(0, 200)));
+        }
+        return json(res, 200, {
+          ok: true,
+          order_id: orderId,
+          plan: newPlan,
+          amount: price,
+          payment_id: data.payment_id || null,
+          payment_url: data.payment_link_url || data.payment_url || data.checkout_url || data.url || data.data?.payment_link_url || data.data?.payment_url || null,
+          payment: data,
+        });
+      } catch (e) {
+        console.error('[sumopod] checkout threw', e);
+        return err(res, 502, 'Gagal buat pembayaran: ' + (e.message || 'network error'));
+      }
+    })();
+  }
+
+  // Sumopod payment verification — client polls this after returning from checkout.
+  // If Sumopod confirms the order is paid, we upgrade the user's plan locally.
+  if (route('POST', '/api/billing/verify')) {
+    return (async () => {
+      const { order_id, plan: newPlan } = body || {};
+      if (!order_id || !PLANS[newPlan]) return err(res, 400, 'order_id dan plan wajib.');
+      try {
+        const r = await fetch(SUMOPOD_PAY_URL + '/' + encodeURIComponent(order_id), {
+          headers: { 'X-Api-Key': SUMOPOD_PAY_KEY },
+        });
+        const bodyText = await r.text();
+        let data; try { data = JSON.parse(bodyText); } catch { data = { raw: bodyText }; }
+        if (!r.ok) {
+          return err(res, 502, 'Sumopod verify: ' + (data.message || bodyText.slice(0, 200)));
+        }
+        const status = (data.status || data.data?.status || '').toString().toLowerCase();
+        const paid = ['paid', 'success', 'completed', 'settled'].includes(status);
+        if (paid) {
+          db.prepare('UPDATE users SET plan=? WHERE id=?').run(newPlan, user.id);
+        }
+        return json(res, 200, { ok: true, paid, status, order_id, plan: newPlan });
+      } catch (e) {
+        return err(res, 502, 'Gagal verifikasi: ' + (e.message || 'network error'));
+      }
+    })();
+  }
+
+  // Sumopod AI — natural-language commodity → HS mapping + cargo keywords + outreach angle.
+  // The AI Buyer Discovery route below already falls back to keyword matching if this returns nothing.
+  if (route('POST', '/api/ai/complete')) {
+    return (async () => {
+      const { messages, temperature, max_tokens, model } = body || {};
+      if (!Array.isArray(messages) || !messages.length) return err(res, 400, 'messages wajib array non-kosong.');
+      try {
+        const r = await fetch(SUMOPOD_AI_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUMOPOD_AI_KEY },
+          body: JSON.stringify({
+            model: model || SUMOPOD_AI_MODEL,
+            messages,
+            max_tokens: typeof max_tokens === 'number' ? max_tokens : 400,
+            temperature: typeof temperature === 'number' ? temperature : 0.5,
+          }),
+        });
+        const bodyText = await r.text();
+        let data; try { data = JSON.parse(bodyText); } catch { data = { raw: bodyText }; }
+        if (!r.ok) {
+          console.error('[sumopod-ai]', r.status, bodyText.slice(0, 400));
+          return err(res, 502, 'AI: ' + (data.error?.message || data.message || bodyText.slice(0, 200)));
+        }
+        return json(res, 200, {
+          ok: true,
+          content: data.choices?.[0]?.message?.content || '',
+          usage: data.usage || null,
+          model: data.model || null,
+        });
+      } catch (e) {
+        return err(res, 502, 'AI error: ' + (e.message || 'network error'));
+      }
+    })();
   }
 
   // ===== HS taxonomy =====
@@ -807,10 +935,11 @@ async function handleApi(db, req, res, url, body) {
 
   // ===== AI Buyer Discovery Engine =====
   if (route('POST', '/api/discover')) {
+    return (async () => {
     const { query } = body || {};
     if (!query || query.trim().length < 3) return err(res, 400, 'Masukkan deskripsi produk yang ingin dicari buyer-nya.');
 
-    // Step 1: HS Code Mapping (simulated LLM)
+    // Step 1: HS Code Mapping (real LLM via Sumopod, falls back to keyword matching)
     const qLower = query.toLowerCase();
     const HS_MAP = [
       { keywords: ['vanili', 'vanilla', 'vanila', 'vanilla bean', 'vanili kering', 'vanili polong', 'tahitian', 'planifolia'], hs: '0905', desc_en: 'Vanilla beans', desc_id: 'Vanili', industry: ['Food & Beverage', 'Flavoring', 'Confectionery', 'Extract Manufacturing'], titles: ['Procurement Manager', 'Sourcing Director', 'Head of Purchasing', 'Supply Chain Director', 'Category Buyer'], cargo_keywords: ['VANILLA BEANS', 'VANILLA PODS', 'DRIED VANILLA', 'VANILLA EXTRACT', 'CURED VANILLA'] },
@@ -832,6 +961,48 @@ async function handleApi(db, req, res, url, body) {
     ];
 
     let matched = HS_MAP.find((m) => m.keywords.some((k) => qLower.includes(k)));
+
+    // Try Sumopod LLM to refine or discover the HS mapping.
+    // Timeout 8s so a slow AI never blocks the pipeline; keyword match still wins.
+    let aiRaw = null;
+    try {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 8000);
+      const aiResp = await fetch(SUMOPOD_AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUMOPOD_AI_KEY },
+        signal: ac.signal,
+        body: JSON.stringify({
+          model: SUMOPOD_AI_MODEL,
+          temperature: 0.3,
+          max_tokens: 350,
+          messages: [
+            { role: 'system', content: 'You classify Indonesian export commodities. Given a natural-language description (Indonesian or English), respond ONLY with a JSON object in this exact shape (no markdown, no preamble): {"hs":"4-digit HS heading like 0905","desc_en":"short English name","desc_id":"short Indonesian name","industry":["target buyer industry", ...],"cargo_keywords":["UPPERCASE keywords that would appear on a Bill of Lading for this commodity", ...]}' },
+            { role: 'user', content: query },
+          ],
+        }),
+      });
+      clearTimeout(t);
+      if (aiResp.ok) {
+        const aiData = await aiResp.json();
+        aiRaw = aiData.choices?.[0]?.message?.content || '';
+        // The model may return the JSON with backticks. Strip and parse.
+        const jsonText = aiRaw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+        const parsed = JSON.parse(jsonText);
+        if (parsed && typeof parsed.hs === 'string' && /^\d{4}$/.test(parsed.hs)) {
+          matched = {
+            hs: parsed.hs,
+            desc_en: parsed.desc_en || parsed.hs,
+            desc_id: parsed.desc_id || parsed.desc_en || parsed.hs,
+            industry: Array.isArray(parsed.industry) && parsed.industry.length ? parsed.industry : (matched?.industry || ['General Trade']),
+            titles: matched?.titles || ['Procurement Manager', 'Sourcing Director', 'Category Buyer'],
+            cargo_keywords: Array.isArray(parsed.cargo_keywords) && parsed.cargo_keywords.length ? parsed.cargo_keywords : [query.toUpperCase()],
+            ai: true,
+          };
+        }
+      }
+    } catch (e) { /* silent — fallback below */ }
+
     if (!matched) {
       // Fallback: search by text across HS codes in DB
       const hsMatch = db.prepare("SELECT * FROM hs_codes WHERE description_en LIKE ? OR description_id LIKE ? LIMIT 1").get('%' + query + '%', '%' + query + '%');
@@ -945,9 +1116,10 @@ async function handleApi(db, req, res, url, body) {
         trade_manifest_keywords: matched.cargo_keywords || matched.keywords || [query],
         target_industry_segments: matched.industry,
         buyer_job_titles_to_target: matched.titles,
+        ai_powered: !!matched.ai,
       },
       pipeline_steps: [
-        { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
+        { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `${matched.ai ? '🤖 AI (Sumopod MiniMax): ' : ''}Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
         { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan dari ${new Set(buyers.map((b) => b.country)).size} negara` },
         { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${totalContacts} kontak ditemukan, ${verifiedContacts} email terverifikasi` },
         { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 80).length} hot leads, ${results.filter((r) => r.scoring.match_score >= 60 && r.scoring.match_score < 80).length} warm leads` },
@@ -955,6 +1127,7 @@ async function handleApi(db, req, res, url, body) {
       total_leads: results.length,
       leads: results,
     });
+    })();
   }
 
   return err(res, 404, 'Endpoint tidak ditemukan.');

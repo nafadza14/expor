@@ -2220,17 +2220,82 @@ route(/^\/billing$/, async (app) => {
     modal(`<h2 style="margin-bottom:10px">Konfirmasi ${p.price ? 'pembayaran' : 'perubahan paket'}</h2>
       <div class="card card-compact" style="margin-bottom:16px;background:var(--bg-surface-alt)">
         <div style="display:flex;justify-content:space-between"><span>Paket ${esc(p.name)} (bulanan)</span><b class="num">${p.price ? fmtIDR(p.price) : 'Rp 0'}</b></div>
-        <div class="caption muted-3" style="margin-top:6px">Metode: Midtrans (QRIS / VA / kartu, simulasi demo)</div></div>
-      <button class="btn btn-primary" id="pay-now" style="width:100%">${p.price ? 'Bayar & aktifkan' : 'Ganti ke Free'}</button>`);
+        <div class="caption muted-3" style="margin-top:6px">${p.price ? 'Metode: Sumopod QRIS (scan pakai apa saja: GoPay, OVO, DANA, ShopeePay, m-Banking)' : 'Turun ke paket gratis (fitur premium dinonaktifkan)'}</div></div>
+      <button class="btn btn-primary" id="pay-now" style="width:100%">${p.price ? 'Bayar sekarang via QRIS' : 'Ganti ke Free'}</button>`);
     $('#pay-now').onclick = async () => {
-      const r = await api('/api/me/plan', { method: 'POST', body: { plan: code } });
-      closeModal(); toast(`Paket ${p.name} aktif! Invoice ${r.invoice.number} (${r.invoice.provider})`);
-      ME = null; render();
+      const btn = $('#pay-now');
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Menyiapkan…';
+      try {
+        if (!p.price) {
+          // Free downgrade — no payment needed
+          await api('/api/me/plan', { method: 'POST', body: { plan: code } });
+          closeModal(); toast('Paket Free aktif.');
+          ME = null; render();
+          return;
+        }
+        // Create Sumopod payment
+        const r = await api('/api/billing/checkout', { method: 'POST', body: { plan: code, method: 'QRIS' } });
+        if (!r.payment_url) {
+          throw new Error('Sumopod tidak mengembalikan URL pembayaran.');
+        }
+        // Remember what plan we're paying for, so on return we can auto-verify
+        try { localStorage.setItem('eksporin_pending_payment', JSON.stringify({ order_id: r.order_id, plan: code, amount: r.amount, at: String(Date.now()) })); } catch {}
+        closeModal();
+        toast('Mengarahkan ke halaman pembayaran QRIS Sumopod…');
+        // Redirect user to Sumopod hosted checkout
+        window.location.href = r.payment_url;
+      } catch (e) {
+        console.error('[billing] checkout failed:', e);
+        btn.disabled = false; btn.textContent = orig;
+        toast(e.data?.error || e.message || 'Gagal membuat pembayaran.', true);
+      }
     };
   });
+  // Auto-verify: if the user just returned from Sumopod checkout, poll the verify endpoint.
+  (async () => {
+    try {
+      const raw = localStorage.getItem('eksporin_pending_payment');
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      const params = new URLSearchParams(location.hash.split('?')[1] || '');
+      const cameBack = params.get('paid') === '1' || params.get('order') === p.order_id;
+      if (!cameBack) return;
+      toast('Memverifikasi pembayaran…');
+      // Poll a few times in case Sumopod webhook is still catching up
+      for (let i = 0; i < 6; i++) {
+        try {
+          const v = await api('/api/billing/verify', { method: 'POST', body: { order_id: p.order_id, plan: p.plan } });
+          if (v.paid) {
+            try { localStorage.removeItem('eksporin_pending_payment'); } catch {}
+            toast(`Pembayaran sukses. Paket ${p.plan} aktif ✓`);
+            ME = null; render();
+            return;
+          }
+        } catch (e) { console.warn('[billing] verify attempt failed:', e); }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      toast('Pembayaran belum terkonfirmasi. Refresh halaman ini kalau QRIS-nya sudah dibayar.', true);
+    } catch {}
+  })();
 });
 
 // boot: if a Supabase session exists in localStorage (returning user),
 // sync it to the local backend BEFORE the router runs so protected APIs work.
-async function boot() { await syncSupabaseSession(); render(); }
+async function boot() {
+  // Sumopod payment callback: return URL comes back as `/?paid=1&order=X&plan=Y`
+  // (Sumopod strips hash fragments). Forward those query params into the SPA
+  // hash router at #/billing so the verify-and-poll flow picks them up.
+  if (window.location.search) {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('paid') === '1' || q.get('cancelled') === '1') {
+      const hashParams = new URLSearchParams();
+      for (const k of ['paid', 'cancelled', 'order', 'plan']) if (q.get(k)) hashParams.set(k, q.get(k));
+      window.history.replaceState(null, '', window.location.pathname + '#/billing?' + hashParams.toString());
+    }
+  }
+  await syncSupabaseSession();
+  render();
+}
 boot();
