@@ -1,6 +1,16 @@
 /* EksporIn design system | Convix-inspired, orange primary */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
+/* Force flag-emoji rendering on Windows (which lacks native flag glyphs).
+   The unicode-range limits this font to regional-indicator + tag characters so
+   normal text still uses Inter. */
+@font-face {
+  font-family: 'TwemojiCountryFlags';
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E007F;
+  src: url('https://cdn.jsdelivr.net/npm/country-flag-emoji-polyfill@0.1.8/dist/TwemojiCountryFlags.woff2') format('woff2');
+  font-display: swap;
+}
+
 :root {
   /* Primary palette */
   --orange: #ef4d23;
@@ -39,7 +49,7 @@
   --shadow-lg: 0 12px 40px rgba(0,0,0,.12);
   --shadow-focus: 0 0 0 3px rgba(239,77,35,.2);
 
-  --font: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font: "TwemojiCountryFlags", "Inter", -apple-system, "Segoe UI", system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   --font-serif: "Instrument Serif", Georgia, serif;
 }
 
