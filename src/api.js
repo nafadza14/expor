@@ -87,6 +87,54 @@ const USITC_URL = process.env.USITC_URL || 'https://hts.usitc.gov/reststop/expor
 const USITC_CACHE = new Map(); // hs4 → { fetchedAt, entries }
 const USITC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // tariff schedules rarely change
 
+// HS Nomenclature (WCO 6-digit standard) — offline lookup table from
+// github.com/datasets/harmonized-system. Loaded lazily on first request.
+let HS_NOMEN = null; // Map code → { code, description, parent, level, section }
+function loadHsNomenclature() {
+  if (HS_NOMEN) return HS_NOMEN;
+  HS_NOMEN = new Map();
+  try {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const csvPath = path.join(__dirname, '..', 'data', 'hs-nomenclature.csv');
+    if (!fs.existsSync(csvPath)) { console.warn('[hs-nomen] CSV not found at', csvPath); return HS_NOMEN; }
+    const text = fs.readFileSync(csvPath, 'utf8');
+    const lines = text.split(/\r?\n/);
+    // header: section,hscode,description,parent,level
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue;
+      // CSV row can contain a quoted description with commas — parse minimally.
+      // Fields: section, hscode, description (possibly quoted), parent, level
+      const m = line.match(/^([^,]*),([^,]*),(?:"([^"]*)"|([^,]*)),([^,]*),([^,]*)$/);
+      if (!m) continue;
+      const section = m[1]; const hscode = m[2]; const desc = m[3] || m[4] || '';
+      const parent = m[5]; const level = parseInt(m[6] || '0', 10) || 0;
+      if (hscode) HS_NOMEN.set(hscode, { code: hscode, description: desc, parent, level, section });
+    }
+  } catch (e) { console.warn('[hs-nomen] load failed:', e.message || e); }
+  return HS_NOMEN;
+}
+
+// Score HS codes by text overlap with the query — returns a ranked list of
+// candidate 6-digit codes. Purely offline; runs against the loaded map.
+function searchHsNomenclature(query, limit = 10) {
+  const map = loadHsNomenclature();
+  if (!map || !map.size || !query) return [];
+  const q = String(query).toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
+  if (!q.length) return [];
+  const scored = [];
+  for (const entry of map.values()) {
+    if (entry.level !== 6) continue; // only 6-digit codes count as "final" HS
+    const desc = entry.description.toLowerCase();
+    let score = 0;
+    for (const w of q) { if (desc.includes(w)) score += w.length; }
+    if (score > 0) scored.push({ ...entry, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
 async function fetchUsitcHts(hs) {
   const clean = String(hs || '').replace(/\D/g, '');
   if (clean.length < 4) return null;
@@ -621,6 +669,96 @@ async function handleApi(db, req, res, url, body) {
       const data = await fetchIndonesiaExports(hs);
       if (!data) return json(res, 200, { ok: false, hs, source: 'UN Comtrade+', message: 'Belum ada data Comtrade untuk HS ini.' });
       return json(res, 200, data);
+    })();
+  }
+
+  // Full HS pipeline: natural-language product query → 6-digit HS (LLM +
+  // offline nomenclature validation) → USITC 10-digit + US import tariff.
+  // GET /api/hs/lookup?query=vanili kering
+  if (route('GET', '/api/hs/lookup')) {
+    return (async () => {
+      const query = (q.get('query') || '').trim();
+      if (!query) return err(res, 400, 'query wajib diisi.');
+
+      // Step 1a: LLM structured output for HS mapping.
+      let llmCode = null; let llmDesc = null; let llmRaw = null;
+      try {
+        const ac = new AbortController();
+        const t = setTimeout(() => ac.abort(), 8000);
+        const aiResp = await fetch(SUMOPOD_AI_URL, {
+          method: 'POST', signal: ac.signal,
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUMOPOD_AI_KEY },
+          body: JSON.stringify({
+            model: SUMOPOD_AI_MODEL,
+            temperature: 0.2,
+            max_tokens: 200,
+            messages: [
+              { role: 'system', content: 'You classify commodities to the WCO Harmonized System. The query may be in Indonesian or English. Always respond with a strict JSON object like {"hs6":"090510","desc_en":"Vanilla beans"} — 6 digits, no dots, no markdown, no preamble. Common Indonesian→WCO mappings: vanili → 0905.10, kopi → 0901.11, lada → 0904.11, pala → 0908.11, cengkeh → 0907.10, kayu manis → 0906.11, sarang burung → 0410.00, karet → 4001.22, sawit/cpo → 1511.10, kelapa → 1513.11, rotan → 4602.12, kayu jati → 4407.29, batik/garmen → 6204.42, udang beku → 0306.17, tuna → 0303.43, kakao → 1801.00.' },
+              { role: 'user', content: query },
+            ],
+          }),
+        });
+        clearTimeout(t);
+        if (aiResp.ok) {
+          const j = await aiResp.json();
+          llmRaw = j.choices?.[0]?.message?.content || '';
+          const cleaned = llmRaw.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+          const parsed = JSON.parse(cleaned);
+          if (parsed && typeof parsed.hs6 === 'string' && /^\d{6}$/.test(parsed.hs6.replace(/\D/g, ''))) {
+            llmCode = parsed.hs6.replace(/\D/g, '');
+            llmDesc = parsed.desc_en || '';
+          }
+        }
+      } catch { /* fall through */ }
+
+      // Step 1b: Validate against offline nomenclature; use LLM code if it
+      // exists in the WCO table, else fall back to text search.
+      const nomen = loadHsNomenclature();
+      let hs6 = null; let hs6Desc = null; let source = null;
+      if (llmCode && nomen.has(llmCode)) {
+        hs6 = llmCode; hs6Desc = nomen.get(llmCode).description; source = 'llm+wco';
+      } else {
+        const candidates = searchHsNomenclature(query, 5);
+        if (candidates.length) {
+          hs6 = candidates[0].code; hs6Desc = candidates[0].description; source = 'wco-text-search';
+        } else if (llmCode) {
+          hs6 = llmCode; hs6Desc = llmDesc || 'LLM-suggested'; source = 'llm-only';
+        }
+      }
+      if (!hs6) return json(res, 200, { ok: false, query, message: 'Tidak bisa menemukan HS code yang cocok.' });
+
+      // Step 2: USITC HTS for the same code — real US 10-digit HTS + duty rate.
+      const usitc = await fetchUsitcHts(hs6);
+      let usitcSummary = null;
+      let usitcMatches = [];
+      if (usitc && usitc.length) {
+        usitcMatches = usitc.filter((e) => e.htsno && e.htsno.replace(/\./g, '').startsWith(hs6));
+        const useSet = usitcMatches.length ? usitcMatches : usitc;
+        const chosen = useSet.find((e) => e.htsno && e.general) || useSet.find((e) => e.htsno);
+        if (chosen) {
+          usitcSummary = {
+            htsno: chosen.htsno,
+            description: chosen.description,
+            general_rate: chosen.general || 'Free',
+            special_rate: chosen.special || '',
+            other_rate: chosen.other || '',
+            units: chosen.units,
+          };
+        }
+      }
+
+      return json(res, 200, {
+        ok: true,
+        query,
+        pipeline: [
+          { step: 1, name: 'LLM + WCO Nomenclature', source, hs6, description: hs6Desc },
+          { step: 2, name: 'USITC HTS (US 10-digit + duty)', hts10: usitcSummary?.htsno || null, duty: usitcSummary?.general_rate || null },
+        ],
+        hs6, hs6_description: hs6Desc, source,
+        usitc: usitcSummary,
+        usitc_variants: usitcMatches.length,
+        llm_raw: llmRaw ? llmRaw.slice(0, 200) : null,
+      });
     })();
   }
 
