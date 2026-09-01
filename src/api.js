@@ -116,12 +116,86 @@ function loadHsNomenclature() {
   return HS_NOMEN;
 }
 
+// Indonesian → English commodity synonym dictionary. When a user searches in
+// Indonesian, we expand the query into English keywords the WCO nomenclature
+// (which is English-only) can actually match. Values are lists of alternates.
+const HS_ID_TO_EN = {
+  // spices & flavourings
+  'vanili': ['vanilla'], 'vanila': ['vanilla'],
+  'kopi': ['coffee'], 'kopi arabica': ['coffee arabica'], 'kopi robusta': ['coffee robusta'],
+  'lada': ['pepper'], 'merica': ['pepper'], 'lada hitam': ['pepper black'], 'lada putih': ['pepper white'],
+  'cabai': ['chilli', 'capsicum', 'pepper'], 'cabe': ['chilli', 'capsicum'], 'cabai kering': ['dried chilli', 'dried capsicum'],
+  'pala': ['nutmeg', 'mace'], 'kapulaga': ['cardamom'], 'fuli': ['mace'],
+  'kayu manis': ['cinnamon', 'cassia'],
+  'cengkeh': ['cloves'], 'cengkih': ['cloves'],
+  'jahe': ['ginger'], 'kunyit': ['turmeric', 'curcuma'], 'kencur': ['galangal', 'kaempferia'],
+  'sereh': ['lemongrass', 'citronella'], 'daun jeruk': ['kaffir lime leaves'],
+  // agri-food
+  'kelapa': ['coconut'], 'minyak kelapa': ['coconut oil'], 'kopra': ['copra'],
+  'santan': ['coconut milk', 'coconut cream'], 'gula kelapa': ['coconut sugar', 'palm sugar'],
+  'sawit': ['palm oil'], 'minyak sawit': ['palm oil'], 'cpo': ['crude palm oil'],
+  'gula': ['sugar', 'sucrose'], 'gula aren': ['palm sugar', 'jaggery'],
+  'kakao': ['cocoa', 'cacao'], 'coklat': ['chocolate', 'cocoa'], 'cocoa butter': ['cocoa butter'],
+  'teh': ['tea'], 'teh hijau': ['tea green'], 'teh hitam': ['tea black'],
+  'sarang burung': ['bird nest', 'edible bird'], 'walet': ['bird nest', 'swiftlet'],
+  'madu': ['honey'],
+  // seafood / fisheries
+  'ikan': ['fish'], 'ikan beku': ['fish frozen'], 'tuna': ['tuna', 'skipjack', 'bonito'],
+  'cakalang': ['skipjack', 'bonito'], 'udang': ['shrimp', 'prawn'], 'udang beku': ['shrimp frozen', 'prawn frozen'],
+  'lobster': ['lobster'], 'kepiting': ['crab'], 'rajungan': ['blue swimming crab'],
+  'rumput laut': ['seaweed', 'algae', 'agar'], 'agar': ['agar-agar'],
+  'cumi': ['squid', 'cuttlefish'], 'gurita': ['octopus'],
+  // wood, rubber, natural products
+  'karet': ['rubber', 'natural rubber'], 'lateks': ['latex'],
+  'kayu': ['wood', 'timber'], 'kayu jati': ['teak'], 'kayu lapis': ['plywood'], 'kayu manis': ['cinnamon'],
+  'rotan': ['rattan'], 'bambu': ['bamboo'], 'anyaman': ['basketwork', 'wickerwork'],
+  'mahoni': ['mahogany'], 'meranti': ['meranti'],
+  // furniture / homeware / crafts
+  'furniture': ['furniture', 'seats'], 'furnitur': ['furniture'], 'mebel': ['furniture', 'seats'],
+  'kursi': ['seats', 'chairs'], 'meja': ['tables', 'furniture'], 'lemari': ['cabinets', 'wardrobes'],
+  'lampu': ['lamps', 'lighting'], 'kerajinan': ['handicraft', 'basketwork'],
+  // textiles & garments
+  'batik': ['batik', 'printed fabric', 'garment', 'cotton'], 'tekstil': ['textile', 'woven fabric'],
+  'kain': ['fabric', 'woven', 'cotton'], 'kaos': ['t-shirts', 'garment'],
+  'garmen': ['garment', 'apparel'], 'baju': ['garment', 'apparel'],
+  'sepatu': ['footwear', 'shoes'], 'sandal': ['sandals', 'footwear'],
+  'tas': ['bags', 'handbag'], 'dompet': ['wallet', 'purse'],
+  // minerals / metals
+  'batu bara': ['coal'], 'nikel': ['nickel'], 'timah': ['tin'], 'tembaga': ['copper'],
+  'emas': ['gold'], 'perak': ['silver'], 'bauksit': ['bauxite'],
+  // essential oils & cosmetics
+  'minyak atsiri': ['essential oil'], 'minyak nilam': ['patchouli oil'],
+  'minyak sereh': ['citronella oil', 'lemongrass oil'], 'minyak cengkeh': ['clove oil'],
+  'kosmetik': ['cosmetics', 'beauty preparations'], 'sabun': ['soap'],
+  // other agri
+  'beras': ['rice'], 'jagung': ['maize', 'corn'], 'kedelai': ['soybean'],
+  'tembakau': ['tobacco'], 'karet olahan': ['rubber articles'],
+};
+
+// Translate an Indonesian query into an English-augmented query, keeping the
+// original words too so partial matches still work.
+function expandQueryToEnglish(query) {
+  const raw = String(query).toLowerCase().trim();
+  if (!raw) return raw;
+  const expanded = new Set([raw]);
+  // Try full phrase mapping first (e.g. "lada hitam", "kayu manis")
+  if (HS_ID_TO_EN[raw]) for (const alt of HS_ID_TO_EN[raw]) expanded.add(alt);
+  // Then per-word mapping
+  for (const word of raw.split(/\s+/)) {
+    if (HS_ID_TO_EN[word]) for (const alt of HS_ID_TO_EN[word]) expanded.add(alt);
+    else if (word.length >= 3) expanded.add(word);
+  }
+  return [...expanded].join(' ');
+}
+
 // Score HS codes by text overlap with the query — returns a ranked list of
 // candidate 6-digit codes. Purely offline; runs against the loaded map.
+// Understands Indonesian via HS_ID_TO_EN expansion before scoring.
 function searchHsNomenclature(query, limit = 10) {
   const map = loadHsNomenclature();
   if (!map || !map.size || !query) return [];
-  const q = String(query).toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
+  const expanded = expandQueryToEnglish(query);
+  const q = expanded.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
   if (!q.length) return [];
   const scored = [];
   for (const entry of map.values()) {
