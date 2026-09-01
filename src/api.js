@@ -672,6 +672,21 @@ async function handleApi(db, req, res, url, body) {
     })();
   }
 
+  // HS search — offline WCO nomenclature text search for the picker UI.
+  // Returns up to 30 matching 6-digit codes ranked by text overlap.
+  // GET /api/hs/search?q=vanili
+  if (route('GET', '/api/hs/search')) {
+    const qStr = (q.get('q') || '').trim();
+    if (!qStr) return json(res, 200, { ok: true, query: '', results: [] });
+    const results = searchHsNomenclature(qStr, 30).map((r) => ({
+      code: r.code,
+      description: r.description,
+      section: r.section,
+      parent: r.parent,
+    }));
+    return json(res, 200, { ok: true, query: qStr, results, count: results.length });
+  }
+
   // Full HS pipeline: natural-language product query → 6-digit HS (LLM +
   // offline nomenclature validation) → USITC 10-digit + US import tariff.
   // GET /api/hs/lookup?query=vanili kering

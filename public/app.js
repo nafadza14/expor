@@ -973,10 +973,23 @@ route(/^\/onboarding$/, async (app) => {
       () => `<h2>Profil usaha Anda</h2><p class="muted" style="margin-bottom:20px">Agar rekomendasi buyer relevan dengan bisnis Anda.</p>
         <div class="field"><label>Nama usaha</label><input class="input" id="w-org" value="${esc(state.org)}" placeholder="PT / CV / UD nama usaha"></div>`,
       // 2: products
-      () => `<h2>Produk yang Anda ekspor</h2><p class="muted" style="margin-bottom:16px">Pilih 1–5 kode HS. Ini menentukan rekomendasi & alert Anda.</p>
-        <div style="max-height:340px;overflow-y:auto">${leaves.map((l) => `
-          <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
-          <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span><div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div></div>`).join('')}</div>`,
+      () => `<h2>Produk yang Anda ekspor</h2>
+        <p class="muted" style="margin-bottom:12px">Cari HS code sesuai komoditas Anda, atau pilih dari daftar populer. Maks 5 kode.</p>
+        <div style="position:relative;margin-bottom:12px">
+          <input class="input" id="hs-search" placeholder="Cari komoditas… (mis. vanili, coffee, rotan, batik)" autocomplete="off" style="padding-left:38px">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9a9a9a" stroke-width="1.5" style="position:absolute;left:12px;top:11px;pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+        <div id="hs-selected" style="display:${state.hs.length ? 'flex' : 'none'};flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          ${state.hs.map((code) => `<span class="pill pill-orange" style="cursor:pointer" data-remove-hs="${code}" title="Klik untuk hapus">${code.replace(/^(\d{4})/, '$1.')} ×</span>`).join('')}
+        </div>
+        <div id="hs-results" style="max-height:320px;overflow-y:auto">
+          ${leaves.map((l) => `
+            <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
+              <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+            </div>`).join('')}
+        </div>
+        <p class="caption muted-3" style="margin-top:8px">💡 Daftar populer: 21 komoditas ekspor utama Indonesia. Ketik untuk cari dari 6.941 kode WCO lengkap.</p>`,
       // 3: countries
       () => `<h2>Negara target</h2><p class="muted" style="margin-bottom:16px">Pilih pasar yang ingin Anda masuki.</p>
         ${COUNTRY_OPTS.map((c) => `<div class="option-card ${state.countries.includes(c) ? 'selected' : ''}" data-country="${c}">
@@ -1003,6 +1016,58 @@ route(/^\/onboarding$/, async (app) => {
       state.hs = state.hs.includes(c) ? state.hs.filter((x) => x !== c) : (state.hs.length < 5 ? [...state.hs, c] : (toast('Maksimal 5 kode HS', true), state.hs));
       draw();
     });
+    // Chip remove
+    $$('[data-remove-hs]').forEach((el) => el.onclick = () => {
+      state.hs = state.hs.filter((x) => x !== el.dataset.removeHs);
+      draw();
+    });
+    // Live HS search against WCO nomenclature
+    const searchInput = $('#hs-search');
+    const resultsBox = $('#hs-results');
+    if (searchInput && resultsBox) {
+      let searchTimer = null;
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        const q = e.target.value.trim();
+        if (!q) {
+          // Reset to popular list
+          resultsBox.innerHTML = leaves.map((l) => `
+            <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
+              <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+            </div>`).join('');
+          resultsBox.querySelectorAll('.option-card[data-hs]').forEach((el) => el.onclick = () => {
+            const c = el.dataset.hs;
+            state.hs = state.hs.includes(c) ? state.hs.filter((x) => x !== c) : (state.hs.length < 5 ? [...state.hs, c] : (toast('Maksimal 5 kode HS', true), state.hs));
+            draw();
+          });
+          return;
+        }
+        searchTimer = setTimeout(async () => {
+          resultsBox.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Mencari…</div>';
+          try {
+            const r = await api('/api/hs/search?q=' + encodeURIComponent(q), { timeout: 5000 });
+            const rows = Array.isArray(r.results) ? r.results : [];
+            if (!rows.length) {
+              resultsBox.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Tidak ada HS code cocok. Coba kata kunci lain (bahasa Inggris juga OK).</div>';
+              return;
+            }
+            resultsBox.innerHTML = rows.map((l) => `
+              <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
+                <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+                <div><b>${esc(l.description)}</b></div>
+              </div>`).join('');
+            resultsBox.querySelectorAll('.option-card[data-hs]').forEach((el) => el.onclick = () => {
+              const c = el.dataset.hs;
+              state.hs = state.hs.includes(c) ? state.hs.filter((x) => x !== c) : (state.hs.length < 5 ? [...state.hs, c] : (toast('Maksimal 5 kode HS', true), state.hs));
+              draw();
+            });
+          } catch (err) {
+            resultsBox.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Gagal cari HS. Coba lagi.</div>';
+          }
+        }, 250);
+      });
+    }
     $$('.option-card[data-country]').forEach((el) => el.onclick = () => {
       const c = el.dataset.country;
       state.countries = state.countries.includes(c) ? state.countries.filter((x) => x !== c) : [...state.countries, c];
@@ -2209,8 +2274,15 @@ route(/^\/settings$/, async (app) => {
             <h3>Produk yang Anda ekspor</h3>
             <span class="caption muted">${state.hs.length} / 5 dipilih</span>
           </div>
-          <p class="muted body-sm" style="margin-bottom:14px">Pilih 1–5 kode HS. Ini menentukan rekomendasi & alert Anda.</p>
-          <div style="max-height:320px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+          <p class="muted body-sm" style="margin-bottom:12px">Cari HS code sesuai komoditas Anda dari 6.941 kode WCO lengkap, atau pilih dari daftar populer.</p>
+          <div style="position:relative;margin-bottom:12px">
+            <input class="input" id="s-hs-search" placeholder="Cari komoditas… (mis. vanili, coffee, rotan, batik)" autocomplete="off" style="padding-left:38px">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9a9a9a" stroke-width="1.5" style="position:absolute;left:12px;top:11px;pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <div id="s-hs-selected" style="display:${state.hs.length ? 'flex' : 'none'};flex-wrap:wrap;gap:6px;margin-bottom:12px">
+            ${state.hs.map((code) => `<span class="pill pill-orange" style="cursor:pointer" data-remove-shs="${code}" title="Klik untuk hapus">${code.replace(/^(\d{4})/, '$1.')} ×</span>`).join('')}
+          </div>
+          <div id="s-hs-results" style="max-height:340px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
             ${leaves.map((l) => `
               <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
                 <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
@@ -2255,6 +2327,58 @@ route(/^\/settings$/, async (app) => {
       else return toast('Maksimal 5 kode HS. Hapus salah satu dulu.', true);
       draw();
     });
+    // Chip remove for settings
+    $$('[data-remove-shs]').forEach((el) => el.onclick = () => {
+      state.hs = state.hs.filter((x) => x !== el.dataset.removeShs);
+      draw();
+    });
+    // Live HS search on settings — same WCO nomenclature endpoint as onboarding
+    const sSearch = $('#s-hs-search');
+    const sResults = $('#s-hs-results');
+    if (sSearch && sResults) {
+      let sTimer = null;
+      const rebindCards = () => {
+        sResults.querySelectorAll('.option-card[data-hs]').forEach((el) => el.onclick = () => {
+          const c = el.dataset.hs;
+          if (state.hs.includes(c)) state.hs = state.hs.filter((x) => x !== c);
+          else if (state.hs.length < 5) state.hs = [...state.hs, c];
+          else return toast('Maksimal 5 kode HS. Hapus salah satu dulu.', true);
+          draw();
+        });
+      };
+      sSearch.addEventListener('input', (e) => {
+        clearTimeout(sTimer);
+        const q = e.target.value.trim();
+        if (!q) {
+          sResults.innerHTML = leaves.map((l) => `
+            <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
+              <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+            </div>`).join('');
+          rebindCards();
+          return;
+        }
+        sTimer = setTimeout(async () => {
+          sResults.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px;grid-column:1/-1"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Mencari…</div>';
+          try {
+            const r = await api('/api/hs/search?q=' + encodeURIComponent(q), { timeout: 5000 });
+            const rows = Array.isArray(r.results) ? r.results : [];
+            if (!rows.length) {
+              sResults.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px;grid-column:1/-1">Tidak ada HS code cocok. Coba kata kunci lain (Inggris juga OK).</div>';
+              return;
+            }
+            sResults.innerHTML = rows.map((l) => `
+              <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
+                <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
+                <div><b>${esc(l.description)}</b></div>
+              </div>`).join('');
+            rebindCards();
+          } catch (err) {
+            sResults.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px;grid-column:1/-1">Gagal cari HS. Coba lagi.</div>';
+          }
+        }, 250);
+      });
+    }
     $('#s-reset').onclick = () => {
       state.name = ME.name || '';
       state.org = ME.org_name || '';
