@@ -1178,6 +1178,14 @@ route(/^\/dashboard$/, async (app) => {
       <div class="card card-compact metric-card"><div class="lbl">Sedang negosiasi</div><div class="numeric-lg">${fmtN((pl.negotiating || 0) + (pl.responded || 0))}</div><div class="caption muted-3">${pl.won || 0} deal tercapai 🎉</div></div>
       <div class="card card-compact metric-card"><div class="lbl">Notifikasi baru</div><div class="numeric-lg">${fmtN(d.alerts_unread)}</div><div class="caption"><a href="#/alerts">Lihat semua →</a></div></div>
     </div>
+    <div class="card" id="comtrade-widget" style="margin-bottom:24px">
+      <div class="card-header">
+        <div><h3>🌐 Ekspor Indonesia (data resmi UN Comtrade)</h3>
+        <span class="caption muted-3">Sumber: UN Comtrade+ · nilai FOB tahunan untuk HS fokus Anda</span></div>
+        <span class="pill pill-info">Live</span>
+      </div>
+      <div id="comtrade-body"><div class="empty muted body-sm" style="padding:20px 12px"><span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span>Memuat data UN Comtrade…</div></div>
+    </div>
     <div class="grid grid-2" style="margin-bottom:24px">
       <div class="card"><div class="card-header"><h3>Tren pasar produk Anda</h3><span class="caption muted-3">Volume shipment 12 bulan</span></div>
         ${lineChart(d.trend, { valKey: 'w', fmtY: fmtKg })}</div>
@@ -1200,6 +1208,39 @@ route(/^\/dashboard$/, async (app) => {
         <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();saveToList(${b.id})">+ Simpan</button></td></tr>`).join('')}
       </tbody></table></div>` : '<div class="empty"><div class="ic">🔎</div><h3>Belum ada rekomendasi</h3><p class="muted">Lengkapi HS fokus & negara target di onboarding.</p></div>'}</div>`);
   bindShell();
+  // Load real UN Comtrade data for the user's first HS focus (async, non-blocking)
+  (async () => {
+    const body = document.getElementById('comtrade-body');
+    if (!body) return;
+    const hs = typeof firstHs === 'string' && firstHs.length >= 4 ? firstHs : null;
+    if (!hs) { body.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Pilih HS focus di Settings agar data UN Comtrade muncul di sini.</div>'; return; }
+    try {
+      const r = await api('/api/comtrade/indonesia-exports?hs=' + encodeURIComponent(hs), { timeout: 20000 });
+      if (!r || !r.ok || !Array.isArray(r.by_country) || !r.by_country.length) {
+        body.innerHTML = `<div class="empty muted body-sm" style="padding:20px 12px">${esc(r?.message || 'Belum ada data Comtrade untuk HS ' + hs + '.')}</div>`;
+        return;
+      }
+      const top = r.by_country.slice(0, 8);
+      const max = top[0].value_usd || 1;
+      const rows = top.map((c) => `
+        <div style="display:grid;grid-template-columns:170px 1fr 110px;gap:12px;align-items:center;margin-bottom:8px">
+          <span class="body-sm"><span style="font-size:16px">${c.flag || '🏳️'}</span> ${esc(c.name)}</span>
+          <div class="progressbar"><div style="width:${(c.value_usd / max) * 100}%"></div></div>
+          <b class="num body-sm" style="text-align:right">${fmtUSD(c.value_usd)}</b>
+        </div>`).join('');
+      body.innerHTML = `
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px">
+          <div><div class="caption muted-3">HS ${esc(hs)}</div><b class="num">${esc(String(r.year))}</b></div>
+          <div><div class="caption muted-3">Total nilai ekspor</div><b class="num" style="color:var(--orange)">${fmtUSD(r.total_value_usd)}</b></div>
+          <div><div class="caption muted-3">Volume</div><b class="num">${fmtKg(r.total_net_wgt_kg)}</b></div>
+          <div><div class="caption muted-3">Negara tujuan</div><b class="num">${r.by_country.length}</b></div>
+        </div>
+        ${rows}
+        <p class="caption muted-3" style="margin-top:12px">Menampilkan Top 8 dari ${r.by_country.length} negara tujuan · Data cached 24 jam</p>`;
+    } catch (e) {
+      body.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Gagal muat data UN Comtrade. Coba refresh dashboard.</div>';
+    }
+  })();
   } catch (renderErr) {
     console.error('[eksporin] dashboard render failed:', renderErr);
     // Fallback minimal dashboard so user is never stuck on error page

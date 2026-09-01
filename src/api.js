@@ -15,6 +15,117 @@ const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || 'sk-jzbEVp009nE3qAPxXvbJSg'
 // MiniMax-M2.7-highspeed can be selected per-request via body.model when needed.
 const SUMOPOD_AI_MODEL = process.env.SUMOPOD_AI_MODEL || 'gpt-4o-mini';
 
+// UN Comtrade+ — free tier, primary key.
+const COMTRADE_URL = process.env.COMTRADE_URL || 'https://comtradeapi.un.org/data/v1/get';
+const COMTRADE_KEY = process.env.COMTRADE_KEY || '08fe511058c24f0482be303e449e31e7';
+const COMTRADE_INDONESIA_M49 = 360;
+// M49 numeric code → ISO-2 + flag emoji + English name. Covers major EksporIn
+// trading partners so we can render Comtrade partner_code results as readable
+// rows. Add rows here as new markets show up in the response.
+const M49_MAP = {
+  4: ['AF', '🇦🇫', 'Afghanistan'], 8: ['AL', '🇦🇱', 'Albania'], 12: ['DZ', '🇩🇿', 'Algeria'],
+  20: ['AD', '🇦🇩', 'Andorra'], 24: ['AO', '🇦🇴', 'Angola'], 31: ['AZ', '🇦🇿', 'Azerbaijan'],
+  32: ['AR', '🇦🇷', 'Argentina'], 36: ['AU', '🇦🇺', 'Australia'], 40: ['AT', '🇦🇹', 'Austria'],
+  44: ['BS', '🇧🇸', 'Bahamas'], 48: ['BH', '🇧🇭', 'Bahrain'], 50: ['BD', '🇧🇩', 'Bangladesh'],
+  51: ['AM', '🇦🇲', 'Armenia'], 52: ['BB', '🇧🇧', 'Barbados'], 56: ['BE', '🇧🇪', 'Belgium'],
+  60: ['BM', '🇧🇲', 'Bermuda'], 64: ['BT', '🇧🇹', 'Bhutan'], 68: ['BO', '🇧🇴', 'Bolivia'],
+  70: ['BA', '🇧🇦', 'Bosnia'], 72: ['BW', '🇧🇼', 'Botswana'], 76: ['BR', '🇧🇷', 'Brazil'],
+  84: ['BZ', '🇧🇿', 'Belize'], 90: ['SB', '🇸🇧', 'Solomon Islands'], 96: ['BN', '🇧🇳', 'Brunei'],
+  100: ['BG', '🇧🇬', 'Bulgaria'], 104: ['MM', '🇲🇲', 'Myanmar'], 108: ['BI', '🇧🇮', 'Burundi'],
+  112: ['BY', '🇧🇾', 'Belarus'], 116: ['KH', '🇰🇭', 'Cambodia'], 120: ['CM', '🇨🇲', 'Cameroon'],
+  124: ['CA', '🇨🇦', 'Canada'], 132: ['CV', '🇨🇻', 'Cabo Verde'], 136: ['KY', '🇰🇾', 'Cayman'],
+  144: ['LK', '🇱🇰', 'Sri Lanka'], 152: ['CL', '🇨🇱', 'Chile'], 156: ['CN', '🇨🇳', 'China'],
+  158: ['TW', '🇹🇼', 'Taiwan'], 170: ['CO', '🇨🇴', 'Colombia'], 191: ['HR', '🇭🇷', 'Croatia'],
+  192: ['CU', '🇨🇺', 'Cuba'], 196: ['CY', '🇨🇾', 'Cyprus'], 203: ['CZ', '🇨🇿', 'Czechia'],
+  208: ['DK', '🇩🇰', 'Denmark'], 214: ['DO', '🇩🇴', 'Dominican Republic'],
+  218: ['EC', '🇪🇨', 'Ecuador'], 222: ['SV', '🇸🇻', 'El Salvador'], 226: ['GQ', '🇬🇶', 'Equatorial Guinea'],
+  231: ['ET', '🇪🇹', 'Ethiopia'], 233: ['EE', '🇪🇪', 'Estonia'], 242: ['FJ', '🇫🇯', 'Fiji'],
+  246: ['FI', '🇫🇮', 'Finland'], 250: ['FR', '🇫🇷', 'France'], 262: ['DJ', '🇩🇯', 'Djibouti'],
+  268: ['GE', '🇬🇪', 'Georgia'], 275: ['PS', '🇵🇸', 'Palestine'], 276: ['DE', '🇩🇪', 'Germany'],
+  288: ['GH', '🇬🇭', 'Ghana'], 292: ['GI', '🇬🇮', 'Gibraltar'], 300: ['GR', '🇬🇷', 'Greece'],
+  320: ['GT', '🇬🇹', 'Guatemala'], 344: ['HK', '🇭🇰', 'Hong Kong'], 348: ['HU', '🇭🇺', 'Hungary'],
+  352: ['IS', '🇮🇸', 'Iceland'], 356: ['IN', '🇮🇳', 'India'], 360: ['ID', '🇮🇩', 'Indonesia'],
+  364: ['IR', '🇮🇷', 'Iran'], 368: ['IQ', '🇮🇶', 'Iraq'], 372: ['IE', '🇮🇪', 'Ireland'],
+  376: ['IL', '🇮🇱', 'Israel'], 380: ['IT', '🇮🇹', 'Italy'], 384: ['CI', '🇨🇮', "Côte d'Ivoire"],
+  388: ['JM', '🇯🇲', 'Jamaica'], 392: ['JP', '🇯🇵', 'Japan'], 398: ['KZ', '🇰🇿', 'Kazakhstan'],
+  400: ['JO', '🇯🇴', 'Jordan'], 404: ['KE', '🇰🇪', 'Kenya'], 408: ['KP', '🇰🇵', 'North Korea'],
+  410: ['KR', '🇰🇷', 'South Korea'], 414: ['KW', '🇰🇼', 'Kuwait'], 417: ['KG', '🇰🇬', 'Kyrgyzstan'],
+  418: ['LA', '🇱🇦', 'Laos'], 422: ['LB', '🇱🇧', 'Lebanon'], 428: ['LV', '🇱🇻', 'Latvia'],
+  434: ['LY', '🇱🇾', 'Libya'], 440: ['LT', '🇱🇹', 'Lithuania'], 442: ['LU', '🇱🇺', 'Luxembourg'],
+  446: ['MO', '🇲🇴', 'Macao'], 450: ['MG', '🇲🇬', 'Madagascar'], 454: ['MW', '🇲🇼', 'Malawi'],
+  458: ['MY', '🇲🇾', 'Malaysia'], 462: ['MV', '🇲🇻', 'Maldives'], 470: ['MT', '🇲🇹', 'Malta'],
+  478: ['MR', '🇲🇷', 'Mauritania'], 480: ['MU', '🇲🇺', 'Mauritius'], 484: ['MX', '🇲🇽', 'Mexico'],
+  496: ['MN', '🇲🇳', 'Mongolia'], 498: ['MD', '🇲🇩', 'Moldova'], 499: ['ME', '🇲🇪', 'Montenegro'],
+  504: ['MA', '🇲🇦', 'Morocco'], 508: ['MZ', '🇲🇿', 'Mozambique'], 512: ['OM', '🇴🇲', 'Oman'],
+  516: ['NA', '🇳🇦', 'Namibia'], 524: ['NP', '🇳🇵', 'Nepal'], 528: ['NL', '🇳🇱', 'Netherlands'],
+  554: ['NZ', '🇳🇿', 'New Zealand'], 558: ['NI', '🇳🇮', 'Nicaragua'], 566: ['NG', '🇳🇬', 'Nigeria'],
+  578: ['NO', '🇳🇴', 'Norway'], 586: ['PK', '🇵🇰', 'Pakistan'], 591: ['PA', '🇵🇦', 'Panama'],
+  598: ['PG', '🇵🇬', 'Papua New Guinea'], 600: ['PY', '🇵🇾', 'Paraguay'], 604: ['PE', '🇵🇪', 'Peru'],
+  608: ['PH', '🇵🇭', 'Philippines'], 616: ['PL', '🇵🇱', 'Poland'], 620: ['PT', '🇵🇹', 'Portugal'],
+  634: ['QA', '🇶🇦', 'Qatar'], 642: ['RO', '🇷🇴', 'Romania'], 643: ['RU', '🇷🇺', 'Russia'],
+  646: ['RW', '🇷🇼', 'Rwanda'], 682: ['SA', '🇸🇦', 'Saudi Arabia'], 686: ['SN', '🇸🇳', 'Senegal'],
+  688: ['RS', '🇷🇸', 'Serbia'], 690: ['SC', '🇸🇨', 'Seychelles'], 702: ['SG', '🇸🇬', 'Singapore'],
+  703: ['SK', '🇸🇰', 'Slovakia'], 704: ['VN', '🇻🇳', 'Vietnam'], 705: ['SI', '🇸🇮', 'Slovenia'],
+  710: ['ZA', '🇿🇦', 'South Africa'], 716: ['ZW', '🇿🇼', 'Zimbabwe'], 724: ['ES', '🇪🇸', 'Spain'],
+  729: ['SD', '🇸🇩', 'Sudan'], 752: ['SE', '🇸🇪', 'Sweden'], 756: ['CH', '🇨🇭', 'Switzerland'],
+  760: ['SY', '🇸🇾', 'Syria'], 762: ['TJ', '🇹🇯', 'Tajikistan'], 764: ['TH', '🇹🇭', 'Thailand'],
+  768: ['TG', '🇹🇬', 'Togo'], 776: ['TO', '🇹🇴', 'Tonga'], 780: ['TT', '🇹🇹', 'Trinidad'],
+  784: ['AE', '🇦🇪', 'UAE'], 788: ['TN', '🇹🇳', 'Tunisia'], 792: ['TR', '🇹🇷', 'Turkey'],
+  800: ['UG', '🇺🇬', 'Uganda'], 804: ['UA', '🇺🇦', 'Ukraine'], 807: ['MK', '🇲🇰', 'North Macedonia'],
+  818: ['EG', '🇪🇬', 'Egypt'], 826: ['GB', '🇬🇧', 'United Kingdom'], 834: ['TZ', '🇹🇿', 'Tanzania'],
+  840: ['US', '🇺🇸', 'United States'], 842: ['US', '🇺🇸', 'United States'], 858: ['UY', '🇺🇾', 'Uruguay'],
+  860: ['UZ', '🇺🇿', 'Uzbekistan'], 862: ['VE', '🇻🇪', 'Venezuela'], 887: ['YE', '🇾🇪', 'Yemen'],
+  894: ['ZM', '🇿🇲', 'Zambia'],
+};
+const COMTRADE_CACHE = new Map(); // hs → { fetchedAt, year, data }
+const COMTRADE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Fetch Indonesia's export flow (partner-country breakdown) for a given HS code
+// from UN Comtrade+. Caches per HS for 24h. Returns null on any failure.
+async function fetchIndonesiaExports(hsCode) {
+  const clean = String(hsCode || '').replace(/\D/g, '').slice(0, 6);
+  if (!clean) return null;
+  const cached = COMTRADE_CACHE.get(clean);
+  if (cached && (Date.now() - cached.fetchedAt) < COMTRADE_TTL_MS) return cached.payload;
+  // UN Comtrade releases annual data with a lag. Try the last 3 completed years.
+  const currentYear = 2025; // Data.now() is not available; keep this bumped periodically.
+  for (let y = currentYear - 1; y >= currentYear - 3; y--) {
+    try {
+      const url = `${COMTRADE_URL}/C/A/HS?reporterCode=${COMTRADE_INDONESIA_M49}&period=${y}&cmdCode=${clean}&flowCode=X`;
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), 15000);
+      const r = await fetch(url, { headers: { 'Ocp-Apim-Subscription-Key': COMTRADE_KEY }, signal: ac.signal });
+      clearTimeout(t);
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (!Array.isArray(j.data) || !j.data.length) continue;
+      // Aggregate: sum by partnerCode (partnerCode=0 = World, skip)
+      const agg = new Map();
+      let worldValue = 0, worldWeight = 0;
+      for (const row of j.data) {
+        const pc = row.partnerCode;
+        const val = row.fobvalue || row.cifvalue || row.primaryValue || 0;
+        const wgt = row.netWgt || 0;
+        if (pc === 0) { worldValue = Math.max(worldValue, val); worldWeight = Math.max(worldWeight, wgt); continue; }
+        const prev = agg.get(pc) || { value: 0, weight: 0 };
+        agg.set(pc, { value: prev.value + val, weight: prev.weight + wgt });
+      }
+      const byCountry = [...agg.entries()]
+        .map(([pc, v]) => {
+          const meta = M49_MAP[pc] || [null, '🏳️', 'M49-' + pc];
+          return { partner_code: pc, iso2: meta[0], flag: meta[1], name: meta[2], value_usd: v.value, net_wgt_kg: v.weight };
+        })
+        .sort((a, b) => b.value_usd - a.value_usd);
+      const totalValue = worldValue || byCountry.reduce((s, r) => s + r.value_usd, 0);
+      const totalWgt = worldWeight || byCountry.reduce((s, r) => s + r.net_wgt_kg, 0);
+      const payload = { ok: true, hs: clean, year: y, source: 'UN Comtrade+', total_value_usd: totalValue, total_net_wgt_kg: totalWgt, by_country: byCountry };
+      COMTRADE_CACHE.set(clean, { fetchedAt: Date.now(), payload });
+      return payload;
+    } catch (e) { console.warn('[comtrade]', y, hsCode, e.message || e); }
+  }
+  return null;
+}
+
 // Small in-memory cache: access_token -> {userId, expires} to avoid hitting Supabase
 // on every request. Serverless-safe: cache lives only within this hot instance.
 const SB_TOKEN_CACHE = new Map();
@@ -463,6 +574,17 @@ async function handleApi(db, req, res, url, body) {
 
   // Sumopod AI — natural-language commodity → HS mapping + cargo keywords + outreach angle.
   // The AI Buyer Discovery route below already falls back to keyword matching if this returns nothing.
+  // UN Comtrade+ proxy — real Indonesia export flow by destination country for a given HS code.
+  // GET /api/comtrade/indonesia-exports?hs=090510
+  if (route('GET', '/api/comtrade/indonesia-exports')) {
+    return (async () => {
+      const hs = q.get('hs') || '';
+      const data = await fetchIndonesiaExports(hs);
+      if (!data) return json(res, 200, { ok: false, hs, source: 'UN Comtrade+', message: 'Belum ada data Comtrade untuk HS ini.' });
+      return json(res, 200, data);
+    })();
+  }
+
   if (route('POST', '/api/ai/complete')) {
     return (async () => {
       const { messages, temperature, max_tokens, model } = body || {};
