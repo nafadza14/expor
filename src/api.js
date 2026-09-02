@@ -1161,6 +1161,85 @@ async function handleApi(db, req, res, url, body) {
     });
   }
 
+  // ===== Scrape pipeline (Postgres-backed) =====
+  if (route('GET', '/api/admin/scrape/status')) {
+    if (!requireAdmin()) return;
+    try {
+      const P = require('./sources/persist');
+      const [countsBySource, jobStats, recentJobs] = await Promise.all([
+        P.countsBySource(), P.jobStats(), P.recentJobs({ limit: 20 }),
+      ]);
+      const totalBuyers = countsBySource.reduce((s, r) => s + r.c, 0);
+      return json(res, 200, {
+        total_buyers: totalBuyers,
+        by_source: countsBySource,
+        jobs_by_status: jobStats,
+        recent_jobs: recentJobs,
+      });
+    } catch (e) {
+      return json(res, 500, { error: 'postgres_unavailable', detail: e.message });
+    }
+  }
+
+  if (route('GET', '/api/admin/scrape/buyers')) {
+    if (!requireAdmin()) return;
+    try {
+      const P = require('./sources/persist');
+      const limit = Math.min(Number(q.get('limit')) || 50, 200);
+      const source = q.get('source') || null;
+      const country = q.get('country') || null;
+      const rows = await P.listRecentBuyers({ limit, source, country });
+      return json(res, 200, { buyers: rows });
+    } catch (e) {
+      return json(res, 500, { error: 'postgres_unavailable', detail: e.message });
+    }
+  }
+
+  if (route('POST', '/api/admin/scrape/seed')) {
+    if (!requireAdmin()) return;
+    try {
+      const pipeline = require('./sources/pipeline');
+      const jobs = await pipeline.seedQueue();
+      return json(res, 200, { enqueued: jobs.length });
+    } catch (e) {
+      return json(res, 500, { error: 'postgres_unavailable', detail: e.message });
+    }
+  }
+
+  if (route('POST', '/api/admin/scrape/enqueue')) {
+    if (!requireAdmin()) return;
+    const { source, hs_code, country } = body || {};
+    if (!source || !hs_code || !country) return json(res, 400, { error: 'source, hs_code, country required' });
+    try {
+      const pipeline = require('./sources/pipeline');
+      const id = await pipeline.enqueue({ source, hs_code, country });
+      return json(res, 200, { id });
+    } catch (e) {
+      return json(res, 500, { error: 'postgres_unavailable', detail: e.message });
+    }
+  }
+
+  if (route('POST', '/api/admin/scrape/run')) {
+    if (!requireAdmin()) return;
+    const max = Math.min(Math.max(Number(body?.max) || 5, 1), 15);
+    try {
+      const pipeline = require('./sources/pipeline');
+      const results = await pipeline.drainQueue({ max });
+      const inserted = results.reduce((s, r) => s + (r.inserted || 0), 0);
+      const skipped = results.filter((r) => r.error?.startsWith('skipped:')).length;
+      const failed = results.filter((r) => r.error && !r.error.startsWith('skipped:')).length;
+      return json(res, 200, {
+        processed: results.length,
+        buyers_persisted: inserted,
+        ok: results.filter((r) => r.ok).length,
+        skipped, failed,
+        results: results.map((r) => ({ jobId: r.jobId, ok: !!r.ok, inserted: r.inserted || 0, error: r.error || null })),
+      });
+    } catch (e) {
+      return json(res, 500, { error: 'pipeline_error', detail: e.message });
+    }
+  }
+
   if (route('GET', '/api/admin/recent-activity')) {
     if (!requireAdmin()) return;
     const recentUsers = db.prepare(`SELECT id, email, name, plan, created_at FROM users ORDER BY created_at DESC LIMIT 10`).all();

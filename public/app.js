@@ -2914,6 +2914,7 @@ const ADMIN_TABS = [
   { id: 'overview', label: 'Overview', icon: '📊' },
   { id: 'users', label: 'Users', icon: '👥' },
   { id: 'buyers', label: 'Buyer Inventory', icon: '🏢' },
+  { id: 'scrape', label: 'Scrape Pipeline', icon: '🕸️' },
   { id: 'shipments', label: 'Shipments', icon: '🚢' },
   { id: 'messages', label: 'Outreach', icon: '✉️' },
   { id: 'revenue', label: 'Revenue', icon: '💰' },
@@ -3166,6 +3167,101 @@ route(/^\/admin$/, async (app, m, params) => {
       `);
       $('#admin-bq')?.addEventListener('input', (e) => { clearTimeout(window.__abq); window.__abq = setTimeout(() => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(e.target.value) + '&c=' + encodeURIComponent(country); }, 400); });
       $('#admin-bc')?.addEventListener('change', (e) => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(search) + '&c=' + encodeURIComponent(e.target.value); });
+    } else if (tab === 'scrape') {
+      // Data source discovery pipeline: reads from Postgres (Supabase).
+      let status = null, buyers = [];
+      try {
+        [status, buyers] = await Promise.all([
+          api('/api/admin/scrape/status'),
+          api('/api/admin/scrape/buyers?limit=50').then((r) => r.buyers || []),
+        ]);
+      } catch (e) {
+        draw(`<div class="admin-panel"><h3 style="margin-bottom:8px">Pipeline belum siap</h3>
+          <p class="muted body-sm">${esc(e.data?.detail || e.message || 'Postgres tidak dapat diakses.')}</p>
+          <p class="caption muted-3" style="margin-top:8px">Pastikan env <code>DATABASE_URL_POSTGRESS</code> tersedia dan migration sudah dijalankan.</p></div>`);
+        return;
+      }
+      const statusBy = (s) => (status.jobs_by_status.find((r) => r.status === s)?.c || 0);
+      const bySrcMap = Object.fromEntries(status.by_source.map((r) => [r.source, r.c]));
+      draw(`
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer Terscrape</div><div class="admin-kpi-num">${fmtN(status.total_buyers)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Pending</div><div class="admin-kpi-num">${fmtN(statusBy('pending'))}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Selesai</div><div class="admin-kpi-num">${fmtN(statusBy('done'))}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Gagal</div><div class="admin-kpi-num">${fmtN(statusBy('failed'))}</div></div>
+        </div>
+
+        <div class="admin-toolbar" style="margin-top:16px">
+          <button class="btn btn-outline btn-sm" id="scrape-seed">+ Seed antrian (all sources × HS × country)</button>
+          <button class="btn btn-primary btn-sm" id="scrape-run">▶ Proses 5 job sekarang</button>
+          <span class="admin-count">${status.recent_jobs.length} job terbaru</span>
+        </div>
+
+        <div class="admin-grid" style="grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px">
+          <div class="admin-panel">
+            <h3 style="margin-bottom:12px">Buyer per sumber</h3>
+            <table class="tbl">
+              <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
+              <tbody>
+                ${['gleif','wikidata','importyeti','itpc'].map((s) => `<tr>
+                  <td class="body-sm">${esc(s)}</td>
+                  <td class="r num">${fmtN(bySrcMap[s] || 0)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="admin-panel">
+            <h3 style="margin-bottom:12px">Job terbaru</h3>
+            <div style="max-height:280px;overflow:auto">
+              <table class="tbl">
+                <thead><tr><th>Source</th><th>HS</th><th>Country</th><th>Status</th><th class="r">N</th></tr></thead>
+                <tbody>
+                  ${status.recent_jobs.map((j) => `<tr>
+                    <td class="body-sm">${esc(j.source)}</td>
+                    <td class="caption">${esc(j.hs_code || '-')}</td>
+                    <td>${j.country ? flag(j.country) + ' ' + esc(j.country) : '-'}</td>
+                    <td><span class="pill ${j.status === 'done' ? 'pill-success' : j.status === 'failed' ? 'pill-danger' : j.status === 'running' ? 'pill-warning' : 'pill-neutral'}" style="font-size:10px">${esc(j.status)}</span>${j.error ? `<div class="caption muted-3" title="${esc(j.error)}">${esc(j.error.slice(0,32))}</div>` : ''}</td>
+                    <td class="r num">${fmtN(j.result_count || 0)}</td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin-panel" style="margin-top:16px;padding:0;overflow:hidden">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border-default)">
+            <h3 style="margin:0">50 buyer terbaru</h3>
+          </div>
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>Nama</th><th>Negara</th><th>Kota</th><th>Source</th><th>HS</th><th class="r">Skor</th><th>Discovered</th></tr></thead>
+            <tbody>
+              ${buyers.length ? buyers.map((b) => `<tr>
+                <td><b class="body-sm">${esc(b.name)}</b>${b.website ? `<div class="caption"><a href="${esc(b.website)}" target="_blank" rel="noopener" class="muted">${esc(b.website.replace(/^https?:\/\//, '').slice(0,40))}</a></div>` : ''}</td>
+                <td>${b.country ? flag(b.country) + ' ' + esc(b.country) : '-'}</td>
+                <td class="body-sm muted">${esc(b.city || '-')}</td>
+                <td><span class="pill pill-neutral" style="font-size:10px">${esc(b.source)}</span></td>
+                <td class="caption">${(b.hs_codes || []).slice(0,3).map((h) => `<span class="tag">${esc(h)}</span>`).join(' ') || '-'}</td>
+                <td class="r"><span class="pill ${b.data_confidence >= 80 ? 'pill-success' : b.data_confidence >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:10px">${b.data_confidence}</span></td>
+                <td class="caption muted-3">${fmtDate(b.updated_at)}</td>
+              </tr>`).join('') : `<tr><td colspan="7" class="muted" style="padding:24px;text-align:center">Belum ada buyer terscrape. Klik "Seed antrian" lalu "Proses 5 job".</td></tr>`}
+            </tbody>
+          </table></div>
+        </div>
+      `);
+      $('#scrape-seed')?.addEventListener('click', async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Enqueuing…';
+        try { const r = await api('/api/admin/scrape/seed', { method: 'POST' }); toast(`+${r.enqueued} job masuk antrian`); location.hash = '#/admin?tab=scrape&t=' + Date.now(); }
+        catch (err) { toast(err.data?.error || 'Gagal seed', true); e.target.disabled = false; e.target.textContent = '+ Seed antrian (all sources × HS × country)'; }
+      });
+      $('#scrape-run')?.addEventListener('click', async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Memproses…';
+        try {
+          const r = await api('/api/admin/scrape/run', { method: 'POST', body: { max: 5 } });
+          toast(`Selesai. ${r.buyers_persisted} buyer baru, ${r.ok} ok, ${r.skipped} skip, ${r.failed} gagal`);
+          location.hash = '#/admin?tab=scrape&t=' + Date.now();
+        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal run', true); e.target.disabled = false; e.target.textContent = '▶ Proses 5 job sekarang'; }
+      });
     } else if (tab === 'shipments') {
       const d = await api('/api/admin/shipments');
       draw(`

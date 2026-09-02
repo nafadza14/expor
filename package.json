@@ -9,6 +9,7 @@
     "build": "echo 'No build step required'",
     "reset-db": "node -e \"const fs=require('fs'),p=require('path').join(__dirname,'data');fs.rmSync(p,{recursive:true,force:true});console.log('Database dihapus')\"",
     "migrate": "node scripts/migrate.js",
+    "scrape": "node scripts/scrape.js",
     "pg:ping": "node -e \"require('dotenv').config?.({path:'.env.local'});require('./src/pg').ping().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\""
   },
   "engines": {

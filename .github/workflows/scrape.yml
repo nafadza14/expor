@@ -1,0 +1,39 @@
+name: Scrape buyers (nightly)
+
+# Runs the scrape pipeline every night at 19:00 UTC = 02:00 WIB.
+# Also runnable on demand from the Actions tab.
+
+on:
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'seed | drain | run'
+        default: 'run'
+      max:
+        description: 'Max jobs to drain'
+        default: '200'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run scraper
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL_POSTGRESS" ]; then
+            echo "::error::DATABASE_URL_POSTGRESS secret not set"
+            exit 1
+          fi
+          CMD="${{ github.event.inputs.command || 'run' }}"
+          MAX="${{ github.event.inputs.max || '200' }}"
+          node scripts/scrape.js "$CMD" --max "$MAX"

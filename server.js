@@ -5,6 +5,18 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+
+// Load .env.local for local dev. Vercel injects env vars natively so this
+// is a no-op there. Silent if the file is absent.
+(function loadEnvLocal() {
+  const p = path.join(__dirname, '.env.local');
+  if (!fs.existsSync(p)) return;
+  for (const line of fs.readFileSync(p, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/i);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+})();
+
 const { getDb } = require('./src/db');
 const { handleApi } = require('./src/api');
 
