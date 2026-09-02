@@ -3194,6 +3194,7 @@ route(/^\/admin$/, async (app, m, params) => {
         <div class="admin-toolbar" style="margin-top:16px">
           <button class="btn btn-outline btn-sm" id="scrape-seed">+ Seed antrian (all sources × HS × country)</button>
           <button class="btn btn-primary btn-sm" id="scrape-run">▶ Proses 5 job sekarang</button>
+          <button class="btn btn-outline btn-sm" id="scrape-enrich">✨ Enrich 5 buyer sekarang</button>
           <span class="admin-count">${status.recent_jobs.length} job terbaru</span>
         </div>
 
@@ -3234,17 +3235,18 @@ route(/^\/admin$/, async (app, m, params) => {
             <h3 style="margin:0">50 buyer terbaru</h3>
           </div>
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Nama</th><th>Negara</th><th>Kota</th><th>Source</th><th>HS</th><th class="r">Skor</th><th>Discovered</th></tr></thead>
+            <thead><tr><th>Nama</th><th>Negara</th><th>Industri</th><th>Source</th><th>Enriched</th><th>HS</th><th class="r">Skor</th><th class="r">Aksi</th></tr></thead>
             <tbody>
               ${buyers.length ? buyers.map((b) => `<tr>
-                <td><b class="body-sm">${esc(b.name)}</b>${b.website ? `<div class="caption"><a href="${esc(b.website)}" target="_blank" rel="noopener" class="muted">${esc(b.website.replace(/^https?:\/\//, '').slice(0,40))}</a></div>` : ''}</td>
-                <td>${b.country ? flag(b.country) + ' ' + esc(b.country) : '-'}</td>
-                <td class="body-sm muted">${esc(b.city || '-')}</td>
+                <td><b class="body-sm">${esc(b.name)}</b>${b.website ? `<div class="caption"><a href="${esc(b.website)}" target="_blank" rel="noopener" class="muted">${esc(b.website.replace(/^https?:\/\//, '').slice(0,40))}</a></div>` : ''}${b.email ? `<div class="caption muted">${esc(b.email)}</div>` : ''}</td>
+                <td>${b.country ? flag(b.country) + ' ' + esc(b.country) : '-'}${b.city ? `<div class="caption muted-3">${esc(b.city)}</div>` : ''}</td>
+                <td class="body-sm muted">${esc(b.industry || '-')}${b.size_bucket ? `<div class="caption muted-3">${esc(b.size_bucket)}</div>` : ''}</td>
                 <td><span class="pill pill-neutral" style="font-size:10px">${esc(b.source)}</span></td>
+                <td>${b.enriched_at ? `<span class="pill pill-success" style="font-size:10px">✓</span>` : `<span class="pill pill-neutral" style="font-size:10px">-</span>`}</td>
                 <td class="caption">${(b.hs_codes || []).slice(0,3).map((h) => `<span class="tag">${esc(h)}</span>`).join(' ') || '-'}</td>
                 <td class="r"><span class="pill ${b.data_confidence >= 80 ? 'pill-success' : b.data_confidence >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:10px">${b.data_confidence}</span></td>
-                <td class="caption muted-3">${fmtDate(b.updated_at)}</td>
-              </tr>`).join('') : `<tr><td colspan="7" class="muted" style="padding:24px;text-align:center">Belum ada buyer terscrape. Klik "Seed antrian" lalu "Proses 5 job".</td></tr>`}
+                <td class="r"><button class="btn btn-sm btn-outline" data-enrich-buyer="${b.id}">Enrich</button></td>
+              </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:24px;text-align:center">Belum ada buyer terscrape. Klik "Seed antrian" lalu "Proses 5 job".</td></tr>`}
             </tbody>
           </table></div>
         </div>
@@ -3262,6 +3264,23 @@ route(/^\/admin$/, async (app, m, params) => {
           location.hash = '#/admin?tab=scrape&t=' + Date.now();
         } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal run', true); e.target.disabled = false; e.target.textContent = '▶ Proses 5 job sekarang'; }
       });
+      $('#scrape-enrich')?.addEventListener('click', async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Enriching…';
+        try {
+          const r = await api('/api/admin/scrape/enrich', { method: 'POST', body: { max: 5 } });
+          toast(`Selesai. ${r.ok}/${r.processed} buyer enriched`);
+          location.hash = '#/admin?tab=scrape&t=' + Date.now();
+        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal enrich', true); e.target.disabled = false; e.target.textContent = '✨ Enrich 5 buyer sekarang'; }
+      });
+      $$('[data-enrich-buyer]').forEach((el) => el.addEventListener('click', async () => {
+        const id = el.dataset.enrichBuyer;
+        el.disabled = true; el.textContent = '…';
+        try {
+          await api('/api/admin/scrape/enrich?id=' + id, { method: 'POST' });
+          toast('Buyer enriched');
+          location.hash = '#/admin?tab=scrape&t=' + Date.now();
+        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal', true); el.disabled = false; el.textContent = 'Enrich'; }
+      }));
     } else if (tab === 'shipments') {
       const d = await api('/api/admin/shipments');
       draw(`

@@ -1,0 +1,38 @@
+name: Enrich buyers (nightly)
+
+# Runs enrichment (website crawl + Sumopod AI classify) on buyers where
+# enriched_at IS NULL. Scheduled after the scrape workflow so the newest
+# rows land in the queue and get processed on the same night.
+#
+# 20:00 UTC = 03:00 WIB (one hour after scrape).
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Max buyers to enrich this run'
+        default: '150'
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run enricher
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL_POSTGRESS" ]; then
+            echo "::error::DATABASE_URL_POSTGRESS secret not set"
+            exit 1
+          fi
+          MAX="${{ github.event.inputs.max || '150' }}"
+          node scripts/enrich.js --max "$MAX"

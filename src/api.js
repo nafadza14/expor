@@ -1219,6 +1219,27 @@ async function handleApi(db, req, res, url, body) {
     }
   }
 
+  if (route('POST', '/api/admin/scrape/enrich')) {
+    if (!requireAdmin()) return;
+    const id = Number(q.get('id')) || Number(body?.id) || 0;
+    const max = Math.min(Math.max(Number(body?.max) || 0, 0), 10);
+    try {
+      const pg = require('./pg');
+      const ep = require('./sources/enricher-pipeline');
+      if (id) {
+        const b = await pg.one('SELECT id, name, country, website, email, phone, industry, size_bucket, description FROM scraped_buyers WHERE id=$1', [id]);
+        if (!b) return json(res, 404, { error: 'buyer_not_found' });
+        const r = await ep.enrichOne(b);
+        return json(res, 200, { ok: true, ...r });
+      }
+      const results = await ep.enrichBatch({ max: max || 5, sleepMs: 500 });
+      const ok = results.filter((r) => r.ok).length;
+      return json(res, 200, { processed: results.length, ok, results });
+    } catch (e) {
+      return json(res, 500, { error: 'enrich_failed', detail: e.message });
+    }
+  }
+
   if (route('POST', '/api/admin/scrape/run')) {
     if (!requireAdmin()) return;
     const max = Math.min(Math.max(Number(body?.max) || 5, 1), 15);
@@ -1335,6 +1356,47 @@ async function handleApi(db, req, res, url, body) {
       return Object.entries(mmap).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ value: k, count: n }));
     };
     return json(res, 200, { total, page: pageN, per, results: pageRows, facets: { country: facet('country'), size: facet('size_bucket') }, quota: quotaCheck(db, user, 'search') });
+  }
+
+  // ===== scraped buyers (Postgres discovery pool) =====
+  // Public to logged-in users. Filters: hs (4-digit HS), country (ISO-2),
+  // q (free text against name). Quota-metered under the 'search' meter.
+  if (route('GET', '/api/scraped-buyers')) {
+    const qc = quotaCheck(db, user, 'search');
+    if (!qc.ok) return json(res, 402, { error: `Kuota pencarian bulan ini habis (${qc.used}/${qc.limit}). Upgrade untuk pencarian tanpa batas.`, quota: qc, upgrade: true });
+    try {
+      const pgClient = require('./pg');
+      const hs = String(q.get('hs') || '').trim();
+      const country = String(q.get('country') || '').trim().toUpperCase();
+      const term = String(q.get('q') || '').trim();
+      const limit = Math.min(Math.max(Number(q.get('limit')) || 20, 1), 50);
+      const conds = ['TRUE']; const params = [];
+      if (hs) { params.push(hs); conds.push(`hs_codes @> ARRAY[$${params.length}]::text[]`); }
+      if (country && /^[A-Z]{2}$/.test(country)) { params.push(country); conds.push(`country = $${params.length}`); }
+      if (term) { params.push('%' + term.toLowerCase() + '%'); conds.push(`LOWER(name) LIKE $${params.length}`); }
+      params.push(limit);
+      const rows = await pgClient.query(`
+        SELECT id, source, name, country, city, website, email, phone,
+               industry, size_bucket, description, hs_codes,
+               data_confidence, enriched_at, updated_at
+          FROM scraped_buyers
+         WHERE ${conds.join(' AND ')}
+         ORDER BY (enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC
+         LIMIT $${params.length}`, params);
+      bumpUsage(db, user.id, 'search');
+      return json(res, 200, {
+        results: rows.map((r) => ({
+          id: r.id, source: r.source, name: r.name, country: r.country, city: r.city,
+          website: r.website, email: r.email, phone: r.phone,
+          industry: r.industry, size_bucket: r.size_bucket, description: r.description,
+          hs_codes: r.hs_codes, confidence: r.data_confidence,
+          enriched: !!r.enriched_at, updated_at: r.updated_at,
+        })),
+        quota: quotaCheck(db, user, 'search'),
+      });
+    } catch (e) {
+      return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
+    }
   }
 
   // ===== buyer profile (F2) =====
