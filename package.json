@@ -7,10 +7,15 @@
     "start": "node server.js",
     "dev": "node server.js",
     "build": "echo 'No build step required'",
-    "reset-db": "node -e \"const fs=require('fs'),p=require('path').join(__dirname,'data');fs.rmSync(p,{recursive:true,force:true});console.log('Database dihapus')\""
+    "reset-db": "node -e \"const fs=require('fs'),p=require('path').join(__dirname,'data');fs.rmSync(p,{recursive:true,force:true});console.log('Database dihapus')\"",
+    "migrate": "node scripts/migrate.js",
+    "pg:ping": "node -e \"require('dotenv').config?.({path:'.env.local'});require('./src/pg').ping().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\""
   },
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
+    "pg": "^8.23.0",
     "sql.js": "^1.11.0"
   },
   "license": "UNLICENSED",

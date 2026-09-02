@@ -1,0 +1,33 @@
+name: Migrate Postgres
+
+# Runs the SQL migration on every push to main so Supabase schema tracks
+# the code. Add DATABASE_URL_POSTGRESS to repo Settings > Secrets > Actions.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+      - 'src/pg.js'
+      - 'scripts/migrate.js'
+      - '.github/workflows/migrate.yml'
+  workflow_dispatch: {}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run migrations
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+        run: |
+          if [ -z "$DATABASE_URL_POSTGRESS" ]; then
+            echo "::error::DATABASE_URL_POSTGRESS secret not set. Add it in repo Settings > Secrets > Actions."
+            exit 1
+          fi
+          npm run migrate
