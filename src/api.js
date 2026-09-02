@@ -614,6 +614,21 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, Object.entries(PLANS).map(([code, pl]) => ({ code, ...pl })));
   }
 
+  // HS search — public endpoint so the landing page "try before signup"
+  // commodity search can hit it without an auth cookie. Runs entirely against
+  // the offline WCO nomenclature file — no external calls, no rate limits.
+  if (route('GET', '/api/hs/search')) {
+    const qStr = (q.get('q') || '').trim();
+    if (!qStr) return json(res, 200, { ok: true, query: '', results: [] });
+    const results = searchHsNomenclature(qStr, 30).map((r) => ({
+      code: r.code,
+      description: r.description,
+      section: r.section,
+      parent: r.parent,
+    }));
+    return json(res, 200, { ok: true, query: qStr, results, count: results.length });
+  }
+
   // ===== everything below requires auth =====
   // Prefer Supabase Bearer (stateless — survives serverless cold instances),
   // fall back to local session cookie (demo user).
@@ -744,21 +759,6 @@ async function handleApi(db, req, res, url, body) {
       if (!data) return json(res, 200, { ok: false, hs, source: 'UN Comtrade+', message: 'Belum ada data Comtrade untuk HS ini.' });
       return json(res, 200, data);
     })();
-  }
-
-  // HS search — offline WCO nomenclature text search for the picker UI.
-  // Returns up to 30 matching 6-digit codes ranked by text overlap.
-  // GET /api/hs/search?q=vanili
-  if (route('GET', '/api/hs/search')) {
-    const qStr = (q.get('q') || '').trim();
-    if (!qStr) return json(res, 200, { ok: true, query: '', results: [] });
-    const results = searchHsNomenclature(qStr, 30).map((r) => ({
-      code: r.code,
-      description: r.description,
-      section: r.section,
-      parent: r.parent,
-    }));
-    return json(res, 200, { ok: true, query: qStr, results, count: results.length });
   }
 
   // Full HS pipeline: natural-language product query → 6-digit HS (LLM +

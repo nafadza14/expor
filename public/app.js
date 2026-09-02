@@ -520,17 +520,26 @@ route(/^\/$/, async (app) => {
             Shaping <span class="serif-italic">Exporters</span><br>of tomorrow
           </h1>
           <p class="hero-sub">Platform intelijen buyer global untuk eksportir Indonesia. Data bea cukai, skor prioritas, dan kontak decision maker dalam satu dashboard.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:24px">
-            <a class="hero-cta" href="#/register" style="margin-top:0">
-              <span>Daftar Gratis</span>
+
+          <!-- Interactive commodity search demo (public try-before-signup) -->
+          <div class="hero-try">
+            <div class="hero-try-label">
+              <b>Apa komoditas Anda?</b>
+              <span>Tuliskan komoditas Anda — sistem kami akan otomatis mencarikan HS Code, kami akan menemukan buyer untuk Anda.</span>
+            </div>
+            <form class="hero-search" id="hero-try-form" onsubmit="return false" autocomplete="off">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="hero-try-input" type="text" placeholder="mis. Kopi Arabika Gayo, Vanili Kering, Rotan…" autocomplete="off">
+              <button type="submit" id="hero-try-btn">Cari</button>
+            </form>
+            <div id="hero-try-results" class="hero-results" style="display:none"></div>
+            <a class="hero-cta hero-cta-below" href="#/register" style="margin-top:0;display:none" id="hero-try-signup">
+              <span>Daftar sekarang</span>
               <span class="arrow-circle">${CHEVRON_RIGHT}</span>
             </a>
-            <a class="hero-cta" href="#/login" style="margin-top:0;background:#fff;color:#0b0f1a;border:1px solid rgba(0,0,0,.1)">
-              <span>Masuk</span>
-              <span class="arrow-circle" style="background:rgba(0,0,0,.08)">${CHEVRON_RIGHT}</span>
-            </a>
           </div>
-          <p class="hero-demo-hint">Akun demo: demo@eksporin.id / demo1234 · <a href="#/login">Masuk sekarang</a></p>
+
+          <p class="hero-demo-hint">Sudah punya akun? <a href="#/login">Masuk di sini</a> · Coba demo: demo@eksporin.id / demo1234</p>
         </div>
 
         <!-- Dashboard preview tray -->
@@ -734,58 +743,200 @@ route(/^\/$/, async (app) => {
     </section>
 
     <!-- How it works -->
-    <section class="landing-section" id="how" style="background:var(--bg-surface)">
+    <section class="landing-section landing-section-alt" id="how">
       <div class="landing-section-inner">
-        <div class="overline" style="text-align:center;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--orange)">Cara Kerja</div>
-        <h2 style="text-align:center;font-size:28px;margin-bottom:40px">4 langkah menuju buyer pertama Anda</h2>
-        <div class="grid grid-4" style="gap:20px">
+        <div class="section-eyebrow">Cara Kerja</div>
+        <h2 class="section-title">4 langkah menuju buyer pertama Anda</h2>
+        <p class="section-lead">End-to-end otomatis. Dari deskripsi komoditas ke pesan pertama yang siap kirim ke buyer luar negeri.</p>
+        <div class="how-grid">
           ${[
-            ['1', 'Deskripsikan produk', 'Masukkan komoditas dalam bahasa Indonesia atau Inggris. AI langsung memetakan ke HS code 6-digit.'],
-            ['2', 'Temukan buyer', 'Pipeline AI mencari importir aktif dari database bill of lading dan meng-enrich kontak decision maker.'],
-            ['3', 'Evaluasi dan simpan', 'Lihat match score, riwayat shipment, dan outreach angle per buyer. Simpan yang potensial ke daftar.'],
-            ['4', 'Kirim outreach', 'Gunakan template multi-bahasa untuk menghubungi buyer. Lacak status pesan dari dashboard.'],
-          ].map(([n, title, desc]) => `
-            <div style="text-align:center">
-              <div style="width:40px;height:40px;border-radius:50%;background:var(--orange);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;margin-bottom:12px">${n}</div>
-              <h4 style="margin-bottom:6px">${title}</h4>
-              <p class="muted body-sm">${desc}</p>
+            { n: '01', title: 'Deskripsikan komoditas', desc: 'Ketik dalam Bahasa Indonesia atau Inggris. AI + WCO nomenclature (6.941 kode) memetakan ke HS 6-digit yang tepat.', chips: ['🤖 AI Sumopod', '📚 WCO 6.941 kode', '🇮🇩 → 🌐'] },
+            { n: '02', title: 'Temukan buyer aktif', desc: 'Pipeline AI 4-step: HS mapping, trade retrieval dari data bea cukai, contact enrichment, dan lead scoring 0–100.', chips: ['📦 Bill of Lading', '🔎 200+ buyer', '⚡ 4-step pipeline'] },
+            { n: '03', title: 'Evaluasi dengan data resmi', desc: 'Match Score, riwayat shipment tahunan, duty rate USITC untuk pasar USA, dan angle outreach yang di-personalize per buyer.', chips: ['🇺🇸 USITC duty', '🌐 UN Comtrade', '🎯 Match Score'] },
+            { n: '04', title: 'Kirim outreach multi-bahasa', desc: 'Template siap kirim di 5 bahasa (EN/ES/AR/ZH/JA), email + WhatsApp. Lacak status dibuka & dibalas dari dashboard.', chips: ['✉️ 10 template', '🌍 5 bahasa', '📊 Tracking'] },
+          ].map((s) => `
+            <div class="how-card">
+              <div class="how-num">${s.n}</div>
+              <h3>${s.title}</h3>
+              <p>${s.desc}</p>
+              <div class="how-chips">${s.chips.map((c) => `<span>${c}</span>`).join('')}</div>
             </div>`).join('')}
         </div>
       </div>
     </section>
 
-    <!-- Social proof -->
-    <section class="landing-section">
+    <!-- Social proof strip -->
+    <section class="landing-section" style="padding-top:0">
       <div class="landing-section-inner">
-        <div class="grid grid-4" style="gap:20px;text-align:center">
-          <div><div class="numeric-xl" style="color:var(--orange)">200+</div><p class="muted body-sm" style="margin-top:4px">Buyer dari 5 negara</p></div>
-          <div><div class="numeric-xl" style="color:var(--orange)">50+</div><p class="muted body-sm" style="margin-top:4px">Kategori HS code</p></div>
-          <div><div class="numeric-xl" style="color:var(--orange)">10rb+</div><p class="muted body-sm" style="margin-top:4px">Data shipment</p></div>
-          <div><div class="numeric-xl" style="color:var(--orange)">4 step</div><p class="muted body-sm" style="margin-top:4px">AI Discovery pipeline</p></div>
+        <div class="stats-strip">
+          <div><div class="stat-num">6.941</div><p>Kode HS WCO</p></div>
+          <div><div class="stat-num">200+</div><p>Buyer aktif</p></div>
+          <div><div class="stat-num">73</div><p>Negara tujuan</p></div>
+          <div><div class="stat-num">$1,6M</div><p>Ekspor per HS (Comtrade)</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimoni -->
+    <section class="landing-section landing-section-alt" id="testimoni">
+      <div class="landing-section-inner">
+        <div class="section-eyebrow">Testimoni</div>
+        <h2 class="section-title">Dipakai eksportir Indonesia untuk masuk pasar global</h2>
+        <p class="section-lead">Dari UKM vanili di Jawa Timur sampai furniture Jepara, EksporIn membantu tim yang tadinya kerja manual jadi punya pipeline buyer yang terukur.</p>
+        <div class="testi-grid">
+          ${[
+            { name: 'Andi Prasetyo', role: 'Founder, PT Kopi Nusantara', avatar: 'AP', text: 'Kami dulu 40 jam per minggu cari data buyer di LinkedIn & pameran. Sekarang cukup 1 jam dengan HS 0901.11 sudah ada 20 lead + kontak Procurement Head.' },
+            { name: 'Sari Mulyani', role: 'Export Manager, Vanili Bali', avatar: 'SM', text: 'Data UN Comtrade real bikin kami tahu $11.5M vanilla exports ke USA per tahun — angle outreach jadi jauh lebih meyakinkan.' },
+            { name: 'Rudi Hartanto', role: 'Direktur, Jepara Furniture Ekspor', avatar: 'RH', text: 'Fitur USITC HTS bikin harga FOB kami competitive. Duty rate langsung ketahuan sebelum kirim quote. Deal ratio naik 3x.' },
+          ].map((t) => `
+            <article class="testi-card">
+              <div class="testi-quote-mark">"</div>
+              <p class="testi-text">${t.text}</p>
+              <div class="testi-author">
+                <div class="testi-avatar">${t.avatar}</div>
+                <div><b>${t.name}</b><div>${t.role}</div></div>
+              </div>
+            </article>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="landing-section" id="pricing">
+      <div class="landing-section-inner">
+        <div class="section-eyebrow">Harga</div>
+        <h2 class="section-title">Mulai gratis, upgrade sesuai skala Anda</h2>
+        <p class="section-lead">Semua paket bulanan tanpa kontrak. Bayar via QRIS (GoPay/OVO/DANA/ShopeePay/m-Banking) — powered by Sumopod. Garansi 7 hari uang kembali.</p>
+        <div class="price-grid">
+          ${[
+            { code: 'free', name: 'Free', price: 'Rp 0', tag: 'Selamanya', desc: 'Coba semua fitur inti.', feats: ['20 pencarian/bulan', '3 profil lengkap/bulan', 'Simpan 10 buyer', '5 kirim outreach', '3 template sistem'] },
+            { code: 'starter', name: 'Starter', price: 'Rp 149.000', tag: '/bulan', desc: 'UKM ekspor sesekali.', feats: ['100 pencarian/bulan', '50 profil lengkap/bulan', 'Simpan tanpa batas', '50 kirim outreach', '5 alert aktif', 'Ekspor CSV 100 baris'] },
+            { code: 'growth', name: 'Growth', price: 'Rp 499.000', tag: '/bulan', desc: 'Yang paling populer.', highlight: true, feats: ['500 pencarian/bulan', '300 profil lengkap/bulan', '✨ Kontak buyer terbuka penuh', '300 kirim outreach', 'Alert tanpa batas', 'Semua template', 'Ekspor CSV 500 baris'] },
+            { code: 'business', name: 'Business', price: 'Rp 999.000', tag: '/bulan', desc: 'Tim ekspor scaleup.', feats: ['Pencarian & profil tanpa batas', 'Kontak terbuka penuh', '2.000 kirim outreach', 'Intel kompetitor', 'Ekspor 10.000 baris', '3 kursi tim', 'Success manager'] },
+          ].map((p) => `
+            <div class="price-card${p.highlight ? ' price-card-featured' : ''}">
+              ${p.highlight ? '<div class="price-badge">Paling Populer</div>' : ''}
+              <div class="price-name">${p.name}</div>
+              <div class="price-desc">${p.desc}</div>
+              <div class="price-amt"><b>${p.price}</b><span>${p.tag}</span></div>
+              <ul class="price-feats">${p.feats.map((f) => `<li>${f}</li>`).join('')}</ul>
+              <a href="#/register" class="btn ${p.highlight ? 'btn-primary' : 'btn-neutral'}" style="width:100%;border-radius:10px;padding:12px">${p.code === 'free' ? 'Mulai gratis' : 'Pilih paket'}</a>
+            </div>`).join('')}
         </div>
       </div>
     </section>
 
     <!-- CTA -->
-    <section class="landing-section" id="pricing" style="background:var(--orange);color:#fff;text-align:center">
+    <section class="landing-cta">
       <div class="landing-section-inner">
-        <h2 style="color:#fff;font-size:28px;margin-bottom:8px">Siap menemukan buyer pertama Anda?</h2>
-        <p style="opacity:.9;max-width:440px;margin:0 auto 28px">Mulai dengan paket gratis, tanpa kartu kredit. Upgrade kapan saja sesuai kebutuhan bisnis Anda.</p>
-        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-          <a href="#/register" class="btn" style="background:#fff;color:var(--orange);border-radius:var(--radius-full);padding:14px 32px;font-size:16px;font-weight:600">Daftar gratis</a>
-          <a href="#/login" class="btn" style="background:rgba(255,255,255,.2);color:#fff;border-radius:var(--radius-full);padding:14px 32px;font-size:16px;font-weight:600;border:1px solid rgba(255,255,255,.3)">Masuk</a>
+        <div class="landing-cta-inner">
+          <div>
+            <h2>Siap menemukan buyer pertama Anda?</h2>
+            <p>Bergabung dengan eksportir Indonesia yang sudah pakai data resmi UN Comtrade + USITC + AI untuk menemukan buyer luar negeri dalam hitungan menit.</p>
+          </div>
+          <div class="landing-cta-actions">
+            <a href="#/register" class="btn btn-primary btn-lg">Daftar gratis, tanpa kartu kredit →</a>
+            <a href="#/login" class="btn btn-ghost btn-lg" style="color:#fff">Masuk</a>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="landing-footer">
-      <div class="landing-section-inner" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-        <div style="display:flex;align-items:center;gap:8px;font-weight:700">${LOGO_SVG} EksporIn</div>
-        <p class="caption muted-3">&copy; 2024 EksporIn. Platform intelijen buyer untuk eksportir Indonesia.</p>
+      <div class="landing-section-inner">
+        <div class="footer-grid">
+          <div class="footer-col footer-brand">
+            <div class="footer-logo">${LOGO_SVG}<span>EksporIn</span></div>
+            <p>Platform intelijen buyer global untuk eksportir Indonesia. Data resmi bea cukai + AI + real-time market data.</p>
+            <div class="footer-social">
+              <a href="#" aria-label="LinkedIn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.3 6.5 1.78 1.78 0 0 1 6.5 8.25zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0 0 13 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 0 1 2.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg></a>
+              <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
+              <a href="#" aria-label="WhatsApp"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.5 14.4c-.3-.1-1.8-.9-2.1-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1c-2.1-1.1-3.5-1.9-4.9-4.3-.4-.6.4-.6 1.1-1.9.1-.2.1-.4 0-.6s-.7-1.6-.9-2.2-.5-.6-.7-.6h-.7c-.2 0-.6.1-.9.4C5 6 4.5 7 4.5 8.4c0 1.4 1 2.7 1.2 2.9s2 3.1 4.9 4.3c1.8.8 2.5.8 3.4.7.6-.1 1.8-.7 2-1.5.3-.7.3-1.4.2-1.5-.1-.2-.4-.3-.7-.4zM12 2a10 10 0 0 0-8.6 15.2L2 22l5-1.3A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 20 12a8 8 0 0 1-8 8z"/></svg></a>
+            </div>
+          </div>
+          <div class="footer-col">
+            <h4>Produk</h4>
+            <a href="#features">Fitur</a>
+            <a href="#how">Cara kerja</a>
+            <a href="#pricing">Harga</a>
+            <a href="#/register">Daftar gratis</a>
+          </div>
+          <div class="footer-col">
+            <h4>Sumber Data</h4>
+            <a href="https://comtradeplus.un.org" target="_blank" rel="noopener">UN Comtrade+</a>
+            <a href="https://hts.usitc.gov" target="_blank" rel="noopener">USITC HTS</a>
+            <a href="https://github.com/datasets/harmonized-system" target="_blank" rel="noopener">WCO HS Nomenclature</a>
+            <a href="#" onclick="return false">Sumopod AI</a>
+          </div>
+          <div class="footer-col">
+            <h4>Kontak</h4>
+            <a href="mailto:hello@eksporin.id">hello@eksporin.id</a>
+            <a href="#">WhatsApp: +62 811 0000 0000</a>
+            <a href="#">Jakarta, Indonesia</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="#">Kebijakan Privasi</a>
+            <a href="#">Syarat Layanan</a>
+            <a href="#">Kebijakan Refund</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>© 2024 EksporIn. Semua data ekspor bersumber dari lembaga resmi (UN Comtrade+, USITC, WCO). AI powered by Sumopod. Payment powered by Sumopod QRIS.</p>
+        </div>
       </div>
     </footer>
   </div>`;
+
+  // Wire the hero commodity search demo — 2 real results + 3 blurred + signup CTA
+  const heroForm = document.getElementById('hero-try-form');
+  const heroInput = document.getElementById('hero-try-input');
+  const heroResults = document.getElementById('hero-try-results');
+  const heroSignup = document.getElementById('hero-try-signup');
+  const heroSubmit = document.getElementById('hero-try-btn');
+  if (heroForm && heroInput) {
+    const runSearch = async () => {
+      const q = heroInput.value.trim();
+      if (!q) return;
+      heroSubmit.disabled = true;
+      heroSubmit.textContent = 'Mencari…';
+      heroResults.style.display = 'block';
+      heroResults.innerHTML = '<div class="hero-results-loading"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Mencari HS code untuk "' + esc(q) + '"…</div>';
+      try {
+        const r = await fetch('/api/hs/search?q=' + encodeURIComponent(q));
+        const body = await r.json();
+        const rows = Array.isArray(body.results) ? body.results : [];
+        if (!rows.length) {
+          heroResults.innerHTML = '<div class="hero-results-empty">Tidak ada HS code cocok. Coba kata lain (mis. "kopi", "vanili", "rotan").</div>';
+          heroSignup.style.display = 'none';
+        } else {
+          const visible = rows.slice(0, 2);
+          const hidden = rows.slice(2, 5);
+          heroResults.innerHTML = `
+            <div class="hero-results-head">Ditemukan ${rows.length} HS code · menampilkan 2 hasil pertama</div>
+            <div class="hero-results-list">
+              ${visible.map((v) => `<div class="hero-result-row">
+                <span class="hero-result-hs">${v.code.replace(/^(\d{4})/, '$1.')}</span>
+                <span class="hero-result-desc">${esc(v.description)}</span>
+              </div>`).join('')}
+              ${hidden.map((v) => `<div class="hero-result-row hero-result-blur">
+                <span class="hero-result-hs">${v.code.replace(/^(\d{4})/, '$1.')}</span>
+                <span class="hero-result-desc">${esc(v.description)}</span>
+              </div>`).join('')}
+            </div>
+            <div class="hero-results-lock">🔒 ${hidden.length}+ HS code lain, kontak buyer, dan data ekspor UN Comtrade tersedia setelah daftar.</div>`;
+          heroSignup.style.display = 'inline-flex';
+        }
+      } catch (e) {
+        heroResults.innerHTML = '<div class="hero-results-empty">Gagal mengambil HS code. Coba lagi.</div>';
+      } finally {
+        heroSubmit.disabled = false;
+        heroSubmit.textContent = 'Cari';
+      }
+    };
+    heroForm.addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
+  }
 });
 
 // ================= auth =================
