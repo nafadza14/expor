@@ -2795,7 +2795,9 @@ const ADMIN_TABS = [
 function adminShell(activeTab, content) {
   const u = ME;
   return `<div class="admin-shell">
-    <aside class="admin-side">
+    <div class="sidebar-backdrop" id="admin-backdrop"></div>
+    <aside class="admin-side" id="admin-side">
+      <button class="sidebar-close" id="admin-side-close" aria-label="Tutup menu">${I.x}</button>
       <div class="admin-side-brand">
         <div class="admin-side-logo">🛡</div>
         <div>
@@ -2822,7 +2824,8 @@ function adminShell(activeTab, content) {
     </aside>
     <main class="admin-main">
       <header class="admin-topbar">
-        <div>
+        <button class="topbar-menu" id="admin-menu" aria-label="Menu">${I.menu}</button>
+        <div class="admin-topbar-left">
           <div class="admin-crumb">Admin Console</div>
           <h1 class="admin-h1">${esc(ADMIN_TABS.find((t) => t.id === activeTab)?.label || 'Admin')}</h1>
         </div>
@@ -2842,6 +2845,16 @@ function bindAdminShell() {
     await api('/api/auth/logout', { method: 'POST' });
     ME = null; location.hash = '#/';
   });
+  const side = document.getElementById('admin-side');
+  const backdrop = document.getElementById('admin-backdrop');
+  const open = () => { side?.classList.add('open'); backdrop?.classList.add('open'); document.body.style.overflow = 'hidden'; };
+  const close = () => { side?.classList.remove('open'); backdrop?.classList.remove('open'); document.body.style.overflow = ''; };
+  document.getElementById('admin-menu')?.addEventListener('click', open);
+  document.getElementById('admin-side-close')?.addEventListener('click', close);
+  backdrop?.addEventListener('click', close);
+  document.querySelectorAll('.admin-side .admin-nav-item').forEach((el) => el.addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 900px)').matches) close();
+  }));
 }
 
 route(/^\/admin$/, async (app, m, params) => {
