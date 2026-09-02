@@ -1058,6 +1058,109 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, { events: rows });
   }
 
+  if (route('GET', '/api/admin/buyers')) {
+    if (!requireAdmin()) return;
+    const search = q.get('q') || '';
+    const country = q.get('country') || '';
+    const rows = db.prepare(`SELECT b.id, b.name, b.country, b.city, b.industry, b.size_bucket,
+      b.shipments_12mo, b.volume_12mo_kg, b.value_12mo_usd, b.base_score, b.data_confidence,
+      b.has_indonesian_supplier,
+      (SELECT GROUP_CONCAT(bh.hs_code) FROM buyer_hs bh WHERE bh.buyer_id=b.id LIMIT 5) hs_codes,
+      (SELECT COUNT(*) FROM list_buyers lb WHERE lb.buyer_id=b.id) times_saved
+      FROM buyers b
+      WHERE (? = '' OR b.name LIKE ? OR b.city LIKE ?)
+        AND (? = '' OR b.country = ?)
+      ORDER BY b.base_score DESC LIMIT 100`)
+      .all(search, '%' + search + '%', '%' + search + '%', country, country);
+    const countries = db.prepare('SELECT country, COUNT(*) c FROM buyers GROUP BY country ORDER BY c DESC').all()
+      .map((r) => ({ ...r, name: COUNTRY_NAMES[r.country] || r.country }));
+    return json(res, 200, { buyers: rows, countries });
+  }
+
+  if (route('GET', '/api/admin/shipments')) {
+    if (!requireAdmin()) return;
+    const rows = db.prepare(`SELECT s.id, s.shipment_date, s.hs_code, s.weight_kg, s.value_usd,
+      s.origin_port, s.dest_port, b.name buyer_name, b.country buyer_country,
+      e.name exporter_name, e.country exporter_country, e.is_indonesian
+      FROM shipments s JOIN buyers b ON b.id=s.buyer_id JOIN exporters e ON e.id=s.exporter_id
+      ORDER BY s.shipment_date DESC LIMIT 100`).all();
+    const stats = db.prepare(`SELECT COUNT(*) total, SUM(weight_kg) total_kg, SUM(value_usd) total_usd,
+      COUNT(DISTINCT hs_code) unique_hs, COUNT(DISTINCT buyer_id) unique_buyers FROM shipments`).get();
+    const monthly = db.prepare(`SELECT substr(shipment_date, 1, 7) ym, COUNT(*) shipments,
+      SUM(value_usd) value FROM shipments GROUP BY ym ORDER BY ym DESC LIMIT 12`).all();
+    return json(res, 200, { shipments: rows, stats, monthly });
+  }
+
+  if (route('GET', '/api/admin/messages')) {
+    if (!requireAdmin()) return;
+    const rows = db.prepare(`SELECT m.id, m.subject, m.channel, m.status, m.sent_at, m.opened_at, m.replied_at,
+      u.email user_email, u.name user_name, b.name buyer_name, b.country buyer_country
+      FROM messages m JOIN users u ON u.id=m.user_id JOIN buyers b ON b.id=m.buyer_id
+      ORDER BY m.sent_at DESC LIMIT 100`).all();
+    const funnel = db.prepare(`SELECT
+      COUNT(*) total,
+      SUM(CASE WHEN status IN ('opened','replied') OR opened_at IS NOT NULL THEN 1 ELSE 0 END) opened,
+      SUM(CASE WHEN status='replied' OR replied_at IS NOT NULL THEN 1 ELSE 0 END) replied
+      FROM messages`).get();
+    const byChannel = db.prepare('SELECT channel, COUNT(*) c FROM messages GROUP BY channel').all();
+    return json(res, 200, { messages: rows, funnel, by_channel: byChannel });
+  }
+
+  if (route('GET', '/api/admin/revenue')) {
+    if (!requireAdmin()) return;
+    const planPrices = { free: 0, starter: 149000, growth: 499000, business: 999000 };
+    const byPlan = db.prepare('SELECT plan, COUNT(*) c FROM users GROUP BY plan').all();
+    let mrr = 0;
+    for (const p of byPlan) mrr += (planPrices[p.plan] || 0) * p.c;
+    const paidUsers = byPlan.filter((p) => planPrices[p.plan] > 0).reduce((s, p) => s + p.c, 0);
+    const arpu = paidUsers > 0 ? Math.round(mrr / paidUsers) : 0;
+    const paymentEvents = db.prepare(`SELECT action, target, meta, created_at FROM audit_log
+      WHERE action='admin.plan_change' ORDER BY created_at DESC LIMIT 50`).all();
+    return json(res, 200, {
+      mrr, arr: mrr * 12, arpu, paid_users: paidUsers,
+      by_plan: byPlan.map((p) => ({ ...p, price: planPrices[p.plan] || 0, revenue: (planPrices[p.plan] || 0) * p.c })),
+      plan_change_history: paymentEvents,
+    });
+  }
+
+  if (route('GET', '/api/admin/hs-usage')) {
+    if (!requireAdmin()) return;
+    // Which HS codes users are focused on
+    const users = db.prepare("SELECT hs_focus FROM users WHERE hs_focus != '[]' AND hs_focus IS NOT NULL").all();
+    const hsCount = new Map();
+    for (const u of users) { try { for (const h of JSON.parse(u.hs_focus)) hsCount.set(h, (hsCount.get(h) || 0) + 1); } catch {} }
+    const rows = [...hsCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).map(([code, count]) => ({ code, count }));
+    // Which target countries
+    const cUsers = db.prepare("SELECT target_countries FROM users WHERE target_countries != '[]' AND target_countries IS NOT NULL").all();
+    const countryCount = new Map();
+    for (const u of cUsers) { try { for (const c of JSON.parse(u.target_countries)) countryCount.set(c, (countryCount.get(c) || 0) + 1); } catch {} }
+    const countries = [...countryCount.entries()].sort((a, b) => b[1] - a[1]).map(([code, count]) => ({ code, count, name: COUNTRY_NAMES[code] || code }));
+    return json(res, 200, { top_hs_focus: rows, top_target_countries: countries });
+  }
+
+  if (route('GET', '/api/admin/system')) {
+    if (!requireAdmin()) return;
+    return json(res, 200, {
+      node_version: process.version,
+      uptime_sec: Math.round(process.uptime()),
+      memory_mb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
+      db_engine: 'sql.js (WASM)',
+      caches: {
+        supabase_token: SB_TOKEN_CACHE.size,
+        comtrade: COMTRADE_CACHE.size,
+        usitc: USITC_CACHE.size,
+      },
+      integrations: {
+        supabase: !!SUPABASE_URL,
+        sumopod_pay: !!SUMOPOD_PAY_KEY,
+        sumopod_ai: !!SUMOPOD_AI_KEY,
+        un_comtrade: !!COMTRADE_KEY,
+        usitc_hts: true,
+      },
+      hs_nomenclature_loaded: HS_NOMEN ? HS_NOMEN.size : 0,
+    });
+  }
+
   if (route('GET', '/api/admin/recent-activity')) {
     if (!requireAdmin()) return;
     const recentUsers = db.prepare(`SELECT id, email, name, plan, created_at FROM users ORDER BY created_at DESC LIMIT 10`).all();

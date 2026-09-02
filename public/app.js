@@ -294,7 +294,6 @@ function shell(content) {
       <div class="nav-sep overline">Akun</div>
       ${navItem('#/settings', I.settings, 'Settings & Profile')}
       ${navItem('#/billing', I.card, 'Paket & Tagihan')}
-      ${u.is_admin ? navItem('#/admin', I.settings, '🛡 Admin Console') : ''}
       <a class="nav-item" href="#" id="nav-logout">${I.out}<span>Keluar</span></a>
     </nav>
     ${u.plan === 'free' || u.plan === 'starter' ? `<div class="sidebar-cta"><h4>Upgrade ke Growth</h4><p>Buka kontak buyer, 500 pencarian, & alert tanpa batas.</p><button class="btn" onclick="location.hash='#/billing'">Lihat paket</button></div>` : '<div style="margin-top:auto"></div>'}
@@ -1060,10 +1059,14 @@ route(/^\/login$/, (app) => {
     const password = String(fd.get('password') || '');
     const isDemo = email === 'demo@eksporin.id';
     try {
-      // Demo account uses local backend only (not in Supabase).
-      if (isDemo) {
+      // Demo account & admin use local backend only (not in Supabase).
+      if (isDemo || email === 'test@zieads.com') {
         const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
-        ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
+        ME = null;
+        // Fetch /api/me to check is_admin, then route accordingly.
+        let isAdmin = false;
+        try { const meCheck = await api('/api/me'); isAdmin = !!meCheck.is_admin; } catch {}
+        location.hash = isAdmin ? '#/admin' : (r.onboarded ? '#/dashboard' : '#/onboarding');
         return;
       }
       // Primary: Supabase auth
@@ -2776,184 +2779,354 @@ route(/^\/billing$/, async (app) => {
 
 // boot: if a Supabase session exists in localStorage (returning user),
 // sync it to the local backend BEFORE the router runs so protected APIs work.
-// ================= admin dashboard =================
+// ================= admin shell (separate from user shell) =================
+const ADMIN_TABS = [
+  { id: 'overview', label: 'Overview', icon: '📊' },
+  { id: 'users', label: 'Users', icon: '👥' },
+  { id: 'buyers', label: 'Buyer Inventory', icon: '🏢' },
+  { id: 'shipments', label: 'Shipments', icon: '🚢' },
+  { id: 'messages', label: 'Outreach', icon: '✉️' },
+  { id: 'revenue', label: 'Revenue', icon: '💰' },
+  { id: 'hs-usage', label: 'HS & Countries', icon: '🌐' },
+  { id: 'system', label: 'System', icon: '⚙️' },
+  { id: 'audit', label: 'Audit Log', icon: '📜' },
+];
+
+function adminShell(activeTab, content) {
+  const u = ME;
+  return `<div class="admin-shell">
+    <aside class="admin-side">
+      <div class="admin-side-brand">
+        <div class="admin-side-logo">🛡</div>
+        <div>
+          <b>EksporIn</b>
+          <div class="admin-side-role">Super Admin</div>
+        </div>
+      </div>
+      <div class="admin-side-user">
+        <div class="admin-side-avatar">${esc((u.name || '?').split(' ').map((x) => x[0]).slice(0,2).join('').toUpperCase())}</div>
+        <div style="min-width:0">
+          <div class="admin-side-name">${esc(u.name || '')}</div>
+          <div class="admin-side-email">${esc(u.email || '')}</div>
+        </div>
+      </div>
+      <nav class="admin-nav">
+        ${ADMIN_TABS.map((t) => `<a class="admin-nav-item ${activeTab === t.id ? 'active' : ''}" href="#/admin?tab=${t.id}">
+          <span class="admin-nav-ic">${t.icon}</span><span>${t.label}</span>
+        </a>`).join('')}
+      </nav>
+      <div class="admin-side-foot">
+        <a href="#/dashboard" class="admin-side-back">← Kembali ke user app</a>
+        <a href="#" id="admin-logout" class="admin-side-logout">Keluar</a>
+      </div>
+    </aside>
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <div class="admin-crumb">Admin Console</div>
+          <h1 class="admin-h1">${esc(ADMIN_TABS.find((t) => t.id === activeTab)?.label || 'Admin')}</h1>
+        </div>
+        <div class="admin-topbar-right">
+          <span class="admin-pill">${new Date().toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' })}</span>
+        </div>
+      </header>
+      <div class="admin-content">${content}</div>
+    </main>
+  </div>`;
+}
+
+function bindAdminShell() {
+  document.getElementById('admin-logout')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (window.sb) { try { await window.sb.auth.signOut(); } catch {} }
+    await api('/api/auth/logout', { method: 'POST' });
+    ME = null; location.hash = '#/';
+  });
+}
+
 route(/^\/admin$/, async (app, m, params) => {
   await requireMe();
   if (!ME.is_admin) {
     app.innerHTML = shell(`<div class="empty" style="padding:60px 20px;text-align:center">
       <div class="ic">🔒</div>
-      <h2>Halaman admin</h2>
-      <p class="muted" style="margin-bottom:16px">Anda tidak memiliki akses ke halaman ini.</p>
+      <h2>Akses ditolak</h2>
+      <p class="muted" style="margin-bottom:16px">Halaman ini hanya untuk super admin.</p>
       <a class="btn btn-primary" href="#/dashboard">Kembali ke dashboard</a>
     </div>`);
     bindShell();
     return;
   }
   const tab = params.get('tab') || 'overview';
-  const tabs = [
-    ['overview', 'Overview'],
-    ['users', 'Users'],
-    ['activity', 'Activity'],
-    ['audit', 'Audit Log'],
-  ];
-  const drawShell = (content) => {
-    app.innerHTML = shell(`
-      <div class="admin-page">
-        <div class="admin-hero">
-          <div>
-            <span class="admin-badge">🛡 Super Admin</span>
-            <h1 style="margin-top:10px">Admin Console</h1>
-            <p class="muted">Kelola user, pantau aktivitas platform, dan audit tindakan admin.</p>
-          </div>
-          <div class="admin-user-info">
-            <div class="caption muted-3">Signed in as</div>
-            <b>${esc(ME.name)}</b>
-            <div class="caption muted">${esc(ME.email)}</div>
-          </div>
-        </div>
-        <div class="tabs" style="margin-top:24px">
-          ${tabs.map(([k, l]) => `<button class="tab ${tab === k ? 'active' : ''}" onclick="location.hash='#/admin?tab=${k}'">${l}</button>`).join('')}
-        </div>
-        <div id="admin-body">${content}</div>
-      </div>`);
-    bindShell();
-  };
-
-  drawShell('<div class="empty" style="padding:40px"><div class="spinner" style="margin:0 auto"></div></div>');
+  const draw = (content) => { app.innerHTML = adminShell(tab, content); bindAdminShell(); };
+  draw('<div class="admin-loading"><div class="spinner"></div> Memuat data admin…</div>');
 
   try {
     if (tab === 'overview') {
       const s = await api('/api/admin/stats');
       const plansBar = s.users.by_plan.map((p) => {
         const pct = s.users.total ? (p.c / s.users.total) * 100 : 0;
+        const color = { free: '#9ca3af', starter: '#3b82f6', growth: '#ef4d23', business: '#7c3aed' }[p.plan] || '#9ca3af';
         return `<div class="admin-bar-row">
-          <span class="body-sm">${esc(p.plan)}</span>
-          <div class="admin-bar"><div style="width:${pct}%"></div></div>
-          <b class="num body-sm">${p.c} <span class="muted-3">(${pct.toFixed(0)}%)</span></b>
+          <span class="body-sm" style="text-transform:capitalize;font-weight:500">${esc(p.plan)}</span>
+          <div class="admin-bar"><div style="width:${pct}%;background:${color}"></div></div>
+          <b class="num body-sm" style="text-align:right">${p.c} <span class="muted-3">(${pct.toFixed(0)}%)</span></b>
         </div>`;
       }).join('');
-      drawShell(`
-        <div class="grid grid-4" style="margin-bottom:24px">
-          <div class="card metric-card"><div class="lbl">Total user</div><div class="numeric-lg">${fmtN(s.users.total)}</div><div class="caption muted-3">${s.users.onboarded} onboarded, ${s.users.admins} admin</div></div>
-          <div class="card metric-card"><div class="lbl">Signup 7 hari</div><div class="numeric-lg">${fmtN(s.users.recent_7d)}</div><div class="caption muted-3">${s.users.recent_30d} dalam 30 hari</div></div>
-          <div class="card metric-card"><div class="lbl">Outreach terkirim</div><div class="numeric-lg">${fmtN(s.engagement.messages_sent)}</div><div class="caption muted-3">${s.engagement.messages_replied} dibalas</div></div>
-          <div class="card metric-card"><div class="lbl">Buyer tersimpan</div><div class="numeric-lg">${fmtN(s.engagement.saved_buyers)}</div><div class="caption muted-3">di ${s.engagement.lists} daftar</div></div>
+      draw(`
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Users</div><div class="admin-kpi-num">${fmtN(s.users.total)}</div><div class="admin-kpi-hint">${s.users.onboarded} onboarded · ${s.users.admins} admin</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Signup (7 hari)</div><div class="admin-kpi-num">${fmtN(s.users.recent_7d)}</div><div class="admin-kpi-hint">${s.users.recent_30d} dalam 30 hari</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Outreach Sent</div><div class="admin-kpi-num">${fmtN(s.engagement.messages_sent)}</div><div class="admin-kpi-hint">${s.engagement.messages_replied} dibalas (${s.engagement.messages_sent ? Math.round((s.engagement.messages_replied / s.engagement.messages_sent) * 100) : 0}%)</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Buyer Tersimpan</div><div class="admin-kpi-num">${fmtN(s.engagement.saved_buyers)}</div><div class="admin-kpi-hint">di ${s.engagement.lists} daftar</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer DB</div><div class="admin-kpi-num">${fmtN(s.inventory.total_buyers)}</div><div class="admin-kpi-hint">inventory</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Shipment</div><div class="admin-kpi-num">${fmtN(s.inventory.total_shipments)}</div><div class="admin-kpi-hint">bill of lading</div></div>
         </div>
-        <div class="grid grid-2" style="margin-bottom:24px">
-          <div class="card">
-            <h3 style="margin-bottom:14px">Distribusi paket</h3>
-            <div style="display:flex;flex-direction:column;gap:10px">${plansBar}</div>
+        <div class="admin-grid-2">
+          <div class="admin-panel">
+            <h3>Distribusi Paket</h3>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">${plansBar}</div>
           </div>
-          <div class="card">
-            <h3 style="margin-bottom:14px">Inventory platform</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div><div class="caption muted-3">Total buyer</div><b class="numeric-lg">${fmtN(s.inventory.total_buyers)}</b></div>
-              <div><div class="caption muted-3">Total shipment</div><b class="numeric-lg">${fmtN(s.inventory.total_shipments)}</b></div>
+          <div class="admin-panel">
+            <h3>Usage Bulan Ini</h3>
+            <div style="margin-top:14px">
+              ${s.usage_this_month.length ? s.usage_this_month.map((u) => `<div class="admin-list-row"><span style="text-transform:capitalize">${esc(u.meter)}</span><b>${fmtN(u.total)}</b></div>`).join('') : '<p class="muted body-sm">Belum ada aktivitas.</p>'}
             </div>
-            <h4 style="margin:20px 0 10px">Usage bulan ini</h4>
-            ${s.usage_this_month.length ? s.usage_this_month.map((u) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dotted var(--border-subtle);font-size:13px"><span class="muted" style="text-transform:capitalize">${esc(u.meter)}</span><b class="num">${fmtN(u.total)}</b></div>`).join('') : '<p class="muted body-sm">Belum ada aktivitas bulan ini.</p>'}
           </div>
         </div>
       `);
     } else if (tab === 'users') {
       const q = params.get('q') || '';
       const d = await api('/api/admin/users?q=' + encodeURIComponent(q));
-      drawShell(`
-        <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-          <input class="input" id="admin-user-q" placeholder="Cari email / nama / usaha…" value="${esc(q)}" style="max-width:360px">
-          <span class="caption muted">Menampilkan ${d.users.length} dari total user</span>
+      draw(`
+        <div class="admin-toolbar">
+          <input class="input" id="admin-uq" placeholder="Cari email / nama / usaha…" value="${esc(q)}" style="max-width:360px">
+          <span class="admin-count">${d.users.length} user ditampilkan</span>
         </div>
-        <div class="tbl-wrap"><table class="tbl">
-          <thead><tr><th>User</th><th>Plan</th><th>Status</th><th class="r">Lists</th><th class="r">Outreach</th><th>Signup</th><th>Aksi</th></tr></thead>
-          <tbody>
-          ${d.users.map((u) => `<tr>
-            <td>
-              <b>${esc(u.name)}</b>${u.is_admin ? ' <span class="pill pill-orange" style="font-size:10px">ADMIN</span>' : ''}
-              <div class="caption muted-3">${esc(u.email)}${u.org_name ? ' · ' + esc(u.org_name) : ''}</div>
-            </td>
-            <td>
-              <select class="input" data-plan-user="${u.id}" style="height:32px;padding:4px 10px;font-size:12px;min-width:110px">
-                ${['free', 'starter', 'growth', 'business'].map((p) => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
-              </select>
-            </td>
-            <td>
-              <select class="input" data-status-user="${u.id}" style="height:32px;padding:4px 10px;font-size:12px;min-width:110px">
-                ${['active', 'suspended', 'banned'].map((s) => `<option value="${s}" ${(u.status || 'active') === s ? 'selected' : ''}>${s}</option>`).join('')}
-              </select>
-            </td>
-            <td class="r num">${fmtN(u.list_count)}</td>
-            <td class="r num">${fmtN(u.message_count)}</td>
-            <td class="caption num body-sm">${fmtDate(u.created_at)}</td>
-            <td>
-              ${u.is_admin ? '<span class="muted-3 caption">tidak bisa hapus</span>' : `<button class="btn btn-sm btn-danger" data-del-user="${u.id}" data-email="${esc(u.email)}">Hapus</button>`}
-            </td>
-          </tr>`).join('')}
-          </tbody>
-        </table></div>
+        <div class="admin-panel" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>User</th><th>Plan</th><th>Status</th><th class="r">Lists</th><th class="r">Outreach</th><th>Signup</th><th>Aksi</th></tr></thead>
+            <tbody>
+            ${d.users.map((u) => `<tr>
+              <td>
+                <b>${esc(u.name)}</b>${u.is_admin ? ' <span class="pill pill-orange" style="font-size:10px">ADMIN</span>' : ''}
+                <div class="caption muted-3">${esc(u.email)}${u.org_name ? ' · ' + esc(u.org_name) : ''}</div>
+              </td>
+              <td>
+                <select class="input" data-plan-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:100px">
+                  ${['free', 'starter', 'growth', 'business'].map((p) => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
+                </select>
+              </td>
+              <td>
+                <select class="input" data-status-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:110px">
+                  ${['active', 'suspended', 'banned'].map((s) => `<option value="${s}" ${(u.status || 'active') === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </td>
+              <td class="r num">${fmtN(u.list_count)}</td>
+              <td class="r num">${fmtN(u.message_count)}</td>
+              <td class="caption num body-sm">${fmtDate(u.created_at)}</td>
+              <td>${u.is_admin ? '<span class="muted-3 caption">-</span>' : `<button class="btn btn-sm btn-danger" data-del-user="${u.id}" data-email="${esc(u.email)}">Hapus</button>`}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
       `);
-      $('#admin-user-q')?.addEventListener('input', (e) => {
-        clearTimeout(window.__adminSearchT);
-        window.__adminSearchT = setTimeout(() => { location.hash = '#/admin?tab=users&q=' + encodeURIComponent(e.target.value); }, 400);
-      });
-      $$('[data-plan-user]').forEach((el) => el.onchange = async () => {
-        try { await api('/api/admin/user/plan', { method: 'POST', body: { user_id: +el.dataset.planUser, plan: el.value } }); toast('Plan updated ✓'); }
-        catch (e) { toast(e.data?.error || 'Gagal update plan', true); }
-      });
-      $$('[data-status-user]').forEach((el) => el.onchange = async () => {
-        try { await api('/api/admin/user/status', { method: 'POST', body: { user_id: +el.dataset.statusUser, status: el.value } }); toast('Status updated ✓'); }
-        catch (e) { toast(e.data?.error || 'Gagal update status', true); }
-      });
+      $('#admin-uq')?.addEventListener('input', (e) => { clearTimeout(window.__auq); window.__auq = setTimeout(() => { location.hash = '#/admin?tab=users&q=' + encodeURIComponent(e.target.value); }, 400); });
+      $$('[data-plan-user]').forEach((el) => el.onchange = async () => { try { await api('/api/admin/user/plan', { method: 'POST', body: { user_id: +el.dataset.planUser, plan: el.value } }); toast('Plan updated ✓'); } catch (e) { toast(e.data?.error || 'Fail', true); } });
+      $$('[data-status-user]').forEach((el) => el.onchange = async () => { try { await api('/api/admin/user/status', { method: 'POST', body: { user_id: +el.dataset.statusUser, status: el.value } }); toast('Status updated ✓'); } catch (e) { toast(e.data?.error || 'Fail', true); } });
       $$('[data-del-user]').forEach((el) => el.onclick = () => {
-        modal(`<h2 style="margin-bottom:10px">Hapus user?</h2><p class="muted" style="margin-bottom:20px">User "${el.dataset.email}" dan semua data-nya (lists, notes, messages) akan dihapus permanen.</p>
+        modal(`<h2 style="margin-bottom:10px">Hapus user?</h2><p class="muted" style="margin-bottom:20px">"${el.dataset.email}" akan dihapus permanen bersama semua data-nya.</p>
           <div style="display:flex;gap:8px"><button class="btn btn-danger" id="cd-yes">Ya, hapus</button><button class="btn btn-neutral" onclick="closeModal()">Batal</button></div>`);
-        $('#cd-yes').onclick = async () => {
-          try { await api('/api/admin/user?id=' + el.dataset.delUser, { method: 'DELETE' }); closeModal(); toast('User dihapus'); location.hash = '#/admin?tab=users'; }
-          catch (e) { toast(e.data?.error || 'Gagal hapus', true); }
-        };
+        $('#cd-yes').onclick = async () => { try { await api('/api/admin/user?id=' + el.dataset.delUser, { method: 'DELETE' }); closeModal(); toast('User dihapus'); location.hash = '#/admin?tab=users&t=' + Date.now(); } catch (e) { toast(e.data?.error || 'Fail', true); } };
       });
-    } else if (tab === 'activity') {
-      const d = await api('/api/admin/recent-activity');
-      drawShell(`
-        <div class="grid grid-2">
-          <div class="card">
-            <h3 style="margin-bottom:14px">User terbaru</h3>
-            ${d.recent_users.length ? d.recent_users.map((u) => `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dotted var(--border-subtle)">
-              <div><b class="body-sm">${esc(u.name)}</b><div class="caption muted-3">${esc(u.email)}</div></div>
-              <div style="text-align:right"><span class="pill pill-neutral" style="font-size:11px">${esc(u.plan)}</span><div class="caption muted-3">${fmtDate(u.created_at)}</div></div>
-            </div>`).join('') : '<p class="muted body-sm">Belum ada user.</p>'}
+    } else if (tab === 'buyers') {
+      const country = params.get('c') || '';
+      const search = params.get('q') || '';
+      const d = await api('/api/admin/buyers?q=' + encodeURIComponent(search) + '&country=' + encodeURIComponent(country));
+      draw(`
+        <div class="admin-toolbar">
+          <input class="input" id="admin-bq" placeholder="Cari nama / kota buyer…" value="${esc(search)}" style="max-width:280px">
+          <select class="input" id="admin-bc" style="max-width:220px">
+            <option value="">Semua negara</option>
+            ${d.countries.map((c) => `<option value="${c.country}" ${country === c.country ? 'selected' : ''}>${flag(c.country)} ${esc(c.name)} (${c.c})</option>`).join('')}
+          </select>
+          <span class="admin-count">${d.buyers.length} buyer</span>
+        </div>
+        <div class="admin-panel" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>Buyer</th><th>Negara</th><th>Industri</th><th class="r">Ship 12bln</th><th class="r">Value USD</th><th class="r">Skor</th><th class="r">Disimpan</th><th>HS Codes</th></tr></thead>
+            <tbody>
+            ${d.buyers.map((b) => `<tr>
+              <td><b class="body-sm">${esc(b.name)}</b>${b.has_indonesian_supplier ? ' <span class="pill pill-info" style="font-size:10px">🇮🇩</span>' : ''}<div class="caption muted-3">${esc(b.city || '')} · ${b.size_bucket}</div></td>
+              <td>${flag(b.country)} ${esc(COUNTRY_NAMES[b.country] || b.country)}</td>
+              <td class="body-sm muted">${esc(b.industry || '-')}</td>
+              <td class="r num">${fmtN(b.shipments_12mo)}</td>
+              <td class="r num">${fmtUSD(b.value_12mo_usd)}</td>
+              <td class="r"><span class="pill ${b.base_score >= 80 ? 'pill-danger' : b.base_score >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:11px">${b.base_score}</span></td>
+              <td class="r num">${b.times_saved}</td>
+              <td class="caption body-sm">${(b.hs_codes || '').split(',').slice(0,3).map((h) => `<span class="tag">${h}</span>`).join(' ')}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      `);
+      $('#admin-bq')?.addEventListener('input', (e) => { clearTimeout(window.__abq); window.__abq = setTimeout(() => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(e.target.value) + '&c=' + encodeURIComponent(country); }, 400); });
+      $('#admin-bc')?.addEventListener('change', (e) => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(search) + '&c=' + encodeURIComponent(e.target.value); });
+    } else if (tab === 'shipments') {
+      const d = await api('/api/admin/shipments');
+      draw(`
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Shipment</div><div class="admin-kpi-num">${fmtN(d.stats.total)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Volume</div><div class="admin-kpi-num">${fmtKg(d.stats.total_kg)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Nilai</div><div class="admin-kpi-num">${fmtUSD(d.stats.total_usd)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">HS Unik</div><div class="admin-kpi-num">${fmtN(d.stats.unique_hs)}</div><div class="admin-kpi-hint">${fmtN(d.stats.unique_buyers)} buyer unik</div></div>
+        </div>
+        <div class="admin-panel" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>Tanggal</th><th>HS</th><th>Buyer</th><th>Eksportir</th><th>Rute</th><th class="r">Berat</th><th class="r">Nilai</th></tr></thead>
+            <tbody>
+            ${d.shipments.map((s) => `<tr>
+              <td class="caption num body-sm">${fmtDate(s.shipment_date)}</td>
+              <td><span class="hs-code-chip">${s.hs_code.replace(/^(\d{4})/, '$1.')}</span></td>
+              <td><b class="body-sm">${esc(s.buyer_name)}</b> <span class="caption">${flag(s.buyer_country)}</span></td>
+              <td class="body-sm">${flag(s.exporter_country)} ${esc(s.exporter_name)} ${s.is_indonesian ? '<span class="pill pill-info" style="font-size:10px">🇮🇩</span>' : ''}</td>
+              <td class="caption muted">${esc(s.origin_port || '')} → ${esc(s.dest_port || '')}</td>
+              <td class="r num">${fmtKg(s.weight_kg)}</td>
+              <td class="r num">${fmtUSD(s.value_usd)}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      `);
+    } else if (tab === 'messages') {
+      const d = await api('/api/admin/messages');
+      const rateOpened = d.funnel.total ? Math.round((d.funnel.opened / d.funnel.total) * 100) : 0;
+      const rateReplied = d.funnel.total ? Math.round((d.funnel.replied / d.funnel.total) * 100) : 0;
+      draw(`
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Terkirim</div><div class="admin-kpi-num">${fmtN(d.funnel.total)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Open Rate</div><div class="admin-kpi-num">${rateOpened}%</div><div class="admin-kpi-hint">${d.funnel.opened} dibuka</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Reply Rate</div><div class="admin-kpi-num">${rateReplied}%</div><div class="admin-kpi-hint">${d.funnel.replied} dibalas</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Channel</div><div class="admin-kpi-num" style="font-size:16px;padding-top:4px">${d.by_channel.map((c) => `${c.channel === 'email' ? '✉️' : '💬'} ${c.c}`).join(' · ')}</div></div>
+        </div>
+        <div class="admin-panel" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>Dari User</th><th>Ke Buyer</th><th>Subjek</th><th>Channel</th><th>Status</th><th>Dikirim</th></tr></thead>
+            <tbody>
+            ${d.messages.map((mg) => `<tr>
+              <td><b class="body-sm">${esc(mg.user_name)}</b><div class="caption muted-3">${esc(mg.user_email)}</div></td>
+              <td>${flag(mg.buyer_country)} ${esc(mg.buyer_name)}</td>
+              <td class="body-sm muted">${esc(mg.subject || '(WhatsApp)')}</td>
+              <td>${mg.channel === 'email' ? '✉️' : '💬'} ${mg.channel}</td>
+              <td>${statusPill(mg.status)}</td>
+              <td class="caption num body-sm">${fmtDate(mg.sent_at)}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      `);
+    } else if (tab === 'revenue') {
+      const d = await api('/api/admin/revenue');
+      draw(`
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi admin-kpi-hero"><div class="admin-kpi-lbl">MRR (Monthly)</div><div class="admin-kpi-num">${fmtIDR(d.mrr)}</div><div class="admin-kpi-hint">${d.paid_users} paying users</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">ARR (Annual)</div><div class="admin-kpi-num">${fmtIDR(d.arr)}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">ARPU</div><div class="admin-kpi-num">${fmtIDR(d.arpu)}</div><div class="admin-kpi-hint">per paying user / bulan</div></div>
+        </div>
+        <div class="admin-grid-2">
+          <div class="admin-panel">
+            <h3>Revenue per Paket</h3>
+            <div style="margin-top:14px">
+              ${d.by_plan.map((p) => `<div class="admin-list-row">
+                <div><b style="text-transform:capitalize">${esc(p.plan)}</b> <span class="caption muted">× ${p.c} user @ ${fmtIDR(p.price)}</span></div>
+                <b>${fmtIDR(p.revenue)}</b>
+              </div>`).join('')}
+            </div>
           </div>
-          <div class="card">
-            <h3 style="margin-bottom:14px">Outreach terbaru</h3>
-            ${d.recent_messages.length ? d.recent_messages.map((mg) => `<div style="padding:10px 0;border-bottom:1px dotted var(--border-subtle)">
-              <b class="body-sm">${esc(mg.subject || '(WhatsApp)')}</b>
-              <div class="caption muted-3">Dari ${esc(mg.user_email)} → ${esc(mg.buyer_name)} · ${statusPill(mg.status)}</div>
-              <div class="caption muted-3">${fmtDate(mg.sent_at)}</div>
-            </div>`).join('') : '<p class="muted body-sm">Belum ada outreach.</p>'}
+          <div class="admin-panel">
+            <h3>Riwayat Perubahan Plan (50 terakhir)</h3>
+            <div style="margin-top:14px;max-height:400px;overflow-y:auto">
+              ${d.plan_change_history.length ? d.plan_change_history.map((e) => `<div class="admin-list-row">
+                <div><span class="caption muted-3">User ${esc(e.target)}</span><div class="body-sm">→ ${esc((e.meta && JSON.parse(e.meta).plan) || '?')}</div></div>
+                <span class="caption muted-3">${fmtDate(e.created_at)}</span>
+              </div>`).join('') : '<p class="muted body-sm">Belum ada riwayat.</p>'}
+            </div>
+          </div>
+        </div>
+      `);
+    } else if (tab === 'hs-usage') {
+      const d = await api('/api/admin/hs-usage');
+      const maxHs = d.top_hs_focus[0]?.count || 1;
+      const maxC = d.top_target_countries[0]?.count || 1;
+      draw(`
+        <div class="admin-grid-2">
+          <div class="admin-panel">
+            <h3>Top HS Focus User</h3>
+            <p class="caption muted-3" style="margin-bottom:14px">HS code paling sering dipilih user waktu onboarding.</p>
+            ${d.top_hs_focus.length ? d.top_hs_focus.map((h) => `<div class="admin-bar-row">
+              <span class="hs-code-chip">${h.code.replace(/^(\d{4})/, '$1.')}</span>
+              <div class="admin-bar"><div style="width:${(h.count / maxHs) * 100}%"></div></div>
+              <b class="num body-sm" style="text-align:right">${h.count}</b>
+            </div>`).join('') : '<p class="muted body-sm">Belum ada data.</p>'}
+          </div>
+          <div class="admin-panel">
+            <h3>Top Target Countries</h3>
+            <p class="caption muted-3" style="margin-bottom:14px">Negara yang paling sering dipilih user sebagai target ekspor.</p>
+            ${d.top_target_countries.length ? d.top_target_countries.map((c) => `<div class="admin-bar-row">
+              <span class="body-sm">${flag(c.code)} ${esc(c.name)}</span>
+              <div class="admin-bar"><div style="width:${(c.count / maxC) * 100}%"></div></div>
+              <b class="num body-sm" style="text-align:right">${c.count}</b>
+            </div>`).join('') : '<p class="muted body-sm">Belum ada data.</p>'}
+          </div>
+        </div>
+      `);
+    } else if (tab === 'system') {
+      const d = await api('/api/admin/system');
+      draw(`
+        <div class="admin-grid-2">
+          <div class="admin-panel">
+            <h3>Runtime</h3>
+            <div style="margin-top:14px">
+              <div class="admin-list-row"><span>Node</span><b>${esc(d.node_version)}</b></div>
+              <div class="admin-list-row"><span>Uptime</span><b>${Math.floor(d.uptime_sec / 60)}m ${d.uptime_sec % 60}s</b></div>
+              <div class="admin-list-row"><span>Memory RSS</span><b>${d.memory_mb} MB</b></div>
+              <div class="admin-list-row"><span>DB Engine</span><b>${esc(d.db_engine)}</b></div>
+              <div class="admin-list-row"><span>HS Nomenclature Loaded</span><b>${fmtN(d.hs_nomenclature_loaded)} kode</b></div>
+            </div>
+          </div>
+          <div class="admin-panel">
+            <h3>Cache Stats</h3>
+            <div style="margin-top:14px">
+              <div class="admin-list-row"><span>Supabase token cache</span><b>${d.caches.supabase_token} entri</b></div>
+              <div class="admin-list-row"><span>UN Comtrade cache</span><b>${d.caches.comtrade} entri</b></div>
+              <div class="admin-list-row"><span>USITC HTS cache</span><b>${d.caches.usitc} entri</b></div>
+            </div>
+            <h3 style="margin-top:20px">Integrasi</h3>
+            <div style="margin-top:14px">
+              ${Object.entries(d.integrations).map(([k, v]) => `<div class="admin-list-row"><span style="text-transform:capitalize">${k.replace(/_/g, ' ')}</span><span class="pill ${v ? 'pill-success' : 'pill-danger'}" style="font-size:11px">${v ? '● live' : '× off'}</span></div>`).join('')}
+            </div>
           </div>
         </div>
       `);
     } else if (tab === 'audit') {
       const d = await api('/api/admin/audit');
-      drawShell(`
-        <div class="card">
-          <h3 style="margin-bottom:14px">Audit log admin (100 terakhir)</h3>
-          <p class="muted body-sm" style="margin-bottom:16px">Semua tindakan admin (ubah plan, ubah status, hapus user) tercatat di sini.</p>
-          ${d.events.length ? `<div class="tbl-wrap"><table class="tbl">
+      draw(`
+        <div class="admin-panel" style="padding:0;overflow:hidden">
+          <div class="tbl-wrap"><table class="tbl">
             <thead><tr><th>Waktu</th><th>Admin</th><th>Aksi</th><th>Target</th><th>Meta</th></tr></thead>
             <tbody>
-            ${d.events.map((e) => `<tr>
+            ${d.events.length ? d.events.map((e) => `<tr>
               <td class="caption num body-sm">${fmtDate(e.created_at)}</td>
               <td><b class="body-sm">${esc(e.actor_name || '?')}</b><div class="caption muted-3">${esc(e.actor_email || '-')}</div></td>
               <td><span class="pill pill-info" style="font-size:11px">${esc(e.action)}</span></td>
               <td class="caption">${esc(e.target || '-')}</td>
               <td class="caption muted-3" style="font-family:monospace;font-size:11px">${esc(e.meta || '-')}</td>
-            </tr>`).join('')}
-            </tbody></table></div>` : '<p class="muted">Belum ada tindakan admin tercatat.</p>'}
+            </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:40px" class="muted">Belum ada tindakan admin tercatat.</td></tr>'}
+            </tbody></table></div>
         </div>
       `);
     }
   } catch (err) {
-    drawShell(`<div class="empty" style="padding:40px"><h3>Gagal memuat data admin</h3><p class="muted">${esc(err.data?.error || err.message || 'Coba refresh')}</p></div>`);
+    draw(`<div class="empty" style="padding:40px"><h3>Gagal memuat data</h3><p class="muted">${esc(err.data?.error || err.message || 'Coba refresh')}</p></div>`);
   }
 });
 
