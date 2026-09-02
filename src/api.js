@@ -1270,6 +1270,51 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, { recent_users: recentUsers, recent_messages: recentMessages });
   }
 
+  // Unified activity feed for the admin overview. Merges local sqlite
+  // events (signups, outreach, audit log) with Postgres scrape events.
+  // Sorted newest first; safe to call every 10 s.
+  if (route('GET', '/api/admin/activity')) {
+    if (!requireAdmin()) return;
+    const events = [];
+    try {
+      for (const r of db.prepare(`SELECT id, email, name, created_at FROM users ORDER BY created_at DESC LIMIT 15`).all()) {
+        events.push({ ts: r.created_at, kind: 'user.signup', title: `${r.name} daftar`, meta: { email: r.email, id: r.id } });
+      }
+      for (const r of db.prepare(`SELECT m.id, m.sent_at, m.status, u.email user_email, b.name buyer_name FROM messages m JOIN users u ON u.id=m.user_id JOIN buyers b ON b.id=m.buyer_id ORDER BY m.sent_at DESC LIMIT 15`).all()) {
+        events.push({ ts: r.sent_at, kind: 'outreach.sent', title: `${r.user_email} → ${r.buyer_name}`, meta: { status: r.status, id: r.id } });
+      }
+      for (const r of db.prepare(`SELECT id, user_id, action, target, meta, created_at FROM audit_log ORDER BY created_at DESC LIMIT 15`).all()) {
+        events.push({ ts: r.created_at, kind: 'admin.' + r.action.replace(/^admin\./, ''), title: `${r.action} → ${r.target || ''}`, meta: r.meta ? JSON.parse(r.meta) : null });
+      }
+    } catch (_e) { /* keep going */ }
+    try {
+      const pgClient = require('./pg');
+      const recentJobs = await pgClient.query(`SELECT id, source, hs_code, country, status, result_count, error, finished_at, started_at, created_at FROM scrape_jobs WHERE finished_at IS NOT NULL OR started_at IS NOT NULL ORDER BY COALESCE(finished_at, started_at, created_at) DESC LIMIT 20`);
+      for (const r of recentJobs) {
+        const ts = r.finished_at || r.started_at || r.created_at;
+        events.push({
+          ts: ts instanceof Date ? ts.toISOString() : ts,
+          kind: 'scrape.job.' + r.status,
+          title: `${r.source} · ${r.hs_code || '-'} · ${r.country || '-'}: ${r.status === 'done' ? '+' + (r.result_count || 0) + ' buyer' : r.status}`,
+          meta: { id: Number(r.id), source: r.source, hs_code: r.hs_code, country: r.country, result_count: r.result_count, error: r.error },
+        });
+      }
+      const recentBuyers = await pgClient.query(`SELECT id, source, name, country, enriched_at, created_at, updated_at FROM scraped_buyers ORDER BY updated_at DESC LIMIT 15`);
+      for (const r of recentBuyers) {
+        const isNew = Math.abs(new Date(r.created_at).getTime() - new Date(r.updated_at).getTime()) < 2000;
+        const kind = isNew ? 'buyer.discovered' : (r.enriched_at ? 'buyer.enriched' : 'buyer.updated');
+        const ts = r.updated_at;
+        events.push({
+          ts: ts instanceof Date ? ts.toISOString() : ts,
+          kind, title: `${r.name} (${r.country || '?'}) via ${r.source}`,
+          meta: { id: Number(r.id), source: r.source },
+        });
+      }
+    } catch (_e) { /* Postgres may be offline; skip its section */ }
+    events.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+    return json(res, 200, { events: events.slice(0, 40) });
+  }
+
   // ===== HS taxonomy =====
   if (route('GET', '/api/hs')) {
     const parent = q.get('parent');

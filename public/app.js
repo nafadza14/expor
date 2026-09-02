@@ -3058,7 +3058,11 @@ route(/^\/admin$/, async (app, m, params) => {
 
   try {
     if (tab === 'overview') {
-      const s = await api('/api/admin/stats');
+      // Fetch stats + optional Postgres scrape summary in parallel.
+      const [s, scrapeStatus] = await Promise.all([
+        api('/api/admin/stats'),
+        api('/api/admin/scrape/status').catch(() => null),
+      ]);
       const plansBar = s.users.by_plan.map((p) => {
         const pct = s.users.total ? (p.c / s.users.total) * 100 : 0;
         const color = { free: '#9ca3af', starter: '#3b82f6', growth: '#ef4d23', business: '#7c3aed' }[p.plan] || '#9ca3af';
@@ -3068,14 +3072,16 @@ route(/^\/admin$/, async (app, m, params) => {
           <b class="num body-sm" style="text-align:right">${p.c} <span class="muted-3">(${pct.toFixed(0)}%)</span></b>
         </div>`;
       }).join('');
+      const scrapePending = scrapeStatus?.jobs_by_status?.find((r) => r.status === 'pending')?.c || 0;
+      const scrapeDone = scrapeStatus?.jobs_by_status?.find((r) => r.status === 'done')?.c || 0;
       draw(`
         <div class="admin-kpi-grid">
           <div class="admin-kpi"><div class="admin-kpi-lbl">Total Users</div><div class="admin-kpi-num">${fmtN(s.users.total)}</div><div class="admin-kpi-hint">${s.users.onboarded} onboarded · ${s.users.admins} admin</div></div>
           <div class="admin-kpi"><div class="admin-kpi-lbl">Signup (7 hari)</div><div class="admin-kpi-num">${fmtN(s.users.recent_7d)}</div><div class="admin-kpi-hint">${s.users.recent_30d} dalam 30 hari</div></div>
           <div class="admin-kpi"><div class="admin-kpi-lbl">Outreach Sent</div><div class="admin-kpi-num">${fmtN(s.engagement.messages_sent)}</div><div class="admin-kpi-hint">${s.engagement.messages_replied} dibalas (${s.engagement.messages_sent ? Math.round((s.engagement.messages_replied / s.engagement.messages_sent) * 100) : 0}%)</div></div>
           <div class="admin-kpi"><div class="admin-kpi-lbl">Buyer Tersimpan</div><div class="admin-kpi-num">${fmtN(s.engagement.saved_buyers)}</div><div class="admin-kpi-hint">di ${s.engagement.lists} daftar</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer DB</div><div class="admin-kpi-num">${fmtN(s.inventory.total_buyers)}</div><div class="admin-kpi-hint">inventory</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Shipment</div><div class="admin-kpi-num">${fmtN(s.inventory.total_shipments)}</div><div class="admin-kpi-hint">bill of lading</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Buyer Terscrape</div><div class="admin-kpi-num">${fmtN(scrapeStatus?.total_buyers || 0)}</div><div class="admin-kpi-hint">${scrapeDone} job selesai</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Scrape Queue</div><div class="admin-kpi-num">${fmtN(scrapePending)}</div><div class="admin-kpi-hint">job pending</div></div>
         </div>
         <div class="admin-grid-2">
           <div class="admin-panel">
@@ -3089,7 +3095,58 @@ route(/^\/admin$/, async (app, m, params) => {
             </div>
           </div>
         </div>
+        <div class="admin-panel" style="margin-top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">Aktivitas Terbaru <span class="pill pill-neutral" style="font-size:10px;margin-left:6px">LIVE</span></h3>
+            <span class="caption muted-3" id="feed-updated">Memuat…</span>
+          </div>
+          <div id="feed-list" style="max-height:520px;overflow:auto">
+            <p class="muted body-sm" style="padding:12px">Memuat aktivitas…</p>
+          </div>
+        </div>
       `);
+      // Render + auto-refresh the live activity feed every 10s.
+      const KIND_STYLE = {
+        'user.signup':        { pill: 'pill-info',    icon: '👤' },
+        'outreach.sent':      { pill: 'pill-warning', icon: '✉️' },
+        'buyer.discovered':   { pill: 'pill-success', icon: '🔍' },
+        'buyer.enriched':     { pill: 'pill-success', icon: '✨' },
+        'buyer.updated':      { pill: 'pill-neutral', icon: '♻️' },
+        'scrape.job.done':    { pill: 'pill-success', icon: '✓' },
+        'scrape.job.failed':  { pill: 'pill-danger',  icon: '⚠️' },
+        'scrape.job.running': { pill: 'pill-warning', icon: '⚙️' },
+      };
+      const renderFeed = async () => {
+        try {
+          const { events } = await api('/api/admin/activity');
+          const now = Date.now();
+          const fmtRel = (ts) => {
+            const t = new Date(ts).getTime();
+            const s = Math.max(1, Math.round((now - t) / 1000));
+            if (s < 60) return s + ' dtk';
+            if (s < 3600) return Math.round(s / 60) + ' mnt';
+            if (s < 86400) return Math.round(s / 3600) + ' jam';
+            return Math.round(s / 86400) + ' hari';
+          };
+          const el = document.getElementById('feed-list');
+          const upd = document.getElementById('feed-updated');
+          if (!el) return;
+          el.innerHTML = events.length ? events.map((e) => {
+            const style = KIND_STYLE[e.kind] || { pill: 'pill-neutral', icon: '•' };
+            return `<div class="admin-feed-row">
+              <div class="admin-feed-icon">${style.icon}</div>
+              <div class="admin-feed-body">
+                <div class="body-sm">${esc(e.title)}</div>
+                <div class="caption muted-3"><span class="pill ${style.pill}" style="font-size:9px">${esc(e.kind)}</span> · ${fmtRel(e.ts)} lalu</div>
+              </div>
+            </div>`;
+          }).join('') : '<p class="muted body-sm" style="padding:12px">Belum ada aktivitas tercatat.</p>';
+          if (upd) upd.textContent = 'Update ' + new Date().toLocaleTimeString('id-ID');
+        } catch (_e) { /* keep last state */ }
+      };
+      clearInterval(window.__adminFeedTimer);
+      renderFeed();
+      window.__adminFeedTimer = setInterval(() => { if (parseHash().path === '/admin' && (params.get('tab') || 'overview') === 'overview') renderFeed(); else clearInterval(window.__adminFeedTimer); }, 10000);
     } else if (tab === 'users') {
       const q = params.get('q') || '';
       const d = await api('/api/admin/users?q=' + encodeURIComponent(q));
@@ -3281,6 +3338,15 @@ route(/^\/admin$/, async (app, m, params) => {
           location.hash = '#/admin?tab=scrape&t=' + Date.now();
         } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal', true); el.disabled = false; el.textContent = 'Enrich'; }
       }));
+      // Auto-refresh scrape tab KPI + job table every 15s while visible.
+      clearInterval(window.__adminScrapeTimer);
+      window.__adminScrapeTimer = setInterval(() => {
+        if (parseHash().path === '/admin' && (params.get('tab') || 'overview') === 'scrape') {
+          location.hash = '#/admin?tab=scrape&t=' + Date.now();
+        } else {
+          clearInterval(window.__adminScrapeTimer);
+        }
+      }, 15000);
     } else if (tab === 'shipments') {
       const d = await api('/api/admin/shipments');
       draw(`
