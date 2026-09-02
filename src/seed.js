@@ -379,6 +379,11 @@ function seed(db) {
       JSON.stringify(['090111', '090121', '090411']), JSON.stringify(['US', 'JP', 'NL']), 'occasional', 'find_buyers');
     const demoId = db.prepare('SELECT id FROM users WHERE email=?').get('demo@eksporin.id').id;
 
+    // ---------- super admin user ----------
+    db.prepare(`INSERT INTO users (email,password_hash,name,org_name,plan,is_admin,onboarded)
+      VALUES (?,?,?,?,?,?,1)`)
+      .run('test@zieads.com', hashPassword('asikasikjos14'), 'Super Admin', 'EksporIn Admin', 'business', 1);
+
     // demo saved list with pipeline states
     db.prepare('INSERT INTO lists (user_id,name,description,color) VALUES (?,?,?,?)')
       .run(demoId, 'Prospek Kopi Q3 2026', 'Buyer kopi prioritas untuk outreach kuartal ini', '#2563EB');

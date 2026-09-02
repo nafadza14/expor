@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS users (
   export_status TEXT,
   goal TEXT,
   onboarded INTEGER NOT NULL DEFAULT 0,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  action TEXT NOT NULL,
+  target TEXT,
+  meta TEXT,
+  ip TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

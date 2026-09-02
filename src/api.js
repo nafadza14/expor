@@ -698,6 +698,7 @@ async function handleApi(db, req, res, url, body) {
       quotas: meters, contacts_visible: plan.contacts,
       saved: { used: savedCount(db, user.id), limit: plan.saved },
       unread_alerts: db.prepare('SELECT COUNT(*) c FROM alerts WHERE user_id=? AND read=0').get(user.id).c,
+      is_admin: !!user.is_admin,
     });
   }
 
@@ -966,6 +967,104 @@ async function handleApi(db, req, res, url, body) {
         return err(res, 502, 'AI error: ' + (e.message || 'network error'));
       }
     })();
+  }
+
+  // ===== admin only =====
+  const requireAdmin = () => {
+    if (!user.is_admin) { err(res, 403, 'Admin access required.'); return false; }
+    return true;
+  };
+
+  if (route('GET', '/api/admin/stats')) {
+    if (!requireAdmin()) return;
+    const total = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+    const onboarded = db.prepare('SELECT COUNT(*) c FROM users WHERE onboarded=1').get().c;
+    const admins = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin=1').get().c;
+    const byPlan = db.prepare("SELECT plan, COUNT(*) c FROM users GROUP BY plan ORDER BY c DESC").all();
+    const recent7d = db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= datetime('now','-7 days')").get().c;
+    const recent30d = db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= datetime('now','-30 days')").get().c;
+    const messages = db.prepare('SELECT COUNT(*) c FROM messages').get().c;
+    const messagesReplied = db.prepare("SELECT COUNT(*) c FROM messages WHERE status='replied'").get().c;
+    const lists = db.prepare('SELECT COUNT(*) c FROM lists').get().c;
+    const savedBuyers = db.prepare('SELECT COUNT(*) c FROM list_buyers').get().c;
+    const totalBuyers = db.prepare('SELECT COUNT(*) c FROM buyers').get().c;
+    const totalShipments = db.prepare('SELECT COUNT(*) c FROM shipments').get().c;
+    const usageThisMonth = db.prepare("SELECT meter, SUM(used) total FROM usage_meters WHERE period=? GROUP BY meter").all(period());
+    return json(res, 200, {
+      users: { total, onboarded, admins, recent_7d: recent7d, recent_30d: recent30d, by_plan: byPlan },
+      engagement: { messages_sent: messages, messages_replied: messagesReplied, lists, saved_buyers: savedBuyers },
+      inventory: { total_buyers: totalBuyers, total_shipments: totalShipments },
+      usage_this_month: usageThisMonth,
+    });
+  }
+
+  if (route('GET', '/api/admin/users')) {
+    if (!requireAdmin()) return;
+    const search = q.get('q') || '';
+    const rows = db.prepare(`SELECT u.id, u.email, u.name, u.org_name, u.plan, u.is_admin, u.status, u.onboarded,
+       u.hs_focus, u.target_countries, u.export_status, u.goal, u.created_at,
+       (SELECT COUNT(*) FROM lists l WHERE l.user_id=u.id) list_count,
+       (SELECT COUNT(*) FROM messages m WHERE m.user_id=u.id) message_count
+      FROM users u
+      WHERE (? = '' OR u.email LIKE ? OR u.name LIKE ? OR u.org_name LIKE ?)
+      ORDER BY u.created_at DESC LIMIT 200`)
+      .all(search, '%' + search + '%', '%' + search + '%', '%' + search + '%');
+    return json(res, 200, {
+      users: rows.map((r) => ({
+        ...r,
+        is_admin: !!r.is_admin,
+        onboarded: !!r.onboarded,
+        hs_focus: JSON.parse(r.hs_focus || '[]'),
+        target_countries: JSON.parse(r.target_countries || '[]'),
+      })),
+    });
+  }
+
+  if (route('POST', '/api/admin/user/plan')) {
+    if (!requireAdmin()) return;
+    const { user_id, plan } = body || {};
+    if (!user_id || !PLANS[plan]) return err(res, 400, 'user_id dan plan wajib.');
+    db.prepare('UPDATE users SET plan=? WHERE id=?').run(plan, user_id);
+    db.prepare('INSERT INTO audit_log (user_id, action, target, meta) VALUES (?,?,?,?)').run(user.id, 'admin.plan_change', String(user_id), JSON.stringify({ plan }));
+    return json(res, 200, { ok: true, user_id, plan });
+  }
+
+  if (route('POST', '/api/admin/user/status')) {
+    if (!requireAdmin()) return;
+    const { user_id, status } = body || {};
+    if (!user_id || !['active', 'suspended', 'banned'].includes(status)) return err(res, 400, 'status invalid.');
+    db.prepare('UPDATE users SET status=? WHERE id=?').run(status, user_id);
+    db.prepare('INSERT INTO audit_log (user_id, action, target, meta) VALUES (?,?,?,?)').run(user.id, 'admin.status_change', String(user_id), JSON.stringify({ status }));
+    return json(res, 200, { ok: true, user_id, status });
+  }
+
+  if (route('DELETE', '/api/admin/user')) {
+    if (!requireAdmin()) return;
+    const target = parseInt(q.get('id') || '0', 10);
+    if (!target || target === user.id) return err(res, 400, 'user id invalid (tidak bisa hapus diri sendiri).');
+    db.prepare('DELETE FROM sessions WHERE user_id=?').run(target);
+    db.prepare('DELETE FROM lists WHERE user_id=?').run(target);
+    db.prepare('DELETE FROM messages WHERE user_id=?').run(target);
+    db.prepare('DELETE FROM notes WHERE user_id=?').run(target);
+    db.prepare('DELETE FROM users WHERE id=?').run(target);
+    db.prepare('INSERT INTO audit_log (user_id, action, target) VALUES (?,?,?)').run(user.id, 'admin.user_delete', String(target));
+    return json(res, 200, { ok: true, deleted: target });
+  }
+
+  if (route('GET', '/api/admin/audit')) {
+    if (!requireAdmin()) return;
+    const rows = db.prepare(`SELECT a.*, u.email actor_email, u.name actor_name FROM audit_log a
+      LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 100`).all();
+    return json(res, 200, { events: rows });
+  }
+
+  if (route('GET', '/api/admin/recent-activity')) {
+    if (!requireAdmin()) return;
+    const recentUsers = db.prepare(`SELECT id, email, name, plan, created_at FROM users ORDER BY created_at DESC LIMIT 10`).all();
+    const recentMessages = db.prepare(`SELECT m.id, m.subject, m.sent_at, m.status, u.email user_email, b.name buyer_name
+      FROM messages m JOIN users u ON u.id=m.user_id JOIN buyers b ON b.id=m.buyer_id
+      ORDER BY m.sent_at DESC LIMIT 10`).all();
+    return json(res, 200, { recent_users: recentUsers, recent_messages: recentMessages });
   }
 
   // ===== HS taxonomy =====
