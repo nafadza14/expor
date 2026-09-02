@@ -1540,7 +1540,7 @@ async function handleApi(db, req, res, url, body) {
         ai_powered: !!matched.ai,
       },
       pipeline_steps: [
-        { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `${matched.ai ? '🤖 AI (Sumopod MiniMax): ' : ''}Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
+        { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `${matched.ai ? 'AI: ' : ''}Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
         { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan dari ${new Set(buyers.map((b) => b.country)).size} negara` },
         { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${totalContacts} kontak ditemukan, ${verifiedContacts} email terverifikasi` },
         { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 80).length} hot leads, ${results.filter((r) => r.scoring.match_score >= 60 && r.scoring.match_score < 80).length} warm leads` },

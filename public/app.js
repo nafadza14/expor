@@ -525,11 +525,10 @@ route(/^\/$/, async (app) => {
           <div class="hero-try">
             <div class="hero-try-label">
               <b>Apa komoditas Anda?</b>
-              <span>Tuliskan komoditas Anda — sistem kami akan otomatis mencarikan HS Code, kami akan menemukan buyer untuk Anda.</span>
             </div>
             <form class="hero-search" id="hero-try-form" onsubmit="return false" autocomplete="off">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input id="hero-try-input" type="text" placeholder="mis. Kopi Arabika Gayo, Vanili Kering, Rotan…" autocomplete="off">
+              <input id="hero-try-input" type="text" placeholder="Tuliskan komoditas Anda misal: kopi robusta, Vanili Kering, Nilam…" autocomplete="off">
               <button type="submit" id="hero-try-btn">Cari</button>
             </form>
             <div id="hero-try-results" class="hero-results" style="display:none"></div>
@@ -539,7 +538,7 @@ route(/^\/$/, async (app) => {
             </a>
           </div>
 
-          <p class="hero-demo-hint">Sudah punya akun? <a href="#/login">Masuk di sini</a> · Coba demo: demo@eksporin.id / demo1234</p>
+          <p class="hero-demo-hint">Sudah punya akun? <a href="#/login">Masuk di sini</a></p>
         </div>
 
         <!-- Dashboard preview tray -->
@@ -750,7 +749,7 @@ route(/^\/$/, async (app) => {
         <p class="section-lead">End-to-end otomatis. Dari deskripsi komoditas ke pesan pertama yang siap kirim ke buyer luar negeri.</p>
         <div class="how-grid">
           ${[
-            { n: '01', title: 'Deskripsikan komoditas', desc: 'Ketik dalam Bahasa Indonesia atau Inggris. AI + WCO nomenclature (6.941 kode) memetakan ke HS 6-digit yang tepat.', chips: ['🤖 AI Sumopod', '📚 WCO 6.941 kode', '🇮🇩 → 🌐'] },
+            { n: '01', title: 'Deskripsikan komoditas', desc: 'Ketik dalam Bahasa Indonesia atau Inggris. AI + WCO nomenclature (6.941 kode) memetakan ke HS 6-digit yang tepat.', chips: ['AI', '📚 WCO 6.941 kode', '🇮🇩 → 🌐'] },
             { n: '02', title: 'Temukan buyer aktif', desc: 'Pipeline AI 4-step: HS mapping, trade retrieval dari data bea cukai, contact enrichment, dan lead scoring 0–100.', chips: ['📦 Bill of Lading', '🔎 200+ buyer', '⚡ 4-step pipeline'] },
             { n: '03', title: 'Evaluasi dengan data resmi', desc: 'Match Score, riwayat shipment tahunan, duty rate USITC untuk pasar USA, dan angle outreach yang di-personalize per buyer.', chips: ['🇺🇸 USITC duty', '🌐 UN Comtrade', '🎯 Match Score'] },
             { n: '04', title: 'Kirim outreach multi-bahasa', desc: 'Template siap kirim di 5 bahasa (EN/ES/AR/ZH/JA), email + WhatsApp. Lacak status dibuka & dibalas dari dashboard.', chips: ['✉️ 10 template', '🌍 5 bahasa', '📊 Tracking'] },
@@ -806,7 +805,7 @@ route(/^\/$/, async (app) => {
       <div class="landing-section-inner">
         <div class="section-eyebrow">Harga</div>
         <h2 class="section-title">Mulai gratis, upgrade sesuai skala Anda</h2>
-        <p class="section-lead">Semua paket bulanan tanpa kontrak. Bayar via QRIS (GoPay/OVO/DANA/ShopeePay/m-Banking) — powered by Sumopod. Garansi 7 hari uang kembali.</p>
+        <p class="section-lead">Semua paket bulanan tanpa kontrak. Bayar via QRIS (GoPay / OVO / DANA / ShopeePay / m-Banking). Garansi 7 hari uang kembali.</p>
         <div class="price-grid">
           ${[
             { code: 'free', name: 'Free', price: 'Rp 0', tag: 'Selamanya', desc: 'Coba semua fitur inti.', feats: ['20 pencarian/bulan', '3 profil lengkap/bulan', 'Simpan 10 buyer', '5 kirim outreach', '3 template sistem'] },
@@ -867,7 +866,6 @@ route(/^\/$/, async (app) => {
             <a href="https://comtradeplus.un.org" target="_blank" rel="noopener">UN Comtrade+</a>
             <a href="https://hts.usitc.gov" target="_blank" rel="noopener">USITC HTS</a>
             <a href="https://github.com/datasets/harmonized-system" target="_blank" rel="noopener">WCO HS Nomenclature</a>
-            <a href="#" onclick="return false">Sumopod AI</a>
           </div>
           <div class="footer-col">
             <h4>Kontak</h4>
@@ -883,7 +881,7 @@ route(/^\/$/, async (app) => {
           </div>
         </div>
         <div class="footer-bottom">
-          <p>© 2024 EksporIn. Semua data ekspor bersumber dari lembaga resmi (UN Comtrade+, USITC, WCO). AI powered by Sumopod. Payment powered by Sumopod QRIS.</p>
+          <p>© 2024 EksporIn. Semua data ekspor bersumber dari lembaga resmi (UN Comtrade+, USITC, WCO).</p>
         </div>
       </div>
     </footer>
@@ -895,6 +893,18 @@ route(/^\/$/, async (app) => {
   const heroResults = document.getElementById('hero-try-results');
   const heroSignup = document.getElementById('hero-try-signup');
   const heroSubmit = document.getElementById('hero-try-btn');
+  // Rotate 3 hints inside the search bar placeholder every 3 seconds.
+  if (heroInput) {
+    const HINTS = [
+      'Tuliskan komoditas Anda misal: kopi robusta, Vanili Kering, Nilam…',
+      'Sistem kami akan otomatis mencarikan HS Code komoditas anda',
+      'Kami akan menemukan buyer untuk komoditas anda',
+    ];
+    let idx = 0;
+    const applyHint = () => { if (!heroInput.value) heroInput.setAttribute('placeholder', HINTS[idx]); };
+    applyHint();
+    setInterval(() => { idx = (idx + 1) % HINTS.length; applyHint(); }, 3000);
+  }
   if (heroForm && heroInput) {
     const runSearch = async () => {
       const q = heroInput.value.trim();
@@ -960,10 +970,9 @@ function authHero() {
 route(/^\/login$/, (app) => {
   app.innerHTML = `<div class="auth-page">${authHero()}<div class="auth-form-side"><div class="auth-card card">
     <h2 style="margin-bottom:4px">Masuk</h2><p class="muted body-sm" style="margin-bottom:20px">Belum punya akun? <a href="#/register">Daftar gratis</a></p>
-    <form id="f"><div class="field"><label>Email</label><input class="input" name="email" type="email" required value="demo@eksporin.id"></div>
-    <div class="field"><label>Password</label><input class="input" name="password" type="password" required value="demo1234"></div>
-    <button class="btn btn-primary" style="width:100%">Masuk</button></form>
-    <p class="caption muted-3" style="margin-top:14px;text-align:center">Akun demo sudah terisi, langsung klik Masuk.</p></div></div></div>`;
+    <form id="f"><div class="field"><label>Email</label><input class="input" name="email" type="email" required placeholder="namaanda@email.com" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input class="input" name="password" type="password" required placeholder="Passwordanda" autocomplete="current-password"></div>
+    <button class="btn btn-primary" style="width:100%">Masuk</button></form></div></div></div>`;
   $('#f').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -2624,7 +2633,7 @@ route(/^\/billing$/, async (app) => {
     modal(`<h2 style="margin-bottom:10px">Konfirmasi ${p.price ? 'pembayaran' : 'perubahan paket'}</h2>
       <div class="card card-compact" style="margin-bottom:16px;background:var(--bg-surface-alt)">
         <div style="display:flex;justify-content:space-between"><span>Paket ${esc(p.name)} (bulanan)</span><b class="num">${p.price ? fmtIDR(p.price) : 'Rp 0'}</b></div>
-        <div class="caption muted-3" style="margin-top:6px">${p.price ? 'Metode: Sumopod QRIS (scan pakai apa saja: GoPay, OVO, DANA, ShopeePay, m-Banking)' : 'Turun ke paket gratis (fitur premium dinonaktifkan)'}</div></div>
+        <div class="caption muted-3" style="margin-top:6px">${p.price ? 'Metode: QRIS (scan pakai apa saja: GoPay, OVO, DANA, ShopeePay, m-Banking)' : 'Turun ke paket gratis (fitur premium dinonaktifkan)'}</div></div>
       <button class="btn btn-primary" id="pay-now" style="width:100%">${p.price ? 'Bayar sekarang via QRIS' : 'Ganti ke Free'}</button>`);
     $('#pay-now').onclick = async () => {
       const btn = $('#pay-now');
@@ -2639,16 +2648,16 @@ route(/^\/billing$/, async (app) => {
           ME = null; render();
           return;
         }
-        // Create Sumopod payment
+        // Create QRIS payment via backend gateway
         const r = await api('/api/billing/checkout', { method: 'POST', body: { plan: code, method: 'QRIS' } });
         if (!r.payment_url) {
-          throw new Error('Sumopod tidak mengembalikan URL pembayaran.');
+          throw new Error('Gagal membuat halaman pembayaran.');
         }
         // Remember what plan we're paying for, so on return we can auto-verify
         try { localStorage.setItem('eksporin_pending_payment', JSON.stringify({ order_id: r.order_id, plan: code, amount: r.amount, at: String(Date.now()) })); } catch {}
         closeModal();
-        toast('Mengarahkan ke halaman pembayaran QRIS Sumopod…');
-        // Redirect user to Sumopod hosted checkout
+        toast('Mengarahkan ke halaman pembayaran QRIS…');
+        // Redirect user to hosted checkout
         window.location.href = r.payment_url;
       } catch (e) {
         console.error('[billing] checkout failed:', e);
