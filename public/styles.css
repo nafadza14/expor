@@ -783,6 +783,45 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .landing-cta-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 @media (max-width: 900px) { .landing-cta-inner { grid-template-columns: 1fr; padding: 32px 24px; text-align: center; } .landing-cta-actions { justify-content: center; } }
 
+/* ---------- Admin Login (dedicated /admin/login page) ---------- */
+.admin-login-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 20px;
+  background: radial-gradient(circle at 20% 20%, #fff5f0 0%, transparent 55%),
+              radial-gradient(circle at 80% 80%, #fef0e8 0%, transparent 50%),
+              var(--bg-page);
+}
+.admin-login-card {
+  width: 100%; max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  padding: 32px 28px;
+  box-shadow: 0 10px 40px rgba(15,15,15,0.06), 0 2px 8px rgba(15,15,15,0.04);
+}
+.admin-login-brand {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+  padding-bottom: 20px; border-bottom: 1px solid var(--border-default);
+}
+.admin-login-logo {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--orange); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.admin-login-logo svg { width: 22px; height: 22px; }
+.admin-login-title { font-size: 17px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.admin-login-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--orange); margin-top: 2px; }
+.admin-login-h { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; color: var(--text-primary); }
+.admin-login-sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+.admin-login-foot {
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-default);
+  text-align: center;
+}
+.admin-login-foot a { color: var(--text-secondary); font-size: 13px; text-decoration: none; }
+.admin-login-foot a:hover { color: var(--orange); }
+
 /* ---------- Admin Console (matches user dashboard UI/UX) ---------- */
 .admin-shell {
   display: flex;

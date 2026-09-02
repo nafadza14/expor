@@ -2857,16 +2857,68 @@ function bindAdminShell() {
   }));
 }
 
+route(/^\/admin\/login$/, (app) => {
+  app.innerHTML = `<div class="admin-login-page">
+    <div class="admin-login-card">
+      <div class="admin-login-brand">
+        <div class="admin-login-logo">${I.chart}</div>
+        <div>
+          <div class="admin-login-title">EksporIn</div>
+          <div class="admin-login-eyebrow">SUPER ADMIN CONSOLE</div>
+        </div>
+      </div>
+      <h2 class="admin-login-h">Masuk sebagai admin</h2>
+      <p class="admin-login-sub">Akses terbatas untuk tim internal.</p>
+      <form id="admin-lf">
+        <div class="field"><label>Email admin</label><input class="input" name="email" type="email" required placeholder="admin@…" autocomplete="username"></div>
+        <div class="field"><label>Password</label><input class="input" name="password" type="password" required placeholder="••••••••" autocomplete="current-password"></div>
+        <button class="btn btn-primary" style="width:100%">Masuk ke Admin Console</button>
+      </form>
+      <div class="admin-login-foot"><a href="#/">← Kembali ke situs</a></div>
+    </div>
+  </div>`;
+  document.getElementById('admin-lf').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const email = String(fd.get('email') || '').trim().toLowerCase();
+    const password = String(fd.get('password') || '');
+    const btn = e.target.querySelector('button');
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Memverifikasi…';
+    try {
+      await api('/api/auth/login', { method: 'POST', body: { email, password } });
+      ME = null;
+      let isAdmin = false;
+      try { const meCheck = await api('/api/me'); isAdmin = !!meCheck.is_admin; } catch {}
+      if (!isAdmin) {
+        toast('Akun ini bukan admin.', true);
+        btn.disabled = false; btn.textContent = orig;
+        return;
+      }
+      location.hash = '#/admin';
+    } catch (err) {
+      toast(err.data?.error || 'Email atau password salah.', true);
+      btn.disabled = false; btn.textContent = orig;
+    }
+  });
+});
+
 route(/^\/admin$/, async (app, m, params) => {
-  await requireMe();
+  // Custom auth guard: unauthenticated → dedicated admin login (not user login).
+  if (!ME) {
+    try { ME = await api('/api/me'); }
+    catch { location.hash = '#/admin/login'; return; }
+  }
   if (!ME.is_admin) {
-    app.innerHTML = shell(`<div class="empty" style="padding:60px 20px;text-align:center">
-      <div class="ic">🔒</div>
-      <h2>Akses ditolak</h2>
-      <p class="muted" style="margin-bottom:16px">Halaman ini hanya untuk super admin.</p>
-      <a class="btn btn-primary" href="#/dashboard">Kembali ke dashboard</a>
-    </div>`);
-    bindShell();
+    app.innerHTML = `<div class="admin-login-page"><div class="admin-login-card" style="text-align:center">
+      <div class="admin-login-logo" style="margin:0 auto 16px">${I.lock || '🔒'}</div>
+      <h2 class="admin-login-h">Akses ditolak</h2>
+      <p class="admin-login-sub">Akun kamu bukan super admin.</p>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
+        <a class="btn btn-outline" href="#/admin/login">Masuk sebagai admin lain</a>
+        <a class="btn btn-primary" href="#/dashboard">Ke dashboard user</a>
+      </div>
+    </div></div>`;
     return;
   }
   const tab = params.get('tab') || 'overview';
