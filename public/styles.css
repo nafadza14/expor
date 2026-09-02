@@ -783,6 +783,53 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .landing-cta-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 @media (max-width: 900px) { .landing-cta-inner { grid-template-columns: 1fr; padding: 32px 24px; text-align: center; } .landing-cta-actions { justify-content: center; } }
 
+/* ---------- Legal pages (Terms, Privacy, Refund) ---------- */
+.legal-page {
+  min-height: 100vh;
+  background: var(--bg-page);
+  padding: 32px 20px 80px;
+}
+.legal-topbar {
+  max-width: 780px;
+  margin: 0 auto 24px;
+}
+.legal-back {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-secondary); font-size: 14px; text-decoration: none;
+  padding: 8px 14px; border-radius: 20px;
+  background: #fff; border: 1px solid var(--border-default);
+  transition: color .15s ease, border-color .15s ease;
+}
+.legal-back:hover { color: var(--orange); border-color: #ffdcd0; }
+.legal-article {
+  max-width: 780px; margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  padding: 48px 56px;
+  box-shadow: 0 1px 3px rgba(15,15,15,0.03);
+}
+.legal-header { padding-bottom: 24px; margin-bottom: 32px; border-bottom: 1px solid var(--border-default); }
+.legal-header h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 8px; color: var(--text-primary); }
+.legal-updated { color: var(--text-tertiary); font-size: 13px; margin: 0; }
+.legal-body h2 { font-size: 18px; margin: 32px 0 12px; color: var(--text-primary); letter-spacing: -0.01em; }
+.legal-body h2:first-child { margin-top: 0; }
+.legal-body p { color: var(--text-secondary); line-height: 1.7; font-size: 15px; margin: 0 0 14px; }
+.legal-body ul { color: var(--text-secondary); line-height: 1.7; font-size: 15px; padding-left: 20px; margin: 0 0 14px; }
+.legal-body ul li { margin-bottom: 6px; }
+.legal-body a { color: var(--orange); text-decoration: none; }
+.legal-body a:hover { text-decoration: underline; }
+.legal-foot {
+  margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border-default);
+  color: var(--text-tertiary); font-size: 13px;
+}
+.legal-foot p { margin: 0; }
+.legal-foot a { color: var(--orange); text-decoration: none; }
+@media (max-width: 720px) {
+  .legal-article { padding: 32px 24px; border-radius: 16px; }
+  .legal-header h1 { font-size: 26px; }
+}
+
 /* ---------- Admin Login (dedicated /admin/login page) ---------- */
 .admin-login-page {
   min-height: 100vh;

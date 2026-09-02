@@ -151,7 +151,7 @@ async function api(path, opts = {}) {
     // /api/* path because rewrites are wrong), synthesize a clear error object
     // so callers never receive a string where they expect a JSON object.
     if (/^\s*<!doctype|^\s*<html/i.test(text)) {
-      throw { status: res.status || 502, data: { error: 'API endpoint not reachable — got HTML instead of JSON. Check Vercel routing.' } };
+      throw { status: res.status || 502, data: { error: 'API endpoint not reachable. Got HTML instead of JSON. Check Vercel routing.' } };
     }
     data = text;
   }
@@ -780,7 +780,7 @@ route(/^\/$/, async (app) => {
         <div class="testi-grid">
           ${[
             { name: 'Andi Prasetyo', role: 'Founder, PT Kopi Nusantara', avatar: 'AP', text: 'Kami dulu 40 jam per minggu cari data buyer di LinkedIn & pameran. Sekarang cukup 1 jam dengan HS 0901.11 sudah ada 20 lead + kontak Procurement Head.' },
-            { name: 'Sari Mulyani', role: 'Export Manager, Vanili Bali', avatar: 'SM', text: 'Data UN Comtrade real bikin kami tahu $11.5M vanilla exports ke USA per tahun — angle outreach jadi jauh lebih meyakinkan.' },
+            { name: 'Sari Mulyani', role: 'Export Manager, Vanili Bali', avatar: 'SM', text: 'Data UN Comtrade real bikin kami tahu $11.5M vanilla exports ke USA per tahun. Angle outreach jadi jauh lebih meyakinkan.' },
             { name: 'Rudi Hartanto', role: 'Direktur, Jepara Furniture Ekspor', avatar: 'RH', text: 'Fitur USITC HTS bikin harga FOB kami competitive. Duty rate langsung ketahuan sebelum kirim quote. Deal ratio naik 3x.' },
           ].map((t) => `
             <article class="testi-card">
@@ -870,9 +870,9 @@ route(/^\/$/, async (app) => {
           </div>
           <div class="footer-col">
             <h4>Legal</h4>
-            <a href="#">Kebijakan Privasi</a>
-            <a href="#">Syarat Layanan</a>
-            <a href="#">Kebijakan Refund</a>
+            <a href="#/privacy">Kebijakan Privasi</a>
+            <a href="#/terms">Syarat Layanan</a>
+            <a href="#/refund">Kebijakan Refund</a>
           </div>
         </div>
         <div class="footer-bottom">
@@ -1084,7 +1084,7 @@ route(/^\/login$/, (app) => {
           return;
         }
         if (!data || !data.session) {
-          toast('Login gagal — cek email konfirmasi Anda.', true);
+          toast('Login gagal. Cek email konfirmasi Anda.', true);
           return;
         }
         // Sync to backend (best-effort — Bearer token also auto-attaches on subsequent requests)
@@ -1168,6 +1168,136 @@ route(/^\/register$/, (app) => {
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = origLabel || 'Buat akun'; }
     }
   });
+});
+
+// ================= legal pages (Terms, Privacy, Refund) =================
+function legalShell(title, updated, bodyHtml) {
+  return `<div class="legal-page">
+    <div class="legal-topbar">
+      <a class="legal-back" href="#/">← Kembali ke beranda</a>
+    </div>
+    <article class="legal-article">
+      <div class="legal-header">
+        <h1>${title}</h1>
+        <p class="legal-updated">Terakhir diperbarui: ${updated}</p>
+      </div>
+      <div class="legal-body">${bodyHtml}</div>
+      <div class="legal-foot">
+        <p>Ada pertanyaan? Kirim email ke <a href="mailto:hello@eksporin.id">hello@eksporin.id</a>.</p>
+      </div>
+    </article>
+  </div>`;
+}
+
+route(/^\/terms$/, (app) => {
+  app.innerHTML = legalShell('Syarat Layanan', '2 September 2026', `
+    <h2>1. Tentang EksporIn</h2>
+    <p>EksporIn adalah platform intelijen buyer luar negeri untuk eksportir Indonesia. Kami mengumpulkan, menormalisasi, dan menyajikan data yang berasal dari sumber publik seperti UN Comtrade+, USITC HTS, WCO Nomenclature, catatan bill of lading US Customs (CBP AMS), direktori bisnis publik, laporan Kemendag ITPC, dan crawl web publik lainnya. Dengan mendaftar dan menggunakan layanan kami, Anda menyetujui syarat di bawah ini.</p>
+
+    <h2>2. Sifat data yang kami sajikan</h2>
+    <p>Data buyer yang Anda lihat di platform berasal dari sumber terbuka. Kami melakukan agregasi, verifikasi berjenjang, dan pengayaan (enrichment) menggunakan AI. Meskipun kami berusaha akurat, data disajikan apa adanya (as-is). Kami tidak menjamin bahwa setiap kontak masih aktif, setiap perusahaan masih beroperasi, atau setiap volume ekspor merefleksikan realitas terkini secara real-time. Anda wajib memverifikasi ulang sebelum melakukan transaksi bisnis.</p>
+
+    <h2>3. Kewajiban pengguna</h2>
+    <p>Sebagai pengguna, Anda bertanggung jawab untuk:</p>
+    <ul>
+      <li>Mematuhi hukum negara buyer saat melakukan outreach, termasuk namun tidak terbatas pada GDPR (Uni Eropa), CAN-SPAM Act (Amerika Serikat), PDPA (Singapura dan Malaysia), dan CASL (Kanada).</li>
+      <li>Tidak menggunakan data dari EksporIn untuk keperluan spam massal, penipuan, kegiatan ilegal, atau pelanggaran hak kekayaan intelektual.</li>
+      <li>Menjaga kerahasiaan akun. Semua aktivitas dari akun Anda menjadi tanggung jawab Anda.</li>
+      <li>Tidak menjual kembali, mendistribusikan, atau me-lisensikan ulang data dari platform ini kepada pihak ketiga tanpa izin tertulis dari kami.</li>
+    </ul>
+
+    <h2>4. Paket berbayar dan penagihan</h2>
+    <p>Kami menawarkan paket Free, Starter, Growth, dan Business. Detail harga dan kuota tercantum di halaman Harga. Pembayaran diproses melalui gateway pembayaran pihak ketiga. Langganan bulanan otomatis diperpanjang kecuali Anda menonaktifkannya dari menu Billing.</p>
+
+    <h2>5. Batasan tanggung jawab</h2>
+    <p>EksporIn tidak bertanggung jawab atas kerugian yang timbul dari keputusan bisnis Anda berdasarkan data platform, termasuk gagal transaksi, buyer yang tidak merespons, perbedaan kurs, atau perubahan tarif bea masuk. Tanggung jawab maksimum kami dalam kondisi apa pun terbatas pada nilai langganan tiga bulan terakhir yang telah Anda bayarkan.</p>
+
+    <h2>6. Penghentian akun</h2>
+    <p>Kami berhak menangguhkan atau menghapus akun yang terbukti melanggar syarat ini, termasuk aktivitas scraping otomatis terhadap platform kami, pembagian akun ke pengguna lain, atau penggunaan yang secara jelas melanggar hukum. Anda juga bebas menutup akun sendiri kapan saja lewat menu Pengaturan.</p>
+
+    <h2>7. Perubahan syarat</h2>
+    <p>Kami dapat memperbarui syarat ini sewaktu-waktu. Perubahan material akan kami informasikan melalui email dan banner di dashboard minimal 14 hari sebelum berlaku. Melanjutkan penggunaan setelah tanggal efektif berarti Anda menyetujui versi baru.</p>
+
+    <h2>8. Hukum yang berlaku</h2>
+    <p>Syarat ini tunduk pada hukum Republik Indonesia. Sengketa yang tidak dapat diselesaikan secara musyawarah akan diselesaikan melalui Badan Arbitrase Nasional Indonesia (BANI).</p>
+  `);
+});
+
+route(/^\/privacy$/, (app) => {
+  app.innerHTML = legalShell('Kebijakan Privasi', '2 September 2026', `
+    <h2>1. Data yang kami kumpulkan</h2>
+    <p>Saat Anda mendaftar dan menggunakan EksporIn, kami menyimpan:</p>
+    <ul>
+      <li>Data akun: nama, email, nama usaha, password (dienkripsi hash bcrypt).</li>
+      <li>Data preferensi: HS code fokus, negara target, status ekspor, tujuan penggunaan.</li>
+      <li>Data aktivitas: pencarian buyer, buyer yang disimpan, pesan yang dikirim, halaman yang dikunjungi.</li>
+      <li>Data teknis: alamat IP, tipe browser, waktu akses, untuk keperluan keamanan dan analitik agregat.</li>
+      <li>Data pembayaran: hanya token transaksi dari gateway. Kami tidak menyimpan nomor kartu Anda.</li>
+    </ul>
+
+    <h2>2. Data yang kami tampilkan</h2>
+    <p>Data buyer luar negeri yang Anda lihat di dashboard bukan data personal warga negara Anda. Data tersebut berasal dari sumber publik: catatan bea cukai, direktori bisnis, laporan pemerintah, dan crawl web publik. Semua data yang kami tampilkan adalah data bisnis (nama perusahaan, alamat kantor, email umum seperti info@ atau sales@, telepon perusahaan, website).</p>
+
+    <h2>3. Cara kami menggunakan data Anda</h2>
+    <ul>
+      <li>Menyajikan layanan dan mempersonalisasi rekomendasi buyer.</li>
+      <li>Memproses pembayaran dan memberikan support.</li>
+      <li>Mengirim email operasional (invoice, konfirmasi, pemberitahuan sistem). Anda bisa berhenti langganan email pemasaran kapan saja.</li>
+      <li>Memantau kesehatan sistem, mencegah penyalahgunaan, memenuhi kewajiban hukum.</li>
+    </ul>
+
+    <h2>4. Kami tidak menjual data Anda</h2>
+    <p>EksporIn tidak menjual, menyewakan, atau menukar data personal pengguna kepada pihak ketiga untuk tujuan pemasaran. Data agregat dan anonim (misal jumlah pengguna per provinsi) dapat kami gunakan untuk publikasi ringkasan pasar, tanpa mengungkap identitas individu.</p>
+
+    <h2>5. Pihak ketiga yang kami gunakan</h2>
+    <p>Kami menggunakan penyedia infrastruktur untuk hosting (Vercel), autentikasi dan basis data (Supabase), gateway pembayaran, serta model AI untuk pengayaan data. Masing-masing hanya menerima data seperlunya, dan tidak diperbolehkan menggunakan data Anda untuk keperluan mereka sendiri.</p>
+
+    <h2>6. Hak Anda</h2>
+    <ul>
+      <li>Meminta salinan seluruh data pribadi Anda yang kami simpan.</li>
+      <li>Mengoreksi data yang salah.</li>
+      <li>Menghapus akun Anda sekaligus seluruh data terkait.</li>
+      <li>Berhenti berlangganan komunikasi non-transaksional.</li>
+    </ul>
+    <p>Untuk melakukan salah satu di atas, kirim permintaan ke <a href="mailto:privacy@eksporin.id">privacy@eksporin.id</a>. Kami merespons dalam 14 hari kerja.</p>
+
+    <h2>7. Cookies</h2>
+    <p>Kami menggunakan cookie teknis untuk menjaga sesi login Anda dan cookie analitik agregat. Kami tidak menggunakan cookie iklan pihak ketiga.</p>
+
+    <h2>8. Perlindungan data</h2>
+    <p>Data pengguna disimpan di server dengan enkripsi at-rest dan in-transit. Password di-hash. Akses internal ke database dibatasi hanya untuk personel yang membutuhkan.</p>
+
+    <h2>9. Kontak DPO</h2>
+    <p>Data Protection Officer EksporIn dapat dihubungi di <a href="mailto:privacy@eksporin.id">privacy@eksporin.id</a>.</p>
+  `);
+});
+
+route(/^\/refund$/, (app) => {
+  app.innerHTML = legalShell('Kebijakan Refund', '2 September 2026', `
+    <h2>1. Uji coba 7 hari</h2>
+    <p>Semua paket berbayar hadir dengan periode uji coba 7 hari. Anda bisa membatalkan langganan dalam 7 hari pertama dan mendapat refund penuh, tanpa perlu alasan.</p>
+
+    <h2>2. Setelah 7 hari</h2>
+    <p>Setelah masa uji coba berakhir, refund diberikan hanya jika:</p>
+    <ul>
+      <li>Layanan mengalami gangguan teknis di sisi kami yang berdampak signifikan pada penggunaan (downtime lebih dari 24 jam berturut-turut dalam periode tagihan).</li>
+      <li>Terjadi kesalahan penagihan ganda.</li>
+      <li>Fitur inti yang dijanjikan tidak tersedia dan tidak dapat kami perbaiki dalam waktu wajar.</li>
+    </ul>
+
+    <h2>3. Paket tahunan</h2>
+    <p>Untuk paket tahunan, refund pro rata tersedia dalam 30 hari pertama. Setelah 30 hari, langganan tahunan bersifat final namun akun tetap aktif hingga akhir periode tagihan.</p>
+
+    <h2>4. Yang tidak di-refund</h2>
+    <ul>
+      <li>Ketidakpuasan terhadap kualitas atau kuantitas data buyer yang tersedia untuk komoditas atau negara Anda. Ini adalah karakter alami dari sumber data publik dan bisa Anda evaluasi selama uji coba 7 hari.</li>
+      <li>Perubahan kebijakan ekspor pemerintah, perubahan tarif bea masuk, atau kondisi pasar yang mempengaruhi bisnis Anda.</li>
+      <li>Kegagalan Anda menutup transaksi dengan buyer yang kami sajikan.</li>
+    </ul>
+
+    <h2>5. Cara mengajukan refund</h2>
+    <p>Kirim permintaan ke <a href="mailto:billing@eksporin.id">billing@eksporin.id</a> dengan subjek "Refund Request" dan sertakan nomor invoice. Kami memproses dalam 7 hari kerja. Dana dikembalikan ke metode pembayaran yang sama dengan yang Anda gunakan saat berlangganan.</p>
+  `);
 });
 
 // ================= onboarding wizard =================
