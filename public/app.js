@@ -529,13 +529,8 @@ route(/^\/$/, async (app) => {
             <form class="hero-search" id="hero-try-form" onsubmit="return false" autocomplete="off">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
               <input id="hero-try-input" type="text" placeholder="Tuliskan komoditas Anda misal: kopi robusta, Vanili Kering, Nilam…" autocomplete="off">
-              <button type="submit" id="hero-try-btn">Cari</button>
+              <button type="submit" id="hero-try-btn">Cari Buyer</button>
             </form>
-            <div id="hero-try-results" class="hero-results" style="display:none"></div>
-            <a class="hero-cta hero-cta-below" href="#/register" style="margin-top:0;display:none" id="hero-try-signup">
-              <span>Daftar sekarang</span>
-              <span class="arrow-circle">${CHEVRON_RIGHT}</span>
-            </a>
           </div>
 
           <p class="hero-demo-hint">Sudah punya akun? <a href="#/login">Masuk di sini</a></p>
@@ -887,12 +882,9 @@ route(/^\/$/, async (app) => {
     </footer>
   </div>`;
 
-  // Wire the hero commodity search demo — 2 real results + 3 blurred + signup CTA
+  // Wire the hero commodity search — redirects to the Quick Search page.
   const heroForm = document.getElementById('hero-try-form');
   const heroInput = document.getElementById('hero-try-input');
-  const heroResults = document.getElementById('hero-try-results');
-  const heroSignup = document.getElementById('hero-try-signup');
-  const heroSubmit = document.getElementById('hero-try-btn');
   // Rotate 3 hints inside the search bar placeholder every 3 seconds.
   if (heroInput) {
     const HINTS = [
@@ -906,46 +898,133 @@ route(/^\/$/, async (app) => {
     setInterval(() => { idx = (idx + 1) % HINTS.length; applyHint(); }, 3000);
   }
   if (heroForm && heroInput) {
-    const runSearch = async () => {
+    heroForm.addEventListener('submit', (e) => {
+      e.preventDefault();
       const q = heroInput.value.trim();
       if (!q) return;
-      heroSubmit.disabled = true;
-      heroSubmit.textContent = 'Mencari…';
-      heroResults.style.display = 'block';
-      heroResults.innerHTML = '<div class="hero-results-loading"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Mencari HS code untuk "' + esc(q) + '"…</div>';
-      try {
-        const r = await fetch('/api/hs/search?q=' + encodeURIComponent(q));
-        const body = await r.json();
-        const rows = Array.isArray(body.results) ? body.results : [];
-        if (!rows.length) {
-          heroResults.innerHTML = '<div class="hero-results-empty">Tidak ada HS code cocok. Coba kata lain (mis. "kopi", "vanili", "rotan").</div>';
-          heroSignup.style.display = 'none';
-        } else {
-          const visible = rows.slice(0, 2);
-          const hidden = rows.slice(2, 5);
-          heroResults.innerHTML = `
-            <div class="hero-results-head">Ditemukan ${rows.length} HS code · menampilkan 2 hasil pertama</div>
-            <div class="hero-results-list">
-              ${visible.map((v) => `<div class="hero-result-row">
-                <span class="hero-result-hs">${v.code.replace(/^(\d{4})/, '$1.')}</span>
-                <span class="hero-result-desc">${esc(v.description)}</span>
-              </div>`).join('')}
-              ${hidden.map((v) => `<div class="hero-result-row hero-result-blur">
-                <span class="hero-result-hs">${v.code.replace(/^(\d{4})/, '$1.')}</span>
-                <span class="hero-result-desc">${esc(v.description)}</span>
-              </div>`).join('')}
+      location.hash = '#/quick-search?q=' + encodeURIComponent(q);
+    });
+  }
+});
+
+// ================= public quick-search preview page =================
+route(/^\/quick-search$/, async (app, m, params) => {
+  const q = (params.get('q') || '').trim();
+  app.innerHTML = `
+  <div class="qs-page">
+    <div class="qs-nav">
+      <a href="#/" class="qs-brand">${LOGO_SVG} <span>EksporIn</span></a>
+      <div class="qs-nav-right">
+        <a href="#/login" class="btn btn-ghost" style="height:36px;padding:6px 14px;font-size:13px">Masuk</a>
+        <a href="#/register" class="btn btn-primary" style="height:36px;padding:6px 16px;font-size:13px;border-radius:var(--radius-full)">Daftar gratis</a>
+      </div>
+    </div>
+
+    <div class="qs-header">
+      <a href="#/" class="qs-back">← Kembali ke beranda</a>
+      <h1>Hasil pencarian buyer untuk "<span class="qs-query">${esc(q || '…')}</span>"</h1>
+      <p class="qs-sub">Preview buyer luar negeri yang aktif impor komoditas Anda. Kontak decision maker + data lengkap tersedia setelah daftar (gratis).</p>
+      <form class="qs-search" id="qs-form" autocomplete="off">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="qs-input" type="text" value="${esc(q)}" placeholder="Ganti komoditas untuk cari buyer lain…">
+        <button type="submit">Cari Buyer</button>
+      </form>
+    </div>
+
+    <div id="qs-body" class="qs-body">
+      <div class="qs-loading"><span class="spinner"></span> Mencari buyer untuk "${esc(q)}"…</div>
+    </div>
+
+    <div class="qs-cta">
+      <div class="qs-cta-inner">
+        <div>
+          <h2>Butuh data buyer lebih banyak?</h2>
+          <p>Daftar gratis untuk buka semua ${'{count}'} buyer, kontak decision maker, riwayat shipment, dan data ekspor UN Comtrade untuk komoditas Anda.</p>
+        </div>
+        <a href="#/register${q ? '?utm=quick-search&q=' + encodeURIComponent(q) : ''}" class="btn btn-primary btn-lg" style="border-radius:var(--radius-full);padding:14px 32px;font-size:16px;white-space:nowrap">Daftar sekarang →</a>
+      </div>
+    </div>
+  </div>`;
+
+  // Bind form to re-search on submit
+  document.getElementById('qs-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = document.getElementById('qs-input').value.trim();
+    if (!v) return;
+    location.hash = '#/quick-search?q=' + encodeURIComponent(v);
+  });
+
+  if (!q) {
+    document.getElementById('qs-body').innerHTML = '<div class="empty" style="padding:60px 20px;text-align:center"><h3>Ketik komoditas Anda dulu</h3><p class="muted">Contoh: kopi arabika, vanili kering, rotan, batik.</p></div>';
+    return;
+  }
+
+  // Fetch preview buyers
+  try {
+    const r = await fetch('/api/preview/buyers?q=' + encodeURIComponent(q));
+    const body = await r.json();
+    const body_el = document.getElementById('qs-body');
+    if (!body_el) return;
+    if (!body.ok || !body.buyers?.length) {
+      body_el.innerHTML = `
+        <div class="empty" style="padding:60px 20px;text-align:center">
+          <h3>Belum ada buyer di database publik kami untuk "${esc(q)}"</h3>
+          <p class="muted" style="margin-bottom:20px">${esc(body.message || 'Coba komoditas lain, atau daftar untuk pencarian AI penuh (LLM + real-time trade data).')}</p>
+          <a href="#/register" class="btn btn-primary btn-lg">Daftar gratis untuk pencarian penuh</a>
+        </div>`;
+      return;
+    }
+    const total = body.total_buyers_available;
+    const hs = body.hs;
+    body_el.innerHTML = `
+      <div class="qs-hs-summary">
+        <div>
+          <span class="caption muted-3">HS Code terdeteksi</span>
+          <h3><span class="hs-code-chip">${hs.code.replace(/^(\d{4})/, '$1.')}</span> ${esc(hs.description)}</h3>
+        </div>
+        ${body.hs_alternatives?.length ? `
+          <div class="qs-hs-alts">
+            <span class="caption muted-3">Atau:</span>
+            ${body.hs_alternatives.map((a) => `<button class="qs-hs-alt-chip" data-q="${esc(a.description.split(';')[0])}">${a.code.replace(/^(\d{4})/, '$1.')} · ${esc(a.description.slice(0, 42))}${a.description.length > 42 ? '…' : ''}</button>`).join('')}
+          </div>` : ''}
+      </div>
+      <div class="qs-buyers">
+        ${body.buyers.map((b) => `
+          <article class="qs-buyer-card ${b.blurred ? 'is-blurred' : ''}">
+            <div class="qs-buyer-head">
+              <div class="qs-buyer-avatar">${esc((b.name || '?').split(' ').map((x) => x[0]).slice(0,2).join('').toUpperCase())}</div>
+              <div style="flex:1;min-width:0">
+                <div class="qs-buyer-name">${esc(b.name)}</div>
+                <div class="qs-buyer-meta">${flag(b.country)} ${esc(b.country_name)} · ${esc(b.city || '')} · ${esc(b.industry || '')}</div>
+              </div>
+              ${b.score != null ? `<span class="pill ${b.score >= 80 ? 'pill-danger' : b.score >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:11px">Skor ${b.score}</span>` : ''}
             </div>
-            <div class="hero-results-lock">🔒 ${hidden.length}+ HS code lain, kontak buyer, dan data ekspor UN Comtrade tersedia setelah daftar.</div>`;
-          heroSignup.style.display = 'inline-flex';
-        }
-      } catch (e) {
-        heroResults.innerHTML = '<div class="hero-results-empty">Gagal mengambil HS code. Coba lagi.</div>';
-      } finally {
-        heroSubmit.disabled = false;
-        heroSubmit.textContent = 'Cari';
-      }
-    };
-    heroForm.addEventListener('submit', (e) => { e.preventDefault(); runSearch(); });
+            <div class="qs-buyer-stats">
+              <div><span class="caption muted-3">Shipment 12 bln</span><b>${fmtN(b.shipments_12mo)}</b></div>
+              <div><span class="caption muted-3">Volume</span><b>${fmtKg(b.volume_12mo_kg)}</b></div>
+              <div><span class="caption muted-3">Nilai</span><b>${fmtUSD(b.value_12mo_usd)}</b></div>
+              <div><span class="caption muted-3">Ukuran</span><b>${esc(b.size || '-')}</b></div>
+            </div>
+            <div class="qs-buyer-contact">
+              <span class="caption muted-3">Kontak decision maker</span>
+              <div class="qs-buyer-contact-masked">🔒 ••••••@•••••.com · +•• ••• ••• ••</div>
+            </div>
+          </article>`).join('')}
+      </div>
+      <div class="qs-unlock">
+        🔒 <b>${Math.max(0, total - 2)}+ buyer lain</b> beserta kontak email & LinkedIn tersedia setelah daftar (gratis, tanpa kartu kredit).
+      </div>`;
+
+    // Update the CTA count text
+    const cta = document.querySelector('.qs-cta p');
+    if (cta) cta.textContent = cta.textContent.replace('{count}', String(total));
+
+    // Bind alt HS chips → re-search
+    document.querySelectorAll('.qs-hs-alt-chip').forEach((el) => el.addEventListener('click', () => {
+      location.hash = '#/quick-search?q=' + encodeURIComponent(el.dataset.q);
+    }));
+  } catch (e) {
+    document.getElementById('qs-body').innerHTML = '<div class="empty" style="padding:60px 20px;text-align:center"><h3>Gagal memuat data</h3><p class="muted">Coba lagi atau daftar untuk pengalaman penuh.</p></div>';
   }
 });
 

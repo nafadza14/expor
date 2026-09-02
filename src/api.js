@@ -614,6 +614,57 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, Object.entries(PLANS).map(([code, pl]) => ({ code, ...pl })));
   }
 
+  // Public preview: given a natural-language commodity query, resolve it to
+  // an HS 6-digit via the offline WCO nomenclature (Indonesian-aware),
+  // then return a teaser list of buyers who import that HS. Two rows are
+  // returned unmasked, three more are marked "blurred:true" so the landing
+  // Quick Search page can visually gate them behind the signup CTA.
+  // GET /api/preview/buyers?q=vanili
+  if (route('GET', '/api/preview/buyers')) {
+    const qStr = (q.get('q') || '').trim();
+    if (!qStr) return json(res, 200, { ok: false, query: '', message: 'Query kosong.' });
+    const hsHits = searchHsNomenclature(qStr, 5);
+    if (!hsHits.length) return json(res, 200, { ok: false, query: qStr, hs: null, buyers: [], message: 'HS code tidak ditemukan.' });
+    const hs4 = hsHits[0].code.slice(0, 4);
+    // Pull up to 5 buyers with a matching HS prefix from the seeded directory.
+    const buyerRows = db.prepare(`
+      SELECT b.id, b.name, b.country, b.city, b.industry, b.size_bucket,
+             b.shipments_12mo, b.volume_12mo_kg, b.value_12mo_usd,
+             b.base_score
+      FROM buyers b
+      JOIN buyer_hs bh ON bh.buyer_id = b.id
+      WHERE bh.hs_code LIKE ?
+      GROUP BY b.id
+      ORDER BY b.base_score DESC
+      LIMIT 5
+    `).all(hs4 + '%');
+    const buyers = buyerRows.map((b, i) => ({
+      id: b.id,
+      name: b.name,
+      country: b.country,
+      country_name: COUNTRY_NAMES[b.country] || b.country,
+      city: b.city,
+      industry: b.industry,
+      size: b.size_bucket,
+      shipments_12mo: b.shipments_12mo,
+      volume_12mo_kg: b.volume_12mo_kg,
+      value_12mo_usd: b.value_12mo_usd,
+      score: b.base_score,
+      blurred: i >= 2, // first 2 clear, rest blurred
+    }));
+    return json(res, 200, {
+      ok: true,
+      query: qStr,
+      hs: {
+        code: hsHits[0].code,
+        description: hsHits[0].description,
+      },
+      hs_alternatives: hsHits.slice(1, 4).map((h) => ({ code: h.code, description: h.description })),
+      buyers,
+      total_buyers_available: buyerRows.length,
+    });
+  }
+
   // HS search — public endpoint so the landing page "try before signup"
   // commodity search can hit it without an auth cookie. Runs entirely against
   // the offline WCO nomenclature file — no external calls, no rate limits.
