@@ -25,12 +25,12 @@ from typing import Callable, Awaitable
 try:
     from .shared import db as db_mod
     from .shared.schema import BuyerRecord
-    from .crawlers import kompass, europages
+    from .crawlers import kompass, europages, companies_house_uk
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from python_scrapers.shared import db as db_mod  # type: ignore
     from python_scrapers.shared.schema import BuyerRecord  # type: ignore
-    from python_scrapers.crawlers import kompass, europages  # type: ignore
+    from python_scrapers.crawlers import kompass, europages, companies_house_uk  # type: ignore
 
 
 # Same HS list as src/scrape-config.js, but expressed here as
@@ -46,13 +46,21 @@ HS_KEYWORDS: list[tuple[str, str]] = [
 ]
 
 # Countries with strong buyer presence for coffee + spices.
-COUNTRIES: list[str] = ["US", "DE", "NL", "IT", "JP", "IN", "MY", "EG", "FR", "GB"]
+COUNTRIES: list[str] = ["GB", "US", "DE", "NL", "IT", "JP", "IN", "MY", "EG", "FR"]
 
 Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 
+# Some crawlers only make sense for specific countries. If a crawler's
+# `only_countries` set is non-empty, we skip (source, hs, other-country)
+# slices for it.
 CRAWLERS: dict[str, Crawler] = {
+    "companies_house_uk": lambda kw, co, hs: companies_house_uk.crawl_one(kw, co, hs),
     "kompass": lambda kw, co, hs: kompass.crawl_one(kw, co, hs),
     "europages": lambda kw, co, hs: europages.crawl_one(kw, co, hs),
+}
+
+ONLY_COUNTRIES: dict[str, set[str]] = {
+    "companies_house_uk": {"GB"},
 }
 
 
@@ -61,8 +69,10 @@ def build_matrix() -> list[tuple[str, str, str, str]]:
     consecutive runs do not all hit the same site first."""
     triples: list[tuple[str, str, str, str]] = []
     for source in CRAWLERS.keys():
+        only = ONLY_COUNTRIES.get(source)
+        countries = [c for c in COUNTRIES if not only or c in only]
         for hs, kw in HS_KEYWORDS:
-            for co in COUNTRIES:
+            for co in countries:
                 triples.append((source, hs, kw, co))
     random.shuffle(triples)
     return triples
