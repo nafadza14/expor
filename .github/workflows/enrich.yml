@@ -54,3 +54,17 @@ jobs:
           MODE="${{ github.event.inputs.mode || 'contacts' }}"
           CONC="${{ github.event.inputs.concurrency || '6' }}"
           node scripts/enrich.js --max "$MAX" --mode "$MODE" --concurrency "$CONC"
+      # Self-dispatch next enrich run so the enrichment loop is also
+      # continuous, independent of GitHub cron reliability.
+      - name: Chain next enrich
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "WORKFLOW_PAT not set. Skipping self-chain; relying on cron + workflow_run."
+            exit 0
+          fi
+          sleep 60
+          gh workflow run enrich.yml --repo ${{ github.repository }} \
+            -f max=250 -f mode=contacts -f concurrency=6 || true

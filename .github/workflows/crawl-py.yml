@@ -46,3 +46,21 @@ jobs:
           MIN="${{ github.event.inputs.minutes || '35' }}"
           CONC="${{ github.event.inputs.concurrency || '10' }}"
           python python_scrapers/main.py run --minutes "$MIN" --concurrency "$CONC"
+      # Self-dispatch the next crawl-py run. This is the infinite chain
+      # that keeps the crawler going even when GitHub free-tier cron
+      # drops slots. Requires the WORKFLOW_PAT secret (Personal Access
+      # Token with `workflow` scope). If the token is missing, the step
+      # silently no-ops and we fall back to cron + watchdog.
+      - name: Chain next crawl-py
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "WORKFLOW_PAT not set. Skipping self-chain; relying on cron + watchdog."
+            exit 0
+          fi
+          # Small delay so we do not tight-loop when a run finishes fast.
+          sleep 30
+          gh workflow run crawl-py.yml --repo ${{ github.repository }} \
+            -f minutes=30 -f concurrency=10 || true

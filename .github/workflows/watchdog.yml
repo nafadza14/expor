@@ -21,28 +21,34 @@ jobs:
     steps:
       - name: Check last crawl-py run and re-dispatch if stale
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer the user-provided PAT so we can dispatch other
+          # workflows even from a scheduled context. Fall back to the
+          # built-in token; it works for read-only queries but the
+          # dispatch call will only succeed with a PAT that has the
+          # `workflow` scope.
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          # Most recent crawl-py run's updated_at (ISO 8601)
           last=$(gh run list --repo ${{ github.repository }} \
                    --workflow=crawl-py.yml --limit 1 \
                    --json updatedAt --jq '.[0].updatedAt' 2>/dev/null || echo "")
           if [ -z "$last" ]; then
             echo "No prior crawl-py run seen. Dispatching."
             gh workflow run crawl-py.yml --repo ${{ github.repository }} \
-              -f minutes=30 -f concurrency=10
+              -f minutes=30 -f concurrency=10 || echo "dispatch failed (need WORKFLOW_PAT)"
             exit 0
           fi
-          # seconds since last run
           last_ts=$(date -u -d "$last" +%s 2>/dev/null || echo 0)
           now_ts=$(date -u +%s)
           age=$(( now_ts - last_ts ))
           echo "Last crawl-py finished ${age}s ago"
-          if [ "$age" -gt 5400 ]; then
-            echo "Stale (>90 min). Dispatching crawl-py."
+          # Redispatch if idle for 45+ minutes (was 90). Tighter watchdog
+          # because self-chain plus staggered cron should keep it under
+          # 30 min in normal operation; 45 already means something is off.
+          if [ "$age" -gt 2700 ]; then
+            echo "Stale (>45 min). Dispatching crawl-py."
             gh workflow run crawl-py.yml --repo ${{ github.repository }} \
-              -f minutes=30 -f concurrency=10
+              -f minutes=30 -f concurrency=10 || echo "dispatch failed (need WORKFLOW_PAT)"
           else
             echo "Fresh. No action."
           fi
