@@ -25,12 +25,12 @@ from typing import Callable, Awaitable
 try:
     from .shared import db as db_mod
     from .shared.schema import BuyerRecord
-    from .crawlers import kompass, europages, companies_house_uk
+    from .crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from python_scrapers.shared import db as db_mod  # type: ignore
     from python_scrapers.shared.schema import BuyerRecord  # type: ignore
-    from python_scrapers.crawlers import kompass, europages, companies_house_uk  # type: ignore
+    from python_scrapers.crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us  # type: ignore
 
 
 # Same HS list as src/scrape-config.js, but expressed here as
@@ -46,7 +46,7 @@ HS_KEYWORDS: list[tuple[str, str]] = [
 ]
 
 # Countries with strong buyer presence for coffee + spices.
-COUNTRIES: list[str] = ["GB", "US", "DE", "NL", "IT", "JP", "IN", "MY", "EG", "FR"]
+COUNTRIES: list[str] = ["GB", "US", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG"]
 
 Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 
@@ -55,12 +55,16 @@ Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 # slices for it.
 CRAWLERS: dict[str, Crawler] = {
     "companies_house_uk": lambda kw, co, hs: companies_house_uk.crawl_one(kw, co, hs),
+    "sirene_fr": lambda kw, co, hs: sirene_fr.crawl_one(kw, co, hs),
+    "sec_edgar_us": lambda kw, co, hs: sec_edgar_us.crawl_one(kw, co, hs),
     "kompass": lambda kw, co, hs: kompass.crawl_one(kw, co, hs),
     "europages": lambda kw, co, hs: europages.crawl_one(kw, co, hs),
 }
 
 ONLY_COUNTRIES: dict[str, set[str]] = {
     "companies_house_uk": {"GB"},
+    "sirene_fr": {"FR"},
+    "sec_edgar_us": {"US"},
 }
 
 

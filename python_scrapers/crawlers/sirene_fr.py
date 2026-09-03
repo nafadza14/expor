@@ -1,0 +1,106 @@
+"""SIRENE France via recherche-entreprises.api.gouv.fr.
+
+The Direction Interministerielle du Numerique publishes a free, unlimited,
+no-auth JSON API on top of the INSEE SIRENE / SIRET base plus the DGFIP
+enrichment. Every French registered entity is in there, including small
+importers relevant to coffee and spices. Response includes SIREN,
+official name, primary NAF activity code (used as our industry hint),
+head office address, first opening date, and whether the entity is still
+active.
+"""
+
+from __future__ import annotations
+import httpx
+from urllib.parse import quote
+
+from ..shared.schema import BuyerRecord
+
+
+SOURCE = "sirene_fr"
+BASE = "https://recherche-entreprises.api.gouv.fr/search"
+
+UA = "EksporIn/1.0 (+https://ekspor.zieads.com; hello@eksporin.id)"
+
+# NAF -> compact English industry label. Not exhaustive; if not mapped we
+# keep the raw code so the admin can spot patterns later.
+NAF_INDUSTRY = {
+    "10.": "food manufacturing",
+    "11.": "beverage manufacturing",
+    "46.": "wholesale trade",
+    "47.": "retail trade",
+    "56.": "food service",
+    "10.83": "coffee and tea processing",
+    "46.37": "coffee, tea and spice wholesale",
+    "46.31": "fruit and vegetable wholesale",
+    "10.84": "spice manufacturing",
+}
+
+
+def _industry_from_naf(naf: str | None) -> str | None:
+    if not naf:
+        return None
+    for prefix, label in NAF_INDUSTRY.items():
+        if naf.startswith(prefix):
+            return label
+    return f"NAF {naf}"
+
+
+def _size_from_effectif(tranche: str | None) -> str | None:
+    """INSEE tranche_effectif_salarie codes:
+    NN / 00 = unknown, 01 = 1-2, 02 = 3-5, 03 = 6-9 -> small
+    11 = 10-19, 12 = 20-49, 21 = 50-99                -> medium
+    22..53 = 100+                                     -> large
+    """
+    if not tranche:
+        return None
+    try:
+        n = int(tranche)
+    except (TypeError, ValueError):
+        return None
+    if n <= 3:
+        return "small"
+    if n <= 21:
+        return "medium"
+    return "large"
+
+
+async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
+                    per_page: int = 20) -> list[BuyerRecord]:
+    if country.upper() != "FR":
+        return []
+    url = f"{BASE}?q={quote(keyword)}&per_page={per_page}&etat_administratif=A"
+    try:
+        async with httpx.AsyncClient(timeout=25.0, headers={"User-Agent": UA}) as client:
+            res = await client.get(url)
+    except Exception:
+        return []
+    if res.status_code != 200:
+        return []
+    payload = res.json()
+    results = payload.get("results") or []
+
+    out: list[BuyerRecord] = []
+    for r in results:
+        siren = str(r.get("siren") or "")
+        name = (r.get("nom_complet") or r.get("nom_raison_sociale") or "").strip()
+        if not siren or not name:
+            continue
+        siege = r.get("siege") or {}
+        adresse = siege.get("adresse")
+        city = siege.get("libelle_commune") or siege.get("commune")
+        postal = siege.get("code_postal")
+        address_line = ", ".join(x for x in [adresse, postal, city, "France"] if x)
+        naf = siege.get("activite_principale") or r.get("activite_principale")
+        industry = _industry_from_naf(naf)
+        size = _size_from_effectif(r.get("tranche_effectif_salarie") or siege.get("tranche_effectif_salarie"))
+
+        out.append(BuyerRecord(
+            source=SOURCE, source_id=siren,
+            name=name, country="FR",
+            city=city, address=address_line or None,
+            industry=industry, size_bucket=size,
+            hs_codes=[hs_code] if hs_code else [],
+            data_confidence=80,
+            raw={"siren": siren, "naf": naf, "url": url},
+        ))
+    return out

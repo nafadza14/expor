@@ -2178,29 +2178,37 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
     throw e;
   }
   const tab = params.get('tab') || 'overview';
-  const tabs = [['overview', 'Ringkasan'], ['shipments', 'Riwayat Shipment'], ['suppliers', 'Pemasok'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['notes', 'Catatan & Aktivitas']];
+  const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['notes', 'Catatan & Aktivitas']];
+  const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
+  const sourceLabels = { gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
+  const verifPill = sources.length >= 2
+    ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
+    : `<span class="pill pill-neutral">Sumber tunggal</span>`;
   const header = `
     <div class="breadcrumb"><a href="#/cari">Cari Buyer</a><span class="sep">/</span><span>${esc(b.name)}</span></div>
     <div class="card" style="margin-bottom:24px"><div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
       <span class="avatar avatar-lg">${esc(b.name.slice(0, 2).toUpperCase())}</span>
       <div style="flex:1;min-width:240px">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h1>${esc(b.name)}</h1>
-          ${b.has_indonesian_supplier ? '<span class="pill pill-info">Pernah impor dari 🇮🇩</span>' : '<span class="pill pill-success">Untapped, belum dari 🇮🇩</span>'}</div>
-        <p class="muted" style="margin:4px 0 10px">${flag(b.country)} ${esc(b.address || b.city || '')} · ${esc(b.country_name)} · ${esc(b.industry || '')} · Ukuran ${b.size_bucket}</p>
+          ${verifPill}</div>
+        <p class="muted" style="margin:4px 0 10px">${flag(b.country)} ${esc(b.address || b.city || '')} · ${esc(b.country_name || b.country || '')}${b.industry ? ' · ' + esc(b.industry) : ''}${b.size_bucket ? ' · Ukuran ' + esc(b.size_bucket) : ''}</p>
         <div style="display:flex;gap:24px;flex-wrap:wrap">
-          <div><div class="caption muted-3">Total shipment</div><b class="num">${fmtN(b.total_shipments)}</b></div>
-          <div><div class="caption muted-3">Volume 12 bln</div><b class="num">${fmtKg(b.volume_12mo_kg)}</b></div>
-          <div><div class="caption muted-3">Nilai 12 bln</div><b class="num">${fmtUSD(b.value_12mo_usd)}</b></div>
-          <div><div class="caption muted-3">Shipment pertama</div><b class="num">${fmtDate(b.first_shipment_date)}</b></div>
-          <div><div class="caption muted-3">Terakhir</div><b class="num">${fmtDate(b.last_shipment_date)}</b></div></div>
+          <div><div class="caption muted-3">Data confidence</div><b class="num">${b.data_confidence || b.score || 60}%</b></div>
+          <div><div class="caption muted-3">Ditemukan pertama</div><b class="num">${b.first_seen ? fmtDate(b.first_seen) : '-'}</b></div>
+          <div><div class="caption muted-3">Terakhir diperbarui</div><b class="num">${b.last_updated ? fmtDate(b.last_updated) : '-'}</b></div>
+          <div><div class="caption muted-3">Enrichment</div><b class="num">${b.enriched ? '✓ Enriched' : 'Raw'}</b></div>
+          <div><div class="caption muted-3">HS terkait</div><b class="num">${(b.hs_codes || []).length}</b></div>
+        </div>
+        <div style="margin-top:10px">${sourceChips}</div>
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" onclick="composeTo(${b.id})">${I.send} Kirim outreach</button>
           <button class="btn btn-secondary btn-sm" onclick="saveToList(${b.id})">+ Simpan ke daftar</button>
-          ${b.website ? `<a class="btn btn-neutral btn-sm" href="${esc(b.website)}" target="_blank" rel="noopener">🌐 Website</a>` : ''}</div>
+          ${b.website ? `<a class="btn btn-neutral btn-sm" href="${esc(b.website)}" target="_blank" rel="noopener">${I.globe} Website</a>` : ''}</div>
         ${b.in_lists.length ? `<p class="caption muted" style="margin-top:10px">Tersimpan di: ${b.in_lists.map((l) => `<a href="#/list/${l.id}">${esc(l.name)}</a> ${statusPill(l.status)}`).join(' · ')}</p>` : ''}
       </div>
       <div class="gauge-wrap" style="flex-direction:column;align-items:center">${gauge(b.score)}
-        <span class="caption muted-3">Data confidence: ${b.data_confidence}%</span></div>
+        <span class="caption muted-3">Confidence: ${b.data_confidence || b.score || 60}%</span></div>
     </div></div>
     <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
     <div id="tab-body"><div class="skeleton" style="height:220px"></div></div>`;
@@ -2210,19 +2218,31 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const body = $('#tab-body');
 
   if (tab === 'overview') {
+    const desc = b.description ? `<div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:8px">Profil singkat (AI)</h3><p class="body-sm">${esc(b.description)}</p></div>` : '';
+    const scoreRows = [
+      ['Data confidence', b.data_confidence || 60, 'Skor kualitas data dari kombinasi sumber, LLM enrichment, dan pengayaan website.'],
+      ['Product fit', b.fit_score || 0, 'Cocok tidaknya HS fokus kamu dengan HS terkait buyer.'],
+      ['Cross-source', Math.min(100, sources.length * 40), sources.length >= 2 ? `Buyer ini ditemukan di ${sources.length} sumber independen.` : 'Baru ditemukan di 1 sumber. Perlu verifikasi manual.'],
+    ];
+    const scorePanel = scoreRows.map(([label, val, hint]) => `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span class="body-sm" style="font-weight:500">${label}</span><b class="num body-sm">${val}</b></div>
+        <div class="admin-bar"><div style="width:${val}%;background:var(--orange)"></div></div>
+        <div class="caption muted-3" style="margin-top:4px">${hint}</div>
+      </div>`).join('');
     body.innerHTML = `<div class="grid grid-2">
-      <div class="card"><h3 style="margin-bottom:14px">Skor EksporIn: komponen</h3>${scoreBars(b.score_components)}
-        <p class="caption muted-3" style="margin-top:10px">Kecocokan produk dihitung dari HS fokus Anda vs produk yang diimpor buyer ini. Bobot per Buyer Scoring Engine (F4).</p></div>
+      ${desc}
+      <div class="card"><h3 style="margin-bottom:14px">Skor kepercayaan</h3>${scorePanel}</div>
       <div class="card"><h3 style="margin-bottom:14px">Kontak</h3>
-        ${!b.contacts.length ? '<p class="muted">Belum ada kontak ter-enrich untuk buyer ini.</p>' : b.contacts.map((c) => `
+        ${!b.contacts.length ? '<p class="muted body-sm">Belum ada kontak ter-enrich. Enrichment nightly (03:00 WIB) akan mencoba fetch website + extract email/phone.</p>' : b.contacts.map((c) => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dotted var(--border-subtle)">
-            <div><span class="caption muted-3" style="text-transform:capitalize">${c.contact_type}${c.person_name ? ` · ${esc(c.person_name)} (${esc(c.person_title || '')})` : ''}</span><br>
+            <div><span class="caption muted-3" style="text-transform:capitalize">${c.contact_type}</span><br>
             ${c.masked ? `<span class="masked-chip">${esc(c.value)} 🔒</span>` : c.contact_type === 'website' || c.contact_type === 'linkedin' ? `<a href="${esc(c.value)}" target="_blank" rel="noopener">${esc(c.value)}</a>` : `<b>${esc(c.value)}</b>`}</div>
             <span class="caption muted-3">conf. ${c.confidence}%</span></div>`).join('')}
         ${!b.contacts_visible && b.contacts.length ? `<div class="banner banner-info" style="margin-top:12px">🔒 Kontak lengkap tersedia mulai paket <b>Growth</b>. <a href="#/billing">Upgrade</a></div>` : ''}</div>
-      <div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:14px">Produk yang diimpor</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">${b.hs_codes.map((h) => `<span class="tag"><b>${h.hs_code.replace(/^(\d{4})/, '$1.')}</b> ${esc(h.description_id)} · ${h.shipment_count}×</span>`).join('')}</div>
-        <p class="caption muted-3" style="margin-top:12px">Sumber data: catatan customs publik. Terakhir diperbarui: ${fmtDate(b.last_shipment_date)}.</p></div></div>`;
+      <div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:14px">HS terkait</h3>
+        ${(b.hs_codes || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.hs_codes.map((h) => `<span class="tag"><b>${(h.hs_code || h).replace(/^(\d{4})/, '$1.')}</b>${h.description_id ? ' · ' + esc(h.description_id) : ''}</span>`).join('')}</div>` : '<p class="muted body-sm">Belum ada HS yang di-associate. Buyer discovery via nama, HS bisa ditambahkan manual saat outreach.</p>'}
+        <p class="caption muted-3" style="margin-top:12px">Data live dari ${sources.map((s) => sourceLabels[s] || s).join(', ') || 'unknown'}. Terakhir diperbarui: ${b.last_updated ? fmtDate(b.last_updated) : '-'}.</p></div></div>`;
   } else if (tab === 'shipments') {
     const d = await api(`/api/buyers/${id}/shipments?page=${params.get('p') || 1}`);
     const totalPages = Math.max(1, Math.ceil(d.total / d.per));
@@ -3292,7 +3312,7 @@ route(/^\/admin$/, async (app, m, params) => {
             <table class="tbl">
               <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
               <tbody>
-                ${['gleif','companies_house_uk','kompass','europages','wikidata','importyeti','itpc'].map((s) => `<tr>
+                ${['gleif','companies_house_uk','sirene_fr','sec_edgar_us','kompass','europages','wikidata','importyeti','itpc'].map((s) => `<tr>
                   <td class="body-sm">${esc(s)}</td>
                   <td class="r num">${fmtN(bySrcMap[s] || 0)}</td>
                 </tr>`).join('')}
