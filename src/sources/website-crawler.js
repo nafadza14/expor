@@ -44,13 +44,22 @@ function stripHtml(html) {
 
 function extractEmails(html) {
   if (!html) return [];
-  const re = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
   const seen = new Set();
-  for (const m of html.match(re) || []) {
-    const e = m.toLowerCase();
-    if (!e.includes('@sentry.io') && !e.includes('@example.') && !e.endsWith('.png') && !e.endsWith('.jpg')) seen.add(e);
+  // 1. mailto: hrefs are the most reliable, decode percent-escapes.
+  for (const m of html.matchAll(/mailto:([^"'?\s<>]+)/gi)) {
+    try {
+      const e = decodeURIComponent(m[1]).toLowerCase();
+      if (e.includes('@') && e.includes('.')) seen.add(e);
+    } catch { /* skip */ }
   }
-  return Array.from(seen).slice(0, 5);
+  // 2. plain regex over body text.
+  for (const m of html.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []) {
+    seen.add(m.toLowerCase());
+  }
+  // 3. drop obvious noise: analytics providers, placeholders, static assets.
+  const bad = /@(sentry\.io|example\.|localhost|test\.|domain\.tld|sample\.|placeholder\.|wixpress\.com|jsdelivr\.net|cloudflare|googletagmanager|hotjar|intercom)/i;
+  const badExt = /\.(png|jpg|jpeg|gif|svg|webp|css|js|ico)$/i;
+  return Array.from(seen).filter((e) => !bad.test(e) && !badExt.test(e)).slice(0, 5);
 }
 
 function extractPhones(html) {
@@ -71,19 +80,34 @@ async function crawlWebsite(rootUrl) {
   let base;
   try { base = new URL(normalized); } catch (_e) { return null; }
 
-  const paths = ['/', '/contact', '/contact-us', '/about', '/impressum'];
+  // Broader path set: multiple languages + common contact-page variants.
+  const paths = [
+    '/', '/contact', '/contact-us', '/contact.html', '/about', '/about-us',
+    '/impressum', '/kontakt', '/nous-contacter', '/kontakt-uns',
+    '/company', '/team',
+  ];
   const combined = [];
   for (const p of paths) {
     const html = await fetchWithTimeout(new URL(p, base).toString());
     if (html) combined.push(html);
-    if (combined.length >= 3) break;
+    if (combined.length >= 4) break;
   }
   if (!combined.length) return null;
   const full = combined.join(' ');
+  const emails = extractEmails(full);
+  const phones = extractPhones(full);
+  // If the site had no explicit email but has a real domain, offer a
+  // generic address as an inferred lead. Small businesses reliably
+  // route info@ to their inbox, so it is a useful starting point
+  // even without a scraped confirmation.
+  if (!emails.length) {
+    const domain = base.hostname.replace(/^www\./, '');
+    emails.push(`info@${domain}`);
+  }
   return {
     text_snippet: stripHtml(full).slice(0, 2000),
-    emails: extractEmails(full),
-    phones: extractPhones(full),
+    emails,
+    phones,
   };
 }
 
