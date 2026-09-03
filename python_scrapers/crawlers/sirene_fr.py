@@ -68,26 +68,29 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
                     per_page: int = 25) -> list[BuyerRecord]:
     if country.upper() != "FR":
         return []
-    # Quality filters: active companies only, employee band >= 12 (20+ staff)
-    # so tiny cafe / hairdresser noise gets dropped. Also filter by NAF
-    # sections most relevant to food import/wholesale so we don't return
-    # unrelated firms whose display name happens to contain the keyword.
-    naf_focus = [
-        "46.37Z",  # Wholesale of coffee, tea, cocoa, spices
-        "46.31Z",  # Fruit and vegetable wholesale
-        "46.32A", "46.32B", "46.32C",  # Meat and seafood wholesale
-        "46.36Z",  # Wholesale sugar, chocolate
-        "46.38A",  # Fish wholesale
-        "46.39A", "46.39B",  # General food wholesale
-        "10.83Z",  # Coffee/tea processing
-        "10.84Z",  # Spice manufacturing
-    ]
+    # Map every seed HS to the most relevant NAF codes so we can query by
+    # activity (INDUSTRY-FIRST) instead of relying on a keyword hitting
+    # the company name. This surfaces real coffee/spice wholesalers that
+    # never call themselves "coffee" or "vanilla" but ARE the buyers.
+    NAF_BY_HS = {
+        "0901": ["46.37Z", "10.83Z"],  # coffee/tea/spice wholesale + coffee processing
+        "0902": ["46.37Z", "10.83Z"],
+        "0904": ["46.37Z", "10.84Z"],
+        "0905": ["46.37Z", "10.84Z"],
+        "0906": ["46.37Z", "10.84Z"],
+        "0907": ["46.37Z", "10.84Z"],
+        "0908": ["46.37Z", "10.84Z"],
+        "0910": ["46.37Z", "10.84Z"],
+    }
+    default_naf = ["46.37Z", "46.39A", "46.39B", "10.83Z", "10.84Z"]
+    naf_focus = NAF_BY_HS.get(hs_code, default_naf)
+    # Employee band 6+ (10+ staff). 12+ was too tight combined with the
+    # narrow NAF filter; the intersection was near-empty.
     params = [
-        f"q={quote(keyword)}",
         f"per_page={per_page}",
         "etat_administratif=A",
         "minimal=true",
-        "tranche_effectif_salarie=12,21,22,31,32,41,42,51,52,53",  # 20+ employees
+        "tranche_effectif_salarie=03,11,12,21,22,31,32,41,42,51,52,53",
         f"activite_principale={quote(','.join(naf_focus))}",
     ]
     url = f"{BASE}?{'&'.join(params)}"
