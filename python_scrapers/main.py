@@ -37,16 +37,31 @@ except ImportError:
 # (hs_code, english keyword) so crawlers have a search term.
 HS_KEYWORDS: list[tuple[str, str]] = [
     ("0901", "coffee"),
+    ("0901", "arabica"),
+    ("0901", "robusta"),
+    ("0901", "roastery"),
+    ("0901", "green coffee"),
+    ("0902", "tea"),
     ("0904", "pepper"),
+    ("0904", "black pepper"),
+    ("0904", "chili"),
     ("0905", "vanilla"),
+    ("0905", "vanilla bean"),
     ("0906", "cinnamon"),
+    ("0906", "cassia"),
     ("0907", "clove"),
+    ("0907", "cengkeh"),
     ("0908", "nutmeg"),
+    ("0908", "cardamom"),
     ("0910", "ginger"),
+    ("0910", "turmeric"),
 ]
 
-# Countries with strong buyer presence for coffee + spices.
-COUNTRIES: list[str] = ["GB", "US", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG"]
+COUNTRIES: list[str] = [
+    "GB", "US", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG",
+    "ES", "BE", "AT", "CH", "SE", "PL", "PT", "DK", "IE", "NO",
+    "CA", "AU", "SG", "KR", "TW", "TH", "VN", "MX", "BR", "AE",
+]
 
 Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 

@@ -92,22 +92,32 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
     # which returns unrelated companies whose name happens to look right.
     # Do NOT set minimal=true; that strips libelle_commune and other
     # human-readable fields we want to surface.
-    params = [
-        f"per_page={per_page}",
-        "etat_administratif=A",
-        "tranche_effectif_salarie=03,11,12,21,22,31,32,41,42,51,52,53",
-        f"activite_principale={','.join(naf_focus)}",
-    ]
-    url = f"{BASE}?{'&'.join(params)}"
+    # Walk pages until the API stops returning or we hit max_pages.
+    # SIRENE per NAF has a few hundred rows; 5 x 50 = up to 250.
+    max_pages = 5
+    results = []
     try:
         async with httpx.AsyncClient(timeout=25.0, headers={"User-Agent": UA}) as client:
-            res = await client.get(url)
+            for page in range(1, max_pages + 1):
+                params = [
+                    f"page={page}",
+                    f"per_page={per_page}",
+                    "etat_administratif=A",
+                    "tranche_effectif_salarie=03,11,12,21,22,31,32,41,42,51,52,53",
+                    f"activite_principale={','.join(naf_focus)}",
+                ]
+                url = f"{BASE}?{'&'.join(params)}"
+                res = await client.get(url)
+                if res.status_code != 200:
+                    break
+                batch = (res.json() or {}).get("results") or []
+                if not batch:
+                    break
+                results.extend(batch)
+                if len(batch) < per_page:
+                    break
     except Exception:
-        return []
-    if res.status_code != 200:
-        return []
-    payload = res.json()
-    results = payload.get("results") or []
+        pass
 
     out: list[BuyerRecord] = []
     for r in results:

@@ -21,6 +21,10 @@ on:
         description: 'Parallel crawl slices'
         default: '10'
 
+concurrency:
+  group: crawl-py
+  cancel-in-progress: false
+
 jobs:
   crawl:
     runs-on: ubuntu-latest

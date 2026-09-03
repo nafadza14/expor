@@ -46,14 +46,25 @@ function mapRecord(rec) {
 
 // Search LEI records by name substring and country.
 // query: string, country: ISO-2, limit: max results (default 20).
-async function searchGleif({ query, country, limit = 20 }) {
+async function searchGleif({ query, country, limit = 50, maxPages = 4 }) {
   if (!query) return [];
-  const url = new URL(BASE);
-  url.searchParams.set('filter[entity.legalName]', query);
-  if (country) url.searchParams.set('filter[entity.legalAddress.country]', country);
-  url.searchParams.set('page[size]', String(Math.min(limit, 50)));
-  const json = await gleifFetch(url.toString());
-  const rows = Array.isArray(json?.data) ? json.data : [];
+  // Paginate so repeated runs get fresh rows instead of the same first
+  // page. GLEIF caps at 200 per query but 4 x 50 covers the common
+  // long tail.
+  const rows = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const url = new URL(BASE);
+    url.searchParams.set('filter[entity.legalName]', query);
+    if (country) url.searchParams.set('filter[entity.legalAddress.country]', country);
+    url.searchParams.set('page[size]', String(Math.min(limit, 50)));
+    url.searchParams.set('page[number]', String(page));
+    let json;
+    try { json = await gleifFetch(url.toString()); } catch { break; }
+    const batch = Array.isArray(json?.data) ? json.data : [];
+    if (!batch.length) break;
+    rows.push(...batch);
+    if (batch.length < Math.min(limit, 50)) break;
+  }
   return rows.map(mapRecord).filter(Boolean);
 }
 
