@@ -90,10 +90,11 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
     # commas literally; percent-encoding them makes the server treat the
     # whole thing as one nonsense code and silently drop the filter,
     # which returns unrelated companies whose name happens to look right.
+    # Do NOT set minimal=true; that strips libelle_commune and other
+    # human-readable fields we want to surface.
     params = [
         f"per_page={per_page}",
         "etat_administratif=A",
-        "minimal=true",
         "tranche_effectif_salarie=03,11,12,21,22,31,32,41,42,51,52,53",
         f"activite_principale={','.join(naf_focus)}",
     ]
@@ -116,9 +117,17 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
             continue
         siege = r.get("siege") or {}
         adresse = siege.get("adresse")
-        city = siege.get("libelle_commune") or siege.get("commune")
         postal = siege.get("code_postal")
-        address_line = ", ".join(x for x in [adresse, postal, city, "France"] if x)
+        # Prefer libelle_commune (human name); fall back to parsing the
+        # address line "XX RUE FOO 26000 VALENCE" -> "VALENCE".
+        city = siege.get("libelle_commune")
+        if not city and isinstance(adresse, str) and postal:
+            after_postal = adresse.split(str(postal), 1)[-1].strip()
+            if after_postal:
+                city = after_postal
+        address_line = ", ".join(x for x in [adresse, "France"] if x and x != "France")
+        if not address_line:
+            address_line = ", ".join(x for x in [postal, city, "France"] if x)
         naf = siege.get("activite_principale") or r.get("activite_principale")
         industry = _industry_from_naf(naf)
         size = _size_from_effectif(r.get("tranche_effectif_salarie") or siege.get("tranche_effectif_salarie"))
