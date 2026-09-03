@@ -359,7 +359,24 @@ async function resolveUser(db, req) {
   const auth = req.headers['authorization'] || req.headers['Authorization'] || '';
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (m) {
-    const u = await verifySupabaseToken(db, m[1]);
+    const raw = m[1].trim();
+    // Signed admin token survives cold starts; check first, no DB lookup.
+    // Accept either the new '|'-separated admin token or a Supabase JWT.
+    const admin = raw.startsWith('admin|') ? require('./auth').verifyAdminToken(raw) : null;
+    if (admin) {
+      // db.js re-seeds on cold start so the admin user is usually present.
+      // If it is not (bare DB), synthesize a virtual admin so the request
+      // still succeeds: signing the token already proved they had valid
+      // credentials at login time.
+      const u = db.prepare('SELECT * FROM users WHERE email=?').get(admin.email);
+      if (u && u.is_admin) return u;
+      return {
+        id: admin.id, email: admin.email, name: 'Super Admin',
+        org_name: 'EksporIn Admin', plan: 'business', hs_focus: '[]',
+        target_countries: '[]', onboarded: 1, is_admin: 1, status: 'active',
+      };
+    }
+    const u = await verifySupabaseToken(db, raw);
     if (u) return u;
   }
   return getSessionUser(db, req);
@@ -539,7 +556,10 @@ async function handleApi(db, req, res, url, body) {
     const u = db.prepare('SELECT * FROM users WHERE email=?').get(email || '');
     if (!u || !verifyPassword(password || '', u.password_hash)) return err(res, 401, 'Email atau password salah.');
     res.setHeader('Set-Cookie', sessionCookie(createSession(db, u.id)));
-    return json(res, 200, { ok: true, onboarded: !!u.onboarded });
+    // Issue a stateless admin token so cold-starting the Vercel instance
+    // does not throw the admin back to the login card mid-session.
+    const admin_token = u.is_admin ? require('./auth').createAdminToken(u) : null;
+    return json(res, 200, { ok: true, onboarded: !!u.onboarded, is_admin: !!u.is_admin, admin_token });
   }
   // Supabase bridge: verify a Supabase access_token, upsert a local user row
   // that mirrors the Supabase user + profile, and issue a local session cookie so
@@ -1166,8 +1186,22 @@ async function handleApi(db, req, res, url, body) {
     if (!requireAdmin()) return;
     try {
       const P = require('./sources/persist');
-      const [countsBySource, jobStats, recentJobs] = await Promise.all([
+      const pgClient = require('./pg');
+      const [countsBySource, jobStats, recentJobs, live] = await Promise.all([
         P.countsBySource(), P.jobStats(), P.recentJobs({ limit: 20 }),
+        pgClient.one(`
+          SELECT
+            (SELECT COUNT(*)::int FROM scraped_buyers) AS total,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE created_at > NOW() - INTERVAL '1 hour') AS new_1h,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE created_at > NOW() - INTERVAL '24 hours') AS new_24h,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE updated_at > NOW() - INTERVAL '1 hour' AND created_at < updated_at) AS updated_1h,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE enriched_at IS NOT NULL) AS enriched,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE enriched_at IS NULL) AS unenriched,
+            (SELECT COUNT(*)::int FROM scrape_jobs WHERE status = 'running') AS running_now,
+            (SELECT COUNT(*)::int FROM scrape_jobs WHERE status = 'done' AND finished_at > NOW() - INTERVAL '1 hour') AS jobs_done_1h,
+            (SELECT COALESCE(SUM(cardinality(sources_seen)), 0)::int FROM scraped_buyers) AS total_source_touches,
+            (SELECT COUNT(*)::int FROM scraped_buyers WHERE cardinality(sources_seen) > 1) AS multi_source_hits
+        `, []),
       ]);
       const totalBuyers = countsBySource.reduce((s, r) => s + r.c, 0);
       return json(res, 200, {
@@ -1175,6 +1209,7 @@ async function handleApi(db, req, res, url, body) {
         by_source: countsBySource,
         jobs_by_status: jobStats,
         recent_jobs: recentJobs,
+        live: live || {},
       });
     } catch (e) {
       return json(res, 500, { error: 'postgres_unavailable', detail: e.message });

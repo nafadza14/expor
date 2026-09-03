@@ -41,4 +41,47 @@ const sessionCookie = (token) =>
   `eksporin_session=${token}; HttpOnly; Path=/; Max-Age=${30 * 86400}; SameSite=Lax`;
 const clearCookie = () => 'eksporin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax';
 
-module.exports = { hashPassword, verifyPassword, createSession, getSessionUser, destroySession, sessionCookie, clearCookie };
+// ---------- Stateless admin token ----------
+// The user session table lives in sql.js which is in-memory on Vercel.
+// Cold starts wipe it, so admin cookies expire mid-flow. Admin auth
+// runs on a signed token instead: no DB lookup, verified by HMAC on
+// every request. The token embeds user id + email + expiry, signed with
+// ADMIN_TOKEN_SECRET (falls back to a per-install constant so local dev
+// still works).
+
+const { createHmac } = require('node:crypto');
+
+const ADMIN_TOKEN_SECRET =
+  process.env.ADMIN_TOKEN_SECRET ||
+  'eksporin-admin-fallback-secret-do-not-use-in-prod-swap-via-env';
+
+function _sign(payload) {
+  return createHmac('sha256', ADMIN_TOKEN_SECRET).update(payload).digest('base64url');
+}
+
+// Token uses '|' as the separator so a '.' inside an email (like ".com")
+// never confuses the split.
+function createAdminToken(user, ttlDays = 30) {
+  const exp = Date.now() + ttlDays * 86400 * 1000;
+  const payload = `admin|${user.id}|${user.email}|${exp}`;
+  return `${payload}|${_sign(payload)}`;
+}
+
+function verifyAdminToken(token) {
+  if (!token || typeof token !== 'string' || !token.startsWith('admin|')) return null;
+  const parts = token.split('|');
+  if (parts.length !== 5) return null;
+  const [, id, email, exp, sig] = parts;
+  const payload = `admin|${id}|${email}|${exp}`;
+  const expected = _sign(payload);
+  if (sig !== expected) return null;
+  if (Number(exp) < Date.now()) return null;
+  return { id: Number(id), email };
+}
+
+module.exports = {
+  hashPassword, verifyPassword,
+  createSession, getSessionUser, destroySession,
+  sessionCookie, clearCookie,
+  createAdminToken, verifyAdminToken,
+};

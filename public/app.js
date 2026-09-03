@@ -122,10 +122,16 @@ async function currentSbToken() {
 
 async function rawFetch(path, opts) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  // Attach Supabase Bearer token so serverless cold instances can identify the user
-  // without relying on a persistent session cookie.
-  const tok = await currentSbToken();
-  if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  // Prefer the stateless admin token when present. It survives Vercel
+  // cold starts because verification is HMAC-only (no DB lookup), so an
+  // admin session never gets kicked out mid-navigation.
+  const adminToken = (() => { try { return localStorage.getItem('eksporin_admin_token'); } catch { return null; } })();
+  if (adminToken) {
+    headers['Authorization'] = 'Bearer ' + adminToken;
+  } else {
+    const tok = await currentSbToken();
+    if (tok) headers['Authorization'] = 'Bearer ' + tok;
+  }
   // Abort after 12s so a stuck serverless function can never freeze the UI.
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), opts.timeout || 12000);
@@ -156,7 +162,12 @@ async function api(path, opts = {}) {
     data = text;
   }
   if (res.status === 401 && !path.includes('/auth/')) {
-    if (path !== '/api/me') location.hash = '#/login';
+    // If the admin token is present, the 401 is a transient backend blip
+    // (Vercel cold start, edge routing, etc). Do NOT redirect. Callers can
+    // catch and decide. This keeps the admin's tab-clicks from ever
+    // yanking them back to a login page.
+    const hasAdminToken = (() => { try { return !!localStorage.getItem('eksporin_admin_token'); } catch { return false; } })();
+    if (!hasAdminToken && path !== '/api/me') location.hash = '#/login';
     throw { status: 401, data };
   }
   if (res.status === 402) { upgradeModal(data && data.error); throw { status: 402, data, handled: true }; }
@@ -2972,8 +2983,12 @@ function adminShell(activeTab, content) {
 function bindAdminShell() {
   document.getElementById('admin-logout')?.addEventListener('click', async (e) => {
     e.preventDefault();
+    // Explicit logout only: clear the stateless admin token, the local
+    // session cookie, and any Supabase session. Anywhere else in the app
+    // that catches a 401 leaves the token alone.
+    try { localStorage.removeItem('eksporin_admin_token'); } catch {}
     if (window.sb) { try { await window.sb.auth.signOut(); } catch {} }
-    await api('/api/auth/logout', { method: 'POST' });
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
     ME = null; location.hash = '#/';
   });
   const side = document.getElementById('admin-side');
@@ -3017,15 +3032,14 @@ route(/^\/admin\/login$/, (app) => {
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = 'Memverifikasi…';
     try {
-      await api('/api/auth/login', { method: 'POST', body: { email, password } });
-      ME = null;
-      let isAdmin = false;
-      try { const meCheck = await api('/api/me'); isAdmin = !!meCheck.is_admin; } catch {}
-      if (!isAdmin) {
+      const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
+      if (!r.is_admin || !r.admin_token) {
         toast('Akun ini bukan admin.', true);
         btn.disabled = false; btn.textContent = orig;
         return;
       }
+      try { localStorage.setItem('eksporin_admin_token', r.admin_token); } catch {}
+      ME = null;
       location.hash = '#/admin';
     } catch (err) {
       toast(err.data?.error || 'Email atau password salah.', true);
@@ -3036,9 +3050,16 @@ route(/^\/admin\/login$/, (app) => {
 
 route(/^\/admin$/, async (app, m, params) => {
   // Custom auth guard: unauthenticated → dedicated admin login (not user login).
+  // If we have a stored admin token, keep the admin logged in even when
+  // /api/me temporarily fails (Vercel cold start, dropped connection, ...).
+  const hasAdminToken = (() => { try { return !!localStorage.getItem('eksporin_admin_token'); } catch { return false; } })();
   if (!ME) {
     try { ME = await api('/api/me'); }
-    catch { location.hash = '#/admin/login'; return; }
+    catch {
+      if (!hasAdminToken) { location.hash = '#/admin/login'; return; }
+      // Fallback: synthesize a minimal admin ME so the page still mounts.
+      ME = { id: 0, email: '(admin)', name: 'Super Admin', is_admin: true, plan: 'business', onboarded: true, hs_focus: [], target_countries: [] };
+    }
   }
   if (!ME.is_admin) {
     app.innerHTML = `<div class="admin-login-page"><div class="admin-login-card" style="text-align:center">
@@ -3240,12 +3261,15 @@ route(/^\/admin$/, async (app, m, params) => {
       }
       const statusBy = (s) => (status.jobs_by_status.find((r) => r.status === s)?.c || 0);
       const bySrcMap = Object.fromEntries(status.by_source.map((r) => [r.source, r.c]));
+      const live = status.live || {};
       draw(`
         <div class="admin-kpi-grid">
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer Terscrape</div><div class="admin-kpi-num">${fmtN(status.total_buyers)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Pending</div><div class="admin-kpi-num">${fmtN(statusBy('pending'))}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Selesai</div><div class="admin-kpi-num">${fmtN(statusBy('done'))}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Jobs Gagal</div><div class="admin-kpi-num">${fmtN(statusBy('failed'))}</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer</div><div class="admin-kpi-num">${fmtN(status.total_buyers)}</div><div class="admin-kpi-hint">${fmtN(live.enriched || 0)} enriched · ${fmtN(live.unenriched || 0)} raw</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Baru 1 Jam</div><div class="admin-kpi-num">${fmtN(live.new_1h || 0)}</div><div class="admin-kpi-hint">${fmtN(live.updated_1h || 0)} merge / update</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Baru 24 Jam</div><div class="admin-kpi-num">${fmtN(live.new_24h || 0)}</div><div class="admin-kpi-hint">${fmtN(live.jobs_done_1h || 0)} job selesai 1 jam</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Queue</div><div class="admin-kpi-num">${fmtN(statusBy('pending'))}</div><div class="admin-kpi-hint">${fmtN(live.running_now || 0)} running · ${fmtN(statusBy('failed'))} gagal</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Multi-source</div><div class="admin-kpi-num">${fmtN(live.multi_source_hits || 0)}</div><div class="admin-kpi-hint">buyer terverif ≥2 sumber</div></div>
+          <div class="admin-kpi"><div class="admin-kpi-lbl">Refresh</div><div class="admin-kpi-num" style="font-size:16px;padding-top:8px">tiap 8 dtk</div><div class="admin-kpi-hint" id="scrape-updated">baru saja</div></div>
         </div>
 
         <div class="admin-toolbar" style="margin-top:16px">
@@ -3338,7 +3362,7 @@ route(/^\/admin$/, async (app, m, params) => {
           location.hash = '#/admin?tab=scrape&t=' + Date.now();
         } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal', true); el.disabled = false; el.textContent = 'Enrich'; }
       }));
-      // Auto-refresh scrape tab KPI + job table every 15s while visible.
+      // Faster auto-refresh (8s) so a running cron shows progress live.
       clearInterval(window.__adminScrapeTimer);
       window.__adminScrapeTimer = setInterval(() => {
         if (parseHash().path === '/admin' && (params.get('tab') || 'overview') === 'scrape') {
@@ -3346,7 +3370,7 @@ route(/^\/admin$/, async (app, m, params) => {
         } else {
           clearInterval(window.__adminScrapeTimer);
         }
-      }, 15000);
+      }, 8000);
     } else if (tab === 'shipments') {
       const d = await api('/api/admin/shipments');
       draw(`
