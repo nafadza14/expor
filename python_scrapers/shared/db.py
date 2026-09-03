@@ -48,7 +48,17 @@ def _parse_dsn() -> dict:
 
 @contextmanager
 def conn() -> Iterator[psycopg.Connection]:
-    with psycopg.connect(autocommit=True, **_parse_dsn()) as c:
+    # prepare_threshold=None disables server-side prepared statements.
+    # Supabase's transaction pooler (port 6543) multiplexes many client
+    # sessions over a small pool of backend connections; a prepared
+    # statement named on one call can collide with the same name on a
+    # different backend the next call. Sending every query as a simple
+    # execute avoids the "prepared statement already exists" clash.
+    with psycopg.connect(
+        autocommit=True,
+        prepare_threshold=None,
+        **_parse_dsn(),
+    ) as c:
         yield c
 
 
