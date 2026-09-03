@@ -62,6 +62,17 @@ async function main() {
   `);
   console.log(`[purge] removed ${noCountry.rowCount} rows without a country`);
 
+  // 3b. SIRENE rows classified under an unrelated NAF. Our sirene_fr
+  // crawler labels the raw NAF as 'NAF XX.XXY' when the code is not in
+  // our food/wholesale whitelist; those are exactly the false positives
+  // that leaked in earlier when the API silently dropped a bad filter.
+  const wrongNaf = await pool.query(`
+    DELETE FROM scraped_buyers
+      WHERE source = 'sirene_fr' AND industry LIKE 'NAF %'
+     RETURNING id
+  `);
+  console.log(`[purge] removed ${wrongNaf.rowCount} SIRENE rows with off-topic NAF`);
+
   // 4. Cross-source duplicates: keep newest updated_at per content_hash.
   const dupes = await pool.query(`
     WITH ranked AS (

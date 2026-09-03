@@ -86,12 +86,16 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
     naf_focus = NAF_BY_HS.get(hs_code, default_naf)
     # Employee band 6+ (10+ staff). 12+ was too tight combined with the
     # narrow NAF filter; the intersection was near-empty.
+    # Do NOT quote() the comma-separated NAF list. The API expects the
+    # commas literally; percent-encoding them makes the server treat the
+    # whole thing as one nonsense code and silently drop the filter,
+    # which returns unrelated companies whose name happens to look right.
     params = [
         f"per_page={per_page}",
         "etat_administratif=A",
         "minimal=true",
         "tranche_effectif_salarie=03,11,12,21,22,31,32,41,42,51,52,53",
-        f"activite_principale={quote(','.join(naf_focus))}",
+        f"activite_principale={','.join(naf_focus)}",
     ]
     url = f"{BASE}?{'&'.join(params)}"
     try:
