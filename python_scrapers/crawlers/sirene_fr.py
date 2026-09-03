@@ -65,7 +65,7 @@ def _size_from_effectif(tranche: str | None) -> str | None:
 
 
 async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
-                    per_page: int = 25) -> list[BuyerRecord]:
+                    per_page: int = 50) -> list[BuyerRecord]:
     if country.upper() != "FR":
         return []
     # Map every seed HS to the most relevant NAF codes so we can query by

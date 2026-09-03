@@ -8,15 +8,18 @@ name: Enrich buyers (nightly)
 
 on:
   schedule:
-    - cron: '0 20 * * *'
+    - cron: '30 */2 * * *'
   workflow_dispatch:
     inputs:
       max:
         description: 'Max buyers to enrich this run'
-        default: '150'
+        default: '250'
       mode:
         description: 'fresh | contacts | all'
         default: 'contacts'
+      concurrency:
+        description: 'Parallel enrichment workers'
+        default: '6'
 
 jobs:
   enrich:
@@ -37,6 +40,7 @@ jobs:
             echo "::error::DATABASE_URL_POSTGRESS secret not set"
             exit 1
           fi
-          MAX="${{ github.event.inputs.max || '150' }}"
+          MAX="${{ github.event.inputs.max || '250' }}"
           MODE="${{ github.event.inputs.mode || 'contacts' }}"
-          node scripts/enrich.js --max "$MAX" --mode "$MODE"
+          CONC="${{ github.event.inputs.concurrency || '6' }}"
+          node scripts/enrich.js --max "$MAX" --mode "$MODE" --concurrency "$CONC"

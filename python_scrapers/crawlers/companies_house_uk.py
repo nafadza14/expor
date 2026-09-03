@@ -80,7 +80,7 @@ async def _fetch_profile(client: httpx.AsyncClient, num: str) -> tuple[str, str]
 
 
 async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
-                    max_profiles: int = 8) -> list[BuyerRecord]:
+                    max_profiles: int = 15) -> list[BuyerRecord]:
     """Search for `keyword`, take first `max_profiles` hits, LLM-parse each."""
     if country.upper() != "GB":
         # Companies House only knows UK companies.

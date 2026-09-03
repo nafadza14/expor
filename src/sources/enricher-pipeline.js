@@ -60,7 +60,7 @@ async function enrichOne(buyer) {
   };
 }
 
-async function enrichBatch({ max = 25, sleepMs = 700, mode = 'fresh' } = {}) {
+async function enrichBatch({ max = 25, mode = 'fresh', concurrency = 5 } = {}) {
   // mode 'fresh': only rows never enriched.
   // mode 'contacts': rows still missing website or email or phone,
   //                  even if a previous enrich pass ran.
@@ -78,16 +78,26 @@ async function enrichBatch({ max = 25, sleepMs = 700, mode = 'fresh' } = {}) {
       ORDER BY ${orderBy}
       LIMIT $1`, [max],
   );
+
+  // Concurrent workers. Each row does a Brave search (up to a couple
+  // seconds), a website crawl (up to 6s * a few pages), and one
+  // Sumopod AI call. Running these sequentially is the slow bit.
   const results = [];
-  for (const b of rows) {
-    try {
-      const r = await enrichOne(b);
-      results.push({ ok: true, ...r });
-    } catch (err) {
-      results.push({ ok: false, id: b.id, error: err.message });
+  let idx = 0;
+  async function worker() {
+    while (idx < rows.length) {
+      const i = idx++;
+      const b = rows[i];
+      try {
+        const r = await enrichOne(b);
+        results.push({ ok: true, ...r });
+      } catch (err) {
+        results.push({ ok: false, id: b.id, error: err.message });
+      }
     }
-    if (sleepMs > 0) await new Promise((r) => setTimeout(r, sleepMs));
   }
+  const workers = Array.from({ length: Math.min(concurrency, rows.length) }, worker);
+  await Promise.all(workers);
   return results;
 }
 

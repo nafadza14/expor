@@ -154,7 +154,7 @@ def _build_query(tags: list[tuple[str, str]], country: str, limit: int = 50) -> 
 
 
 async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
-                    limit: int = 40) -> list[BuyerRecord]:
+                    limit: int = 100) -> list[BuyerRecord]:
     country = (country or "").upper()
     if country not in COUNTRY_ISO_OK:
         return []

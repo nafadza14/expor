@@ -46,7 +46,7 @@ async def _get_company(client: httpx.AsyncClient, cik: str) -> dict | None:
 
 
 async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
-                    max_hits: int = 8) -> list[BuyerRecord]:
+                    max_hits: int = 15) -> list[BuyerRecord]:
     if country.upper() != "US":
         return []
 
