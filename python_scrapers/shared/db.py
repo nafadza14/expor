@@ -5,23 +5,50 @@ happens the same way as in src/sources/persist.js."""
 
 from __future__ import annotations
 import os
+import re
 import json
 import hashlib
 from contextlib import contextmanager
 from typing import Iterator, Optional
+from urllib.parse import unquote
 import psycopg
 
 
-def dsn() -> str:
+def _parse_dsn() -> dict:
+    """Parse DATABASE_URL_POSTGRESS into keyword args psycopg can consume
+    directly. Bypasses libpq's strict URI decoder, which chokes on a
+    literal % in the Supabase-supplied password."""
     uri = os.environ.get("DATABASE_URL_POSTGRESS") or os.environ.get("DATABASE_URL", "")
     if not uri:
         raise RuntimeError("DATABASE_URL_POSTGRESS not set")
-    return uri
+    m = re.match(
+        r"^postgres(?:ql)?://([^:]+):(.+)@([^:/]+):(\d+)/([^?]+)(?:\?(.*))?$",
+        uri,
+    )
+    if not m:
+        raise RuntimeError("Invalid Postgres URI shape")
+    user, raw_pw, host, port, dbname, _ = m.groups()
+    # Decode percent-escapes only if they yield a different string;
+    # otherwise the % is a literal character in the password.
+    try:
+        decoded = unquote(raw_pw)
+        password = decoded if decoded != raw_pw else raw_pw
+    except Exception:
+        password = raw_pw
+    return {
+        "user": user,
+        "password": password,
+        "host": host,
+        "port": int(port),
+        "dbname": dbname,
+        "sslmode": "require",
+        "application_name": "eksporin-py",
+    }
 
 
 @contextmanager
 def conn() -> Iterator[psycopg.Connection]:
-    with psycopg.connect(dsn(), autocommit=True) as c:
+    with psycopg.connect(autocommit=True, **_parse_dsn()) as c:
         yield c
 
 
