@@ -73,6 +73,20 @@ async function main() {
   `);
   console.log(`[purge] removed ${wrongNaf.rowCount} SIRENE rows with off-topic NAF`);
 
+  // 3c. google_business (OSM) rows that were ingested BEFORE the
+  // importer-scale filter existed. Retail shops / cafes are not
+  // importers even if their name contains coffee/tea/spice.
+  const osmRetail = await pool.query(`
+    DELETE FROM scraped_buyers
+      WHERE source = 'google_business'
+        AND (industry IN ('cafe', 'coffee shop', 'tea shop', 'spice shop',
+                          'health food store', 'confectionery', 'greengrocer',
+                          'supermarket', 'convenience', 'bakery')
+             OR industry IS NULL)
+     RETURNING id
+  `);
+  console.log(`[purge] removed ${osmRetail.rowCount} google_business retail-noise rows`);
+
   // 4. Cross-source duplicates: keep newest updated_at per content_hash.
   const dupes = await pool.query(`
     WITH ranked AS (
