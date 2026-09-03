@@ -7,8 +7,18 @@ name: Enrich buyers (nightly)
 # 20:00 UTC = 03:00 WIB (one hour after scrape).
 
 on:
+  # Own staggered cron (2 slots per hour) so GitHub always has a
+  # scheduled slot to honor even when it drops one.
   schedule:
-    - cron: '30 */2 * * *'
+    - cron: '15 * * * *'
+    - cron: '45 * * * *'
+  # Also fire after every Crawl completes so a freshly ingested pool
+  # is enriched right away. workflow_run cannot loop back to trigger
+  # the crawl again, but the crawl has its own cron so the chain
+  # closes at the next scheduled slot.
+  workflow_run:
+    workflows: ["Crawl buyers (Python, aggressive)"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       max:

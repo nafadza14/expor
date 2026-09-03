@@ -1,0 +1,48 @@
+name: Crawl watchdog
+
+# Belt-and-suspenders keep-alive. Runs every 30 minutes and re-dispatches
+# crawl-py if the most recent crawl-py run finished more than 90 minutes
+# ago. Guards against GitHub free-tier occasionally dropping cron slots.
+
+on:
+  schedule:
+    - cron: '10 * * * *'
+    - cron: '40 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check last crawl-py run and re-dispatch if stale
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # Most recent crawl-py run's updated_at (ISO 8601)
+          last=$(gh run list --repo ${{ github.repository }} \
+                   --workflow=crawl-py.yml --limit 1 \
+                   --json updatedAt --jq '.[0].updatedAt' 2>/dev/null || echo "")
+          if [ -z "$last" ]; then
+            echo "No prior crawl-py run seen. Dispatching."
+            gh workflow run crawl-py.yml --repo ${{ github.repository }} \
+              -f minutes=30 -f concurrency=10
+            exit 0
+          fi
+          # seconds since last run
+          last_ts=$(date -u -d "$last" +%s 2>/dev/null || echo 0)
+          now_ts=$(date -u +%s)
+          age=$(( now_ts - last_ts ))
+          echo "Last crawl-py finished ${age}s ago"
+          if [ "$age" -gt 5400 ]; then
+            echo "Stale (>90 min). Dispatching crawl-py."
+            gh workflow run crawl-py.yml --repo ${{ github.repository }} \
+              -f minutes=30 -f concurrency=10
+          else
+            echo "Fresh. No action."
+          fi

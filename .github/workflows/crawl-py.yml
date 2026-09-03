@@ -1,12 +1,17 @@
 name: Crawl buyers (Python, aggressive)
 
-# Multi-source Python crawler. Runs every 3 hours to keep the pool
-# fresh without exhausting the shared LLM budget. Each invocation
-# is time-boxed to 20 minutes so a stuck site can never block the job.
+# Multi-source Python crawler. Fires every hour on the free-tier cron,
+# plus a self-chain trigger at the end of every run that dispatches
+# the enrich workflow (which in turn re-dispatches crawl). GitHub
+# Actions free-tier cron is best-effort, so we stack two schedules
+# and rely on the chain to keep the pool moving continuously.
 
 on:
   schedule:
+    # Two staggered slots per hour. If GitHub drops one, the other
+    # still lets the pool advance in that hour.
     - cron: '0 * * * *'
+    - cron: '35 * * * *'
   workflow_dispatch:
     inputs:
       minutes:
