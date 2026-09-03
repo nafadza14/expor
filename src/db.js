@@ -246,11 +246,14 @@ async function getDb() {
     _db = new DbCompat(rawDb);
     _db.pragma('journal_mode = WAL');
     _db.exec(SCHEMA);
-    const count = _db.prepare('SELECT COUNT(*) AS c FROM buyers').get();
-    if (!count || count.c === 0) {
-      console.log('[eksporin] Database kosong - melakukan seeding data demo...');
+    // Seed only the admin + demo user rows. Buyer / shipment / list data
+    // now lives in Postgres (scraped_buyers, populated by the crawlers),
+    // so the sql.js side stays lean and cold starts do not re-plant
+    // dummy leads.
+    const userCount = _db.prepare('SELECT COUNT(*) AS c FROM users').get();
+    if (!userCount || userCount.c === 0) {
+      console.log('[eksporin] Seeding minimal users (admin + demo)...');
       require('./seed').seed(_db);
-      console.log('[eksporin] Seeding selesai.');
     }
     return _db;
   })();

@@ -987,7 +987,8 @@ table.tbl { width: 100%; border-collapse: collapse; }
   background: #fff5f0;
   z-index: -1;
 }
-.admin-nav-ic { font-size: 15px; width: 20px; text-align: center; }
+.admin-nav-ic { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); flex-shrink: 0; }
+.admin-nav-ic svg { width: 18px; height: 18px; }
 .admin-nav-item.active .admin-nav-ic { color: var(--orange); }
 
 .admin-side-foot {

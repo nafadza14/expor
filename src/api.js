@@ -1374,10 +1374,13 @@ async function handleApi(db, req, res, url, body) {
     const qc = quotaCheck(db, user, 'search');
     if (!qc.ok) return json(res, 402, { error: `Kuota pencarian bulan ini habis (${qc.used}/${qc.limit}). Upgrade paket untuk melanjutkan.`, quota: qc, upgrade: true });
 
-    const hs = q.get('hs') || '';
-    const countries = (q.get('countries') || '').split(',').filter(Boolean);
+    // All buyer intel is now live data from scraped_buyers in Postgres.
+    // Filters supported: hs (4-digit code), countries (comma list),
+    // sizes (comma list of small|medium|large), has=email|phone|website,
+    // q (name substring). Score = data_confidence; sort supports score, name.
+    const hs = (q.get('hs') || '').trim();
+    const countries = (q.get('countries') || '').split(',').filter(Boolean).map((c) => c.toUpperCase());
     const sizes = (q.get('sizes') || '').split(',').filter(Boolean);
-    const activity = q.get('activity') || '';
     const has = (q.get('has') || '').split(',').filter(Boolean);
     const minScore = parseInt(q.get('min_score') || '0', 10);
     const text = (q.get('q') || '').trim();
@@ -1385,57 +1388,91 @@ async function handleApi(db, req, res, url, body) {
     const pageN = Math.max(1, parseInt(q.get('page') || '1', 10));
     const per = Math.min(100, parseInt(q.get('per') || '25', 10));
 
-    let sql = `SELECT DISTINCT b.* FROM buyers b`;
-    const where = []; const args = [];
-    if (hs) { sql += ' JOIN buyer_hs bh ON bh.buyer_id = b.id'; where.push('bh.hs_code LIKE ?'); args.push(hs + '%'); }
-    if (countries.length) { where.push(`b.country IN (${countries.map(() => '?').join(',')})`); args.push(...countries); }
-    if (sizes.length) { where.push(`b.size_bucket IN (${sizes.map(() => '?').join(',')})`); args.push(...sizes); }
-    if (text) { where.push('b.name LIKE ?'); args.push('%' + text + '%'); }
-    if (activity === 'very_active') where.push('b.shipments_12mo > 12');
-    else if (activity === 'active') where.push('b.shipments_12mo BETWEEN 4 AND 12');
-    else if (activity === 'occasional') where.push('b.shipments_12mo BETWEEN 1 AND 3');
-    else if (activity === 'inactive') where.push('b.shipments_12mo = 0');
-    for (const h of has) {
-      if (['email', 'phone', 'linkedin', 'website'].includes(h))
-        where.push(`EXISTS (SELECT 1 FROM buyer_contacts c WHERE c.buyer_id=b.id AND c.contact_type='${h}')`);
+    try {
+      const pgClient = require('./pg');
+      const conds = ['TRUE']; const params = [];
+      if (hs) {
+        const hs4 = hs.slice(0, 4);
+        params.push(hs4);
+        conds.push(`hs_codes @> ARRAY[$${params.length}]::text[]`);
+      }
+      if (countries.length) {
+        const placeholders = countries.map((_c) => { params.push(_c); return `$${params.length}`; }).join(',');
+        conds.push(`country IN (${placeholders})`);
+      }
+      if (sizes.length) {
+        const placeholders = sizes.map((_s) => { params.push(_s); return `$${params.length}`; }).join(',');
+        conds.push(`size_bucket IN (${placeholders})`);
+      }
+      if (text) { params.push('%' + text.toLowerCase() + '%'); conds.push(`LOWER(name) LIKE $${params.length}`); }
+      if (has.includes('email')) conds.push('email IS NOT NULL');
+      if (has.includes('phone')) conds.push('phone IS NOT NULL');
+      if (has.includes('website')) conds.push('website IS NOT NULL');
+      if (minScore > 0) { params.push(minScore); conds.push(`data_confidence >= $${params.length}`); }
+
+      const orderBy = {
+        score: '(enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC',
+        name: 'LOWER(name) ASC',
+        recent: 'updated_at DESC',
+      }[sort] || '(enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC';
+
+      const totalRow = await pgClient.one(
+        `SELECT COUNT(*)::int AS c FROM scraped_buyers WHERE ${conds.join(' AND ')}`, params,
+      );
+      const total = totalRow?.c || 0;
+
+      params.push(per, (pageN - 1) * per);
+      const rows = await pgClient.query(
+        `SELECT id, source, name, country, city, address, website, email, phone,
+                industry, size_bucket, description, hs_codes,
+                data_confidence, enriched_at, updated_at, sources_seen
+           FROM scraped_buyers
+          WHERE ${conds.join(' AND ')}
+          ORDER BY ${orderBy}
+          LIMIT $${params.length - 1} OFFSET $${params.length}`, params,
+      );
+
+      const start = (pageN - 1) * per;
+      const pageRows = rows.map((b, i) => ({
+        rank: start + i + 1, id: Number(b.id), name: b.name,
+        country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country,
+        city: b.city, industry: b.industry || null,
+        size_bucket: b.size_bucket || 'medium',
+        website: b.website, email: b.email, phone: b.phone,
+        description: b.description,
+        hs_codes: b.hs_codes || [],
+        sources: b.sources_seen || [b.source],
+        score: b.data_confidence,
+        score_label: b.data_confidence >= 80 ? 'HOT' : b.data_confidence >= 60 ? 'WARM' : 'FRESH',
+        enriched: !!b.enriched_at,
+        // free tier: rows beyond 20 are teaser-blurred (F1 edge case)
+        blurred: user.plan === 'free' && start + i >= 20,
+        // Legacy shipment-based fields not applicable to scraped data; set to null.
+        shipments_12mo: null, volume_12mo_kg: null, value_12mo_usd: null,
+        last_shipment_date: null, yoy_percent: null, has_indonesian_supplier: false,
+      }));
+
+      // Facets from a lightweight second query so pagination does not distort counts.
+      const facetParams = params.slice(0, params.length - 2);
+      const facetWhere = conds.join(' AND ');
+      const [countryFacet, sourceFacet] = await Promise.all([
+        pgClient.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers WHERE ${facetWhere} AND country IS NOT NULL GROUP BY country ORDER BY c DESC LIMIT 15`, facetParams),
+        pgClient.query(`SELECT source, COUNT(*)::int AS c FROM scraped_buyers WHERE ${facetWhere} GROUP BY source ORDER BY c DESC`, facetParams),
+      ]);
+
+      bumpUsage(db, user.id, 'search');
+      return json(res, 200, {
+        total, page: pageN, per, results: pageRows,
+        facets: {
+          country: countryFacet.map((f) => ({ value: f.country, count: f.c })),
+          source: sourceFacet.map((f) => ({ value: f.source, count: f.c })),
+        },
+        quota: quotaCheck(db, user, 'search'),
+        source: 'scraped_buyers',
+      });
+    } catch (e) {
+      return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message, results: [], total: 0 });
     }
-    if (where.length) sql += ' WHERE ' + where.join(' AND ');
-    let rows = db.prepare(sql).all(...args);
-
-    // compute user-specific final score
-    rows = rows.map((b) => {
-      const fit = productFit(userHs, buyerHsCodes(db, b.id));
-      const score = finalScore(b, fit);
-      return { ...b, fit_score: fit, score, score_label: scoreLabel(score) };
-    }).filter((b) => b.score >= minScore);
-
-    const sorters = {
-      score: (a, b) => b.score - a.score, volume: (a, b) => b.volume_12mo_kg - a.volume_12mo_kg,
-      shipments: (a, b) => b.shipments_12mo - a.shipments_12mo, name: (a, b) => a.name.localeCompare(b.name),
-      recent: (a, b) => String(b.last_shipment_date || '').localeCompare(String(a.last_shipment_date || '')),
-    };
-    rows.sort(sorters[sort] || sorters.score);
-
-    bumpUsage(db, user.id, 'search');
-    const total = rows.length;
-    const start = (pageN - 1) * per;
-    const pageRows = rows.slice(start, start + per).map((b, i) => ({
-      rank: start + i + 1, id: b.id, name: b.name, country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country,
-      city: b.city, industry: b.industry, size_bucket: b.size_bucket,
-      shipments_12mo: b.shipments_12mo, volume_12mo_kg: b.volume_12mo_kg, value_12mo_usd: b.value_12mo_usd,
-      last_shipment_date: b.last_shipment_date, yoy_percent: b.yoy_percent,
-      has_indonesian_supplier: !!b.has_indonesian_supplier,
-      score: b.score, score_label: b.score_label,
-      // free tier: rows beyond 20 are teaser-blurred (F1 edge case)
-      blurred: user.plan === 'free' && start + i >= 20,
-    }));
-    // facets
-    const facet = (key) => {
-      const mmap = {};
-      for (const r of rows) { const k = r[key] || '-'; mmap[k] = (mmap[k] || 0) + 1; }
-      return Object.entries(mmap).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ value: k, count: n }));
-    };
-    return json(res, 200, { total, page: pageN, per, results: pageRows, facets: { country: facet('country'), size: facet('size_bucket') }, quota: quotaCheck(db, user, 'search') });
   }
 
   // ===== scraped buyers (Postgres discovery pool) =====
@@ -1481,94 +1518,123 @@ async function handleApi(db, req, res, url, body) {
 
   // ===== buyer profile (F2) =====
   if ((m = route('GET', '/api/buyers/:id'))) {
-    const b = db.prepare('SELECT * FROM buyers WHERE id=?').get(m.id);
-    if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
-    // profile quota: only counts first view of a buyer in the period
-    const seen = db.prepare('SELECT 1 FROM profile_views WHERE user_id=? AND buyer_id=? AND period=?').get(user.id, b.id, period());
-    if (!seen) {
-      const qc = quotaCheck(db, user, 'profile');
-      if (!qc.ok) return json(res, 402, { error: `Kuota profil lengkap bulan ini habis (${qc.used}/${qc.limit}). Upgrade untuk membuka profil buyer tanpa batas.`, quota: qc, upgrade: true });
-      db.prepare('INSERT INTO profile_views (user_id,buyer_id,period) VALUES (?,?,?)').run(user.id, b.id, period());
-      bumpUsage(db, user.id, 'profile');
+    const buyerId = Number(m.id);
+    if (!buyerId) return err(res, 404, 'Buyer tidak ditemukan.');
+    try {
+      const pgClient = require('./pg');
+      const b = await pgClient.one(`
+        SELECT id, source, name, country, city, address, website, email, phone,
+               industry, size_bucket, description, hs_codes,
+               data_confidence, enriched_at, created_at, updated_at, sources_seen
+          FROM scraped_buyers WHERE id = $1`, [buyerId]);
+      if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
+
+      // profile quota only counts first view of a buyer per period
+      const seen = db.prepare('SELECT 1 FROM profile_views WHERE user_id=? AND buyer_id=? AND period=?').get(user.id, buyerId, period());
+      if (!seen) {
+        const qc = quotaCheck(db, user, 'profile');
+        if (!qc.ok) return json(res, 402, { error: `Kuota profil lengkap bulan ini habis (${qc.used}/${qc.limit}). Upgrade untuk membuka profil buyer tanpa batas.`, quota: qc, upgrade: true });
+        db.prepare('INSERT INTO profile_views (user_id,buyer_id,period) VALUES (?,?,?)').run(user.id, buyerId, period());
+        bumpUsage(db, user.id, 'profile');
+      }
+
+      // Build contacts from the columns we scraped / enriched.
+      const contacts = [];
+      if (b.website) contacts.push({ contact_type: 'website', value: b.website, confidence: b.data_confidence, masked: false });
+      if (b.email) contacts.push({
+        contact_type: 'email',
+        value: plan.contacts ? b.email : maskContact('email', b.email),
+        confidence: b.data_confidence, masked: !plan.contacts,
+      });
+      if (b.phone) contacts.push({
+        contact_type: 'phone',
+        value: plan.contacts ? b.phone : maskContact('phone', b.phone),
+        confidence: b.data_confidence, masked: !plan.contacts,
+      });
+
+      const bHs = (b.hs_codes || []).map((code) => {
+        const meta = db.prepare('SELECT description_en, description_id FROM hs_codes WHERE code=? OR code=?').get(code, code.slice(0, 4));
+        return { hs_code: code, description_en: meta?.description_en || null, description_id: meta?.description_id || null };
+      });
+
+      const fit = productFit(userHs, b.hs_codes || []);
+      const inLists = db.prepare(`SELECT l.id, l.name, lb.status FROM list_buyers lb JOIN lists l ON l.id=lb.list_id
+        WHERE l.user_id=? AND lb.buyer_id=?`).all(user.id, buyerId);
+
+      return json(res, 200, {
+        id: Number(b.id), name: b.name, source: b.source,
+        country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country,
+        city: b.city, address: b.address, website: b.website,
+        industry: b.industry, size_bucket: b.size_bucket,
+        description: b.description,
+        sources_seen: b.sources_seen || [b.source],
+        data_confidence: b.data_confidence,
+        enriched: !!b.enriched_at, enriched_at: b.enriched_at,
+        first_seen: b.created_at, last_updated: b.updated_at,
+        hs_codes: bHs, contacts, contacts_visible: plan.contacts,
+        supplier_countries: [],
+        score: b.data_confidence, fit_score: fit,
+        score_label: b.data_confidence >= 80 ? 'HOT' : b.data_confidence >= 60 ? 'WARM' : 'FRESH',
+        score_components: { confidence: b.data_confidence, product_fit: fit, sources: (b.sources_seen || []).length * 20 },
+        in_lists: inLists,
+        quota: quotaCheck(db, user, 'profile'),
+      });
+    } catch (e) {
+      return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
     }
-    const bHs = db.prepare(`SELECT bh.*, h.description_en, h.description_id FROM buyer_hs bh
-      JOIN hs_codes h ON h.code = bh.hs_code WHERE bh.buyer_id=? ORDER BY bh.total_value_usd DESC`).all(b.id);
-    const contacts = db.prepare('SELECT * FROM buyer_contacts WHERE buyer_id=?').all(b.id).map((c) => ({
-      id: c.id, contact_type: c.contact_type, person_name: c.person_name, person_title: c.person_title, confidence: c.confidence,
-      value: plan.contacts || c.contact_type === 'website' ? c.value : maskContact(c.contact_type, c.value),
-      masked: !plan.contacts && c.contact_type !== 'website',
-    }));
-    const supplierCountries = db.prepare(`SELECT e.country, COUNT(*) n FROM shipments s JOIN exporters e ON e.id=s.exporter_id
-      WHERE s.buyer_id=? GROUP BY e.country ORDER BY n DESC`).all(b.id);
-    const fit = productFit(userHs, bHs.map((x) => x.hs_code));
-    const score = finalScore(b, fit);
-    const inLists = db.prepare(`SELECT l.id, l.name, lb.status FROM list_buyers lb JOIN lists l ON l.id=lb.list_id
-      WHERE l.user_id=? AND lb.buyer_id=?`).all(user.id, b.id);
-    return json(res, 200, {
-      ...b, country_name: COUNTRY_NAMES[b.country] || b.country,
-      hs_codes: bHs, contacts, contacts_visible: plan.contacts,
-      supplier_countries: supplierCountries.map((s) => ({ ...s, name: COUNTRY_NAMES[s.country] || s.country })),
-      score, fit_score: fit, score_label: scoreLabel(score),
-      score_components: { activity: b.activity_score, growth: b.growth_score, product_fit: fit, reachability: b.reachability_score, untapped: b.untapped_score },
-      in_lists: inLists,
-      quota: quotaCheck(db, user, 'profile'),
-    });
   }
 
   if ((m = route('GET', '/api/buyers/:id/shipments'))) {
-    const pageN = Math.max(1, parseInt(q.get('page') || '1', 10));
-    const per = 20;
-    const total = db.prepare('SELECT COUNT(*) c FROM shipments WHERE buyer_id=?').get(m.id).c;
-    const rows = db.prepare(`SELECT s.*, e.name exporter_name, e.country exporter_country, e.is_indonesian
-      FROM shipments s JOIN exporters e ON e.id=s.exporter_id WHERE s.buyer_id=?
-      ORDER BY s.shipment_date DESC LIMIT ? OFFSET ?`).all(m.id, per, (pageN - 1) * per);
-    const monthly = db.prepare(`SELECT substr(shipment_date,1,7) ym, COUNT(*) n, SUM(weight_kg) w, SUM(value_usd) v
-      FROM shipments WHERE buyer_id=? AND shipment_date >= date('now','-24 months') GROUP BY ym ORDER BY ym`).all(m.id);
-    return json(res, 200, { total, page: pageN, per, rows, monthly });
+    // Bill-of-lading data is not yet part of the crawler output. Return an
+    // empty payload with a small hint so the UI can render an empty state
+    // instead of erroring.
+    return json(res, 200, {
+      total: 0, page: 1, per: 20, rows: [], monthly: [],
+      hint: 'Data pengiriman detail belum tersedia untuk buyer ini. Sumber discovery (GLEIF, Companies House UK, Kompass, Europages) memberi profil perusahaan; data shipment akan menyusul saat kita aktifkan sumber bill-of-lading.',
+    });
   }
 
   if ((m = route('GET', '/api/buyers/:id/suppliers'))) {
-    const rows = db.prepare(`SELECT e.id, e.name, e.country, e.is_indonesian, COUNT(*) shipments,
-      SUM(s.weight_kg) volume_kg, SUM(s.value_usd) value_usd, MIN(s.shipment_date) first_date, MAX(s.shipment_date) last_date,
-      GROUP_CONCAT(DISTINCT s.hs_code) hs_codes
-      FROM shipments s JOIN exporters e ON e.id=s.exporter_id WHERE s.buyer_id=?
-      GROUP BY e.id ORDER BY value_usd DESC`).all(m.id);
-    return json(res, 200, rows.map((r) => ({ ...r, country_name: COUNTRY_NAMES[r.country] || r.country })));
+    return json(res, 200, []);
   }
 
   if ((m = route('GET', '/api/buyers/:id/insights'))) {
-    const b = db.prepare('SELECT * FROM buyers WHERE id=?').get(m.id);
-    if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
-    const sup = db.prepare(`SELECT e.country, COUNT(*) n FROM shipments s JOIN exporters e ON e.id=s.exporter_id
-      WHERE s.buyer_id=? GROUP BY e.country ORDER BY n DESC`).all(b.id);
-    const totalN = sup.reduce((a, x) => a + x.n, 0) || 1;
-    const monthly = db.prepare(`SELECT CAST(substr(shipment_date,6,2) AS INT) mo, COUNT(*) n FROM shipments WHERE buyer_id=? GROUP BY mo ORDER BY n DESC`).all(b.id);
-    const topHs = db.prepare(`SELECT bh.hs_code, h.description_id FROM buyer_hs bh JOIN hs_codes h ON h.code=bh.hs_code
-      WHERE bh.buyer_id=? ORDER BY bh.total_value_usd DESC LIMIT 1`).get(b.id);
-    const insights = [];
-    if (sup.length) {
-      const mix = sup.slice(0, 3).map((s) => `${COUNTRY_NAMES[s.country] || s.country} ${Math.round((s.n / totalN) * 100)}%`).join(', ');
-      insights.push(`Pemasok utama buyer ini: ${mix}.`);
+    // Live-data version: insights are inferred from the crawler / enrichment
+    // signals (industry, sources, description, HS codes) instead of the
+    // dummy shipment aggregates.
+    try {
+      const pgClient = require('./pg');
+      const b = await pgClient.one(`SELECT id, name, country, industry, description, hs_codes,
+                                            data_confidence, enriched_at, sources_seen, size_bucket
+                                       FROM scraped_buyers WHERE id = $1`, [Number(m.id)]);
+      if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
+      const insights = [];
+      if (b.industry) insights.push(`Kategori bisnis terverifikasi: ${b.industry}.`);
+      if (Array.isArray(b.sources_seen) && b.sources_seen.length >= 2) {
+        insights.push(`Buyer ini ditemukan di ${b.sources_seen.length} sumber independen (${b.sources_seen.join(', ')}). Data cross-verified.`);
+      } else {
+        insights.push(`Baru muncul di 1 sumber (${(b.sources_seen || [b.source])[0]}). Verifikasi ulang sebelum kontak.`);
+      }
+      if (b.description) insights.push(`Profil singkat: ${b.description}`);
+      if (b.data_confidence >= 80) insights.push('Skor kepercayaan data tinggi (≥80). Aman untuk outreach langsung.');
+      else if (b.data_confidence >= 60) insights.push('Skor kepercayaan data sedang (60-79). Cek website / email sebelum kirim proposal.');
+      else insights.push('Skor kepercayaan data awal. Sebaiknya validasi manual dulu sebelum outreach volume.');
+      if (Array.isArray(b.hs_codes) && b.hs_codes.length) {
+        insights.push(`HS terkait: ${b.hs_codes.slice(0, 3).join(', ')}.`);
+      }
+      const similar = await pgClient.query(`
+        SELECT id, name, country, data_confidence FROM scraped_buyers
+         WHERE industry = $1 AND id <> $2
+         ORDER BY data_confidence DESC LIMIT 3`, [b.industry, Number(m.id)]);
+      const angle = 'Perkenalkan diri sebagai pemasok Indonesia dengan sertifikasi ekspor, kualitas konsisten, dan harga FOB kompetitif. Tawarkan sampel gratis di email pertama.';
+      return json(res, 200, {
+        insights,
+        recommended_angle: angle,
+        similar: similar.map((s) => ({ ...s, id: Number(s.id), country_name: COUNTRY_NAMES[s.country] || s.country })),
+      });
+    } catch (e) {
+      return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
     }
-    const idSup = sup.find((s) => s.country === 'ID');
-    insights.push(idSup
-      ? `Sudah pernah impor dari Indonesia (${Math.round((idSup.n / totalN) * 100)}% dari shipment). Pintu masuk lebih mudah, tonjolkan diferensiasi kualitas dan harga.`
-      : `Belum pernah impor dari Indonesia. Peluang untapped, gunakan angle keunggulan origin Indonesia dan tawarkan sampel gratis.`);
-    if (b.yoy_percent !== null) insights.push(b.yoy_percent >= 0
-      ? `Volume impor tumbuh ${b.yoy_percent}% YoY. Buyer sedang ekspansi, kemungkinan mencari pemasok tambahan.`
-      : `Volume impor turun ${Math.abs(b.yoy_percent)}% YoY. Mungkin sedang konsolidasi pemasok; tawarkan harga kompetitif.`);
-    if (monthly.length >= 3) {
-      const peak = monthly.slice(0, 2).map((x) => MONTHS_ID[x.mo - 1]).join(' & ');
-      insights.push(`Puncak aktivitas impor di bulan ${peak}. Mulai outreach 2–3 bulan sebelumnya agar masuk siklus pembelian.`);
-    }
-    if (topHs) insights.push(`Produk utama yang diimpor: HS ${topHs.hs_code} (${topHs.description_id}).`);
-    const similar = db.prepare(`SELECT id, name, country, base_score FROM buyers
-      WHERE industry=? AND id != ? ORDER BY base_score DESC LIMIT 3`).all(b.industry, b.id)
-      .map((s) => ({ ...s, country_name: COUNTRY_NAMES[s.country] || s.country }));
-    const angle = idSup
-      ? 'Posisikan sebagai pemasok Indonesia alternatif dengan kualitas konsisten dan harga FOB kompetitif.'
-      : 'First-mover advantage: perkenalkan keunggulan origin Indonesia, sertakan sertifikasi dan tawaran sampel gratis di email pertama.';
-    return json(res, 200, { insights, recommended_angle: angle, similar });
   }
 
   // ===== shipment explorer (F3) =====
@@ -1780,49 +1846,67 @@ async function handleApi(db, req, res, url, body) {
   if (route('GET', '/api/dashboard')) {
     materializeAlerts(db, user);
     const countries = JSON.parse(user.target_countries || '[]');
-    // recommendations: top buyers for user's HS focus + target countries, not yet saved
-    let recSql = `SELECT b.* FROM buyers b WHERE b.id NOT IN
-      (SELECT lb.buyer_id FROM list_buyers lb JOIN lists l ON l.id=lb.list_id WHERE l.user_id=?)`;
-    const recArgs = [user.id];
-    if (userHs.length) {
-      recSql += ` AND b.id IN (SELECT buyer_id FROM buyer_hs WHERE ${userHs.map(() => 'hs_code LIKE ?').join(' OR ')})`;
-      recArgs.push(...userHs.map((h) => h.slice(0, 4) + '%'));
-    }
-    if (countries.length) { recSql += ` AND b.country IN (${countries.map(() => '?').join(',')})`; recArgs.push(...countries); }
-    let recs = db.prepare(recSql).all(...recArgs).map((b) => {
-      const fit = productFit(userHs, buyerHsCodes(db, b.id));
-      const score = finalScore(b, fit);
-      return { id: b.id, name: b.name, country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country, city: b.city, industry: b.industry, shipments_12mo: b.shipments_12mo, volume_12mo_kg: b.volume_12mo_kg, has_indonesian_supplier: !!b.has_indonesian_supplier, score, score_label: scoreLabel(score) };
-    }).sort((a, b) => b.score - a.score).slice(0, 6);
 
-    // pipeline stats
+    // Recommendations: pull top scraped buyers matching user's HS focus /
+    // target countries. Falls back to top 6 overall if the user has no
+    // preferences set yet.
+    let recs = [];
+    let countryBreakdown = [];
+    try {
+      const pgClient = require('./pg');
+      const savedIds = db.prepare(`SELECT lb.buyer_id FROM list_buyers lb
+        JOIN lists l ON l.id=lb.list_id WHERE l.user_id=?`).all(user.id).map((r) => Number(r.buyer_id));
+      const conds = ['TRUE']; const params = [];
+      if (userHs.length) {
+        const hs4 = userHs.map((h) => h.slice(0, 4));
+        params.push(hs4);
+        conds.push(`hs_codes && $${params.length}::text[]`);
+      }
+      if (countries.length) {
+        const placeholders = countries.map((c) => { params.push(c); return `$${params.length}`; }).join(',');
+        conds.push(`country IN (${placeholders})`);
+      }
+      if (savedIds.length) {
+        params.push(savedIds);
+        conds.push(`id <> ALL($${params.length}::bigint[])`);
+      }
+      const recRows = await pgClient.query(`
+        SELECT id, name, country, city, industry, size_bucket, data_confidence,
+               hs_codes, enriched_at, sources_seen
+          FROM scraped_buyers
+         WHERE ${conds.join(' AND ')}
+         ORDER BY (enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC
+         LIMIT 6`, params);
+      recs = recRows.map((b) => ({
+        id: Number(b.id), name: b.name, country: b.country,
+        country_name: COUNTRY_NAMES[b.country] || b.country,
+        city: b.city, industry: b.industry, size_bucket: b.size_bucket,
+        hs_codes: b.hs_codes || [], score: b.data_confidence,
+        score_label: b.data_confidence >= 80 ? 'HOT' : b.data_confidence >= 60 ? 'WARM' : 'FRESH',
+        sources: b.sources_seen || [], enriched: !!b.enriched_at,
+        shipments_12mo: null, volume_12mo_kg: null, has_indonesian_supplier: false,
+      }));
+
+      // Country breakdown from live data.
+      const cbConds = userHs.length ? `WHERE hs_codes && $1::text[] AND country IS NOT NULL` : 'WHERE country IS NOT NULL';
+      const cbParams = userHs.length ? [userHs.map((h) => h.slice(0, 4))] : [];
+      const cbRows = await pgClient.query(`
+        SELECT country, COUNT(*)::int AS n FROM scraped_buyers ${cbConds}
+        GROUP BY country ORDER BY n DESC LIMIT 12`, cbParams);
+      countryBreakdown = cbRows.map((r) => ({ country: r.country, n: r.n, name: COUNTRY_NAMES[r.country] || r.country }));
+    } catch (_e) {
+      // Postgres offline: return empty arrays; dashboard degrades gracefully.
+    }
+
+    // Pipeline + outreach stats stay on sql.js (user-owned data).
     const pipeline = db.prepare(`SELECT lb.status, COUNT(*) n FROM list_buyers lb JOIN lists l ON l.id=lb.list_id
       WHERE l.user_id=? GROUP BY lb.status`).all(user.id);
-
-    // market trend: monthly volume for user's HS focus in target countries, last 12 months
-    let trend = [];
-    if (userHs.length) {
-      const hsConds = userHs.map(() => 's.hs_code LIKE ?').join(' OR ');
-      const args2 = userHs.map((h) => h.slice(0, 4) + '%');
-      let cSql = '';
-      if (countries.length) { cSql = ` AND b.country IN (${countries.map(() => '?').join(',')})`; args2.push(...countries); }
-      trend = db.prepare(`SELECT substr(s.shipment_date,1,7) ym, COUNT(*) n, SUM(s.weight_kg) w, SUM(s.value_usd) v
-        FROM shipments s JOIN buyers b ON b.id=s.buyer_id
-        WHERE (${hsConds})${cSql} AND s.shipment_date >= date('now','-12 months') GROUP BY ym ORDER BY ym`).all(...args2);
-    }
-    // buyer count per target country for user's HS
-    let countryBreakdown = [];
-    if (userHs.length) {
-      countryBreakdown = db.prepare(`SELECT b.country, COUNT(DISTINCT b.id) n FROM buyers b JOIN buyer_hs bh ON bh.buyer_id=b.id
-        WHERE ${userHs.map(() => 'bh.hs_code LIKE ?').join(' OR ')} GROUP BY b.country ORDER BY n DESC`)
-        .all(...userHs.map((h) => h.slice(0, 4) + '%'))
-        .map((r) => ({ ...r, name: COUNTRY_NAMES[r.country] || r.country }));
-    }
     const msgs = db.prepare(`SELECT COUNT(*) total,
       SUM(CASE WHEN status IN ('opened','replied') THEN 1 ELSE 0 END) opened,
       SUM(CASE WHEN status='replied' THEN 1 ELSE 0 END) replied FROM messages WHERE user_id=?`).get(user.id);
+
     return json(res, 200, {
-      recommendations: recs, pipeline, trend, country_breakdown: countryBreakdown,
+      recommendations: recs, pipeline, trend: [], country_breakdown: countryBreakdown,
       outreach: msgs, saved: savedCount(db, user.id),
       alerts_unread: db.prepare('SELECT COUNT(*) c FROM alerts WHERE user_id=? AND read=0').get(user.id).c,
     });
