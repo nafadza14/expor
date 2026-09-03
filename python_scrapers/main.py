@@ -25,12 +25,12 @@ from typing import Callable, Awaitable
 try:
     from .shared import db as db_mod
     from .shared.schema import BuyerRecord
-    from .crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us
+    from .crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us, google_business
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from python_scrapers.shared import db as db_mod  # type: ignore
     from python_scrapers.shared.schema import BuyerRecord  # type: ignore
-    from python_scrapers.crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us  # type: ignore
+    from python_scrapers.crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us, google_business  # type: ignore
 
 
 # Same HS list as src/scrape-config.js, but expressed here as
@@ -54,6 +54,7 @@ Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 # `only_countries` set is non-empty, we skip (source, hs, other-country)
 # slices for it.
 CRAWLERS: dict[str, Crawler] = {
+    "google_business": lambda kw, co, hs: google_business.crawl_one(kw, co, hs),
     "companies_house_uk": lambda kw, co, hs: companies_house_uk.crawl_one(kw, co, hs),
     "sirene_fr": lambda kw, co, hs: sirene_fr.crawl_one(kw, co, hs),
     "sec_edgar_us": lambda kw, co, hs: sec_edgar_us.crawl_one(kw, co, hs),
@@ -65,6 +66,7 @@ ONLY_COUNTRIES: dict[str, set[str]] = {
     "companies_house_uk": {"GB"},
     "sirene_fr": {"FR"},
     "sec_edgar_us": {"US"},
+    # google_business (OSM) works for any country in its ISO whitelist.
 }
 
 

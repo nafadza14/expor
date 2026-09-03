@@ -2180,7 +2180,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const tab = params.get('tab') || 'overview';
   const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
-  const sourceLabels = { gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceLabels = { gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
@@ -3342,8 +3342,19 @@ route(/^\/admin$/, async (app, m, params) => {
             <table class="tbl">
               <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
               <tbody>
-                ${['gleif','companies_house_uk','sirene_fr','sec_edgar_us','kompass','europages','wikidata','importyeti','itpc'].map((s) => `<tr>
-                  <td class="body-sm">${esc(s)}</td>
+                ${[
+                  ['gleif', 'GLEIF LEI Registry Crawler'],
+                  ['companies_house_uk', 'UK Companies House Crawler'],
+                  ['sirene_fr', 'France SIRENE NAF Crawler'],
+                  ['sec_edgar_us', 'US SEC EDGAR Filings Crawler'],
+                  ['google_business', 'Google Business Crawler (OSM)'],
+                  ['kompass', 'Kompass B2B Directory Crawler'],
+                  ['europages', 'Europages Directory Crawler'],
+                  ['wikidata', 'Wikidata Entity Crawler'],
+                  ['importyeti', 'ImportYeti US Bill-of-Lading Crawler'],
+                  ['itpc', 'Kemendag ITPC Inquiry Crawler'],
+                ].map(([s, label]) => `<tr>
+                  <td class="body-sm">${esc(label)}<div class="caption muted-3">${esc(s)}</div></td>
                   <td class="r num">${fmtN(bySrcMap[s] || 0)}</td>
                 </tr>`).join('')}
               </tbody>
