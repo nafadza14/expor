@@ -6,15 +6,15 @@ name: Crawl buyers (Python, aggressive)
 
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 */2 * * *'
   workflow_dispatch:
     inputs:
       minutes:
         description: 'Wall-clock budget for this run'
-        default: '20'
+        default: '25'
       concurrency:
         description: 'Parallel crawl slices'
-        default: '4'
+        default: '6'
 
 jobs:
   crawl:
@@ -38,6 +38,6 @@ jobs:
             echo "::error::DATABASE_URL_POSTGRESS secret not set"
             exit 1
           fi
-          MIN="${{ github.event.inputs.minutes || '20' }}"
-          CONC="${{ github.event.inputs.concurrency || '4' }}"
+          MIN="${{ github.event.inputs.minutes || '25' }}"
+          CONC="${{ github.event.inputs.concurrency || '6' }}"
           python python_scrapers/main.py run --minutes "$MIN" --concurrency "$CONC"

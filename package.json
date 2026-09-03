@@ -11,6 +11,7 @@
     "migrate": "node scripts/migrate.js",
     "scrape": "node scripts/scrape.js",
     "enrich": "node scripts/enrich.js",
+    "purge:junk": "node scripts/purge-junk.js",
     "pg:ping": "node -e \"require('dotenv').config?.({path:'.env.local'});require('./src/pg').ping().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\""
   },
   "engines": {

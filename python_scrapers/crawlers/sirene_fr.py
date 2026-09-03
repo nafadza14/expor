@@ -65,10 +65,32 @@ def _size_from_effectif(tranche: str | None) -> str | None:
 
 
 async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
-                    per_page: int = 20) -> list[BuyerRecord]:
+                    per_page: int = 25) -> list[BuyerRecord]:
     if country.upper() != "FR":
         return []
-    url = f"{BASE}?q={quote(keyword)}&per_page={per_page}&etat_administratif=A"
+    # Quality filters: active companies only, employee band >= 12 (20+ staff)
+    # so tiny cafe / hairdresser noise gets dropped. Also filter by NAF
+    # sections most relevant to food import/wholesale so we don't return
+    # unrelated firms whose display name happens to contain the keyword.
+    naf_focus = [
+        "46.37Z",  # Wholesale of coffee, tea, cocoa, spices
+        "46.31Z",  # Fruit and vegetable wholesale
+        "46.32A", "46.32B", "46.32C",  # Meat and seafood wholesale
+        "46.36Z",  # Wholesale sugar, chocolate
+        "46.38A",  # Fish wholesale
+        "46.39A", "46.39B",  # General food wholesale
+        "10.83Z",  # Coffee/tea processing
+        "10.84Z",  # Spice manufacturing
+    ]
+    params = [
+        f"q={quote(keyword)}",
+        f"per_page={per_page}",
+        "etat_administratif=A",
+        "minimal=true",
+        "tranche_effectif_salarie=12,21,22,31,32,41,42,51,52,53",  # 20+ employees
+        f"activite_principale={quote(','.join(naf_focus))}",
+    ]
+    url = f"{BASE}?{'&'.join(params)}"
     try:
         async with httpx.AsyncClient(timeout=25.0, headers={"User-Agent": UA}) as client:
             res = await client.get(url)

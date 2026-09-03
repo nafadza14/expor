@@ -18,13 +18,23 @@ async function gleifFetch(url) {
   return res.json();
 }
 
+const JUNK_NAME_RE = /\b(SPE LLC|SPV|SPECIAL PURPOSE|IN LIQUIDAZIONE|IN LIQUIDATION|EN LIQUIDATION|LIQUIDATED|DISSOLVED|HOLDING SPE|TRUST\s+\d|DEED OF)\b/i;
+
 function mapRecord(rec) {
   const attrs = rec?.attributes || {};
   const entity = attrs.entity || {};
+  const name = entity.legalName?.name;
+  // Reject shell / liquidated / trust entities at ingestion time so we
+  // never store data that would immediately need to be purged.
+  if (!name || JUNK_NAME_RE.test(name)) return null;
+  // Only entities whose LEI status is ACTIVE. Lapsed / retired entities
+  // are almost never useful outreach targets.
+  const status = attrs.registration?.status;
+  if (status && status !== 'ISSUED' && status !== 'PENDING_TRANSFER' && status !== 'PENDING_VALIDATION') return null;
   const addr = entity.legalAddress || entity.headquartersAddress || {};
   return normalizeBuyer({
     source_id: rec.id,
-    name: entity.legalName?.name,
+    name,
     country: addr.country,
     city: addr.city,
     address: [addr.addressLines?.join(', '), addr.postalCode, addr.city, addr.country].filter(Boolean).join(', ') || null,
@@ -53,4 +63,4 @@ async function discoverByKeyword({ keyword, country, limit = 20 }) {
   return searchGleif({ query: keyword, country, limit });
 }
 
-module.exports = { searchGleif, discoverByKeyword };
+module.exports = { searchGleif, discoverByKeyword, JUNK_NAME_RE };

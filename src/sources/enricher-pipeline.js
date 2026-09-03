@@ -60,7 +60,7 @@ async function enrichOne(buyer) {
   };
 }
 
-async function enrichBatch({ max = 25, sleepMs = 1500, mode = 'fresh' } = {}) {
+async function enrichBatch({ max = 25, sleepMs = 700, mode = 'fresh' } = {}) {
   // mode 'fresh': only rows never enriched.
   // mode 'contacts': rows still missing website or email or phone,
   //                  even if a previous enrich pass ran.
