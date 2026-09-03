@@ -1523,7 +1523,7 @@ async function handleApi(db, req, res, url, body) {
     try {
       const pgClient = require('./pg');
       const b = await pgClient.one(`
-        SELECT id, source, name, country, city, address, website, email, phone,
+        SELECT id, source, source_id, name, country, city, address, website, email, phone,
                industry, size_bucket, description, hs_codes,
                data_confidence, enriched_at, created_at, updated_at, sources_seen
           FROM scraped_buyers WHERE id = $1`, [buyerId]);
@@ -1562,7 +1562,7 @@ async function handleApi(db, req, res, url, body) {
         WHERE l.user_id=? AND lb.buyer_id=?`).all(user.id, buyerId);
 
       return json(res, 200, {
-        id: Number(b.id), name: b.name, source: b.source,
+        id: Number(b.id), name: b.name, source: b.source, source_id: b.source_id,
         country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country,
         city: b.city, address: b.address, website: b.website,
         industry: b.industry, size_bucket: b.size_bucket,

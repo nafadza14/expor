@@ -87,4 +87,89 @@ async function crawlWebsite(rootUrl) {
   };
 }
 
-module.exports = { crawlWebsite, stripHtml, extractEmails, extractPhones };
+// ---------- Company website discovery ----------
+// Buyers scraped from public registries (GLEIF, SIRENE, Companies House,
+// SEC EDGAR) rarely publish contact info. To fill emails, phones and
+// descriptions we first need to find the company's own website. Brave
+// Search HTML page returns real organic results server-side without a
+// captcha, unlike Google or DuckDuckGo.
+
+const SEARCH_BLOCKED = new Set([
+  'linkedin.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
+  'youtube.com', 'wikipedia.org', 'wikimedia.org', 'crunchbase.com',
+  'bloomberg.com', 'reuters.com', 'yellowpages.com', 'yelp.com',
+  'trustpilot.com', 'glassdoor.com', 'indeed.com', 'zoominfo.com',
+  'dnb.com', 'rocketreach.co', 'apollo.io', 'signalhire.com',
+  'find-and-update.company-information.service.gov.uk',
+  'opencorporates.com', 'kompass.com', 'europages.co.uk', 'europages.com',
+  'yell.com', 'brave.com', 'search.brave.com', 'sec.gov', 'gleif.org',
+  'insee.fr', 'recherche-entreprises.api.gouv.fr',
+  'w3.org', 'schema.org',
+]);
+
+function isBlockedHost(host) {
+  const h = String(host || '').toLowerCase().replace(/^www\./, '');
+  for (const bad of SEARCH_BLOCKED) {
+    if (h === bad || h.endsWith('.' + bad)) return true;
+  }
+  return false;
+}
+
+async function findCompanyWebsite(name, country) {
+  if (!name) return null;
+  const query = country ? `${name} ${country}` : String(name);
+  const url = 'https://search.brave.com/search?q=' + encodeURIComponent(query) + '&source=web';
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let html = '';
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      headers: { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml' },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    html = Buffer.from(buf.slice(0, 400_000)).toString('utf8');
+  } catch (_e) {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+  if (!html) return null;
+  // Extract external URLs from href="..." attributes.
+  const re = /href="(https?:\/\/[^"'\s]+)"/g;
+  const seenHosts = new Set();
+  const candidates = [];
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    let u;
+    try { u = new URL(m[1]); } catch { continue; }
+    if (!/^https?:$/.test(u.protocol)) continue;
+    const host = u.hostname.toLowerCase();
+    if (isBlockedHost(host)) continue;
+    if (seenHosts.has(host)) continue;
+    seenHosts.add(host);
+    // Keep the root URL only, drop query strings.
+    candidates.push(`${u.protocol}//${host}`);
+    if (candidates.length >= 5) break;
+  }
+  if (!candidates.length) return null;
+  // Prefer a domain whose bare host contains a token from the company name
+  // (helps skip search engine reference pages that slip through).
+  const tokens = String(name).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((t) => t.length >= 4);
+  const scored = candidates.map((c) => {
+    const host = new URL(c).hostname.replace(/^www\./, '');
+    const bareHost = host.split('.')[0];
+    let score = 0;
+    for (const tok of tokens) {
+      if (bareHost.includes(tok)) score += 10;
+      else if (host.includes(tok)) score += 5;
+    }
+    return { url: c, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].url;
+}
+
+module.exports = { crawlWebsite, findCompanyWebsite, stripHtml, extractEmails, extractPhones, isBlockedHost };

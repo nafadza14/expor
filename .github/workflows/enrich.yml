@@ -14,6 +14,9 @@ on:
       max:
         description: 'Max buyers to enrich this run'
         default: '150'
+      mode:
+        description: 'fresh | contacts | all'
+        default: 'contacts'
 
 jobs:
   enrich:
@@ -35,4 +38,5 @@ jobs:
             exit 1
           fi
           MAX="${{ github.event.inputs.max || '150' }}"
-          node scripts/enrich.js --max "$MAX"
+          MODE="${{ github.event.inputs.mode || 'contacts' }}"
+          node scripts/enrich.js --max "$MAX" --mode "$MODE"

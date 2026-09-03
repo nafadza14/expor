@@ -19,15 +19,18 @@ const { enrichBatch } = require('../src/sources/enricher-pipeline');
 
 async function main() {
   const maxIdx = process.argv.indexOf('--max');
+  const modeIdx = process.argv.indexOf('--mode');
   const max = maxIdx > -1 ? Number(process.argv[maxIdx + 1]) : 100;
-  console.log(`[enrich] Enriching up to ${max} buyers...`);
-  const results = await enrichBatch({ max });
+  const mode = modeIdx > -1 ? String(process.argv[modeIdx + 1]) : 'fresh';
+  console.log(`[enrich] Mode ${mode}, enriching up to ${max} buyers...`);
+  const results = await enrichBatch({ max, mode });
   const ok = results.filter((r) => r.ok).length;
   const ai = results.filter((r) => r.ai_used).length;
+  const withSite = results.filter((r) => r.got_website).length;
   const withEmail = results.filter((r) => r.got_email).length;
   const withPhone = results.filter((r) => r.got_phone).length;
   const failed = results.filter((r) => !r.ok).length;
-  console.log(`[enrich] Done. ${results.length} processed. ok=${ok} ai=${ai} +email=${withEmail} +phone=${withPhone} failed=${failed}`);
+  console.log(`[enrich] Done. ${results.length} processed. ok=${ok} ai=${ai} +site=${withSite} +email=${withEmail} +phone=${withPhone} failed=${failed}`);
   await pg.getPool().end().catch(() => {});
 }
 

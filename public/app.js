@@ -2178,13 +2178,14 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
     throw e;
   }
   const tab = params.get('tab') || 'overview';
-  const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['notes', 'Catatan & Aktivitas']];
+  const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
   const sourceLabels = { gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
-    : `<span class="pill pill-neutral">Sumber tunggal</span>`;
+    : `<span class="pill pill-neutral">1 sumber</span>`;
+  const contactCount = (b.contacts || []).filter((c) => c.value && !c.masked).length;
   const header = `
     <div class="breadcrumb"><a href="#/cari">Cari Buyer</a><span class="sep">/</span><span>${esc(b.name)}</span></div>
     <div class="card" style="margin-bottom:24px"><div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
@@ -2195,10 +2196,11 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
         <p class="muted" style="margin:4px 0 10px">${flag(b.country)} ${esc(b.address || b.city || '')} · ${esc(b.country_name || b.country || '')}${b.industry ? ' · ' + esc(b.industry) : ''}${b.size_bucket ? ' · Ukuran ' + esc(b.size_bucket) : ''}</p>
         <div style="display:flex;gap:24px;flex-wrap:wrap">
           <div><div class="caption muted-3">Data confidence</div><b class="num">${b.data_confidence || b.score || 60}%</b></div>
-          <div><div class="caption muted-3">Ditemukan pertama</div><b class="num">${b.first_seen ? fmtDate(b.first_seen) : '-'}</b></div>
-          <div><div class="caption muted-3">Terakhir diperbarui</div><b class="num">${b.last_updated ? fmtDate(b.last_updated) : '-'}</b></div>
-          <div><div class="caption muted-3">Enrichment</div><b class="num">${b.enriched ? '✓ Enriched' : 'Raw'}</b></div>
+          <div><div class="caption muted-3">Sumber terverifikasi</div><b class="num">${sources.length}</b></div>
           <div><div class="caption muted-3">HS terkait</div><b class="num">${(b.hs_codes || []).length}</b></div>
+          <div><div class="caption muted-3">Kontak</div><b class="num">${contactCount}</b></div>
+          <div><div class="caption muted-3">Ditemukan</div><b class="num">${b.first_seen ? fmtDate(b.first_seen) : '-'}</b></div>
+          <div><div class="caption muted-3">Terakhir update</div><b class="num">${b.last_updated ? fmtDate(b.last_updated) : '-'}</b></div>
         </div>
         <div style="margin-top:10px">${sourceChips}</div>
         <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -2295,6 +2297,34 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
         <div class="card"><h3 style="margin-bottom:12px">Buyer serupa</h3>
           ${d.similar.map((s) => `<div class="clickable" style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px dotted var(--border-subtle);cursor:pointer" onclick="location.hash='#/buyer/${s.id}'">
             <span>${flag(s.country)} <b>${esc(s.name)}</b></span><span class="pill pill-neutral num">${s.base_score}</span></div>`).join('')}</div></div></div>`;
+  } else if (tab === 'sources') {
+    const srcLinks = {
+      gleif: (id, name) => `https://search.gleif.org/#/record/${id}`,
+      companies_house_uk: (id) => `https://find-and-update.company-information.service.gov.uk/company/${id}`,
+      sirene_fr: (id) => `https://annuaire-entreprises.data.gouv.fr/entreprise/${id}`,
+      sec_edgar_us: (id) => `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${id}`,
+      wikidata: (id) => `https://www.wikidata.org/wiki/${id}`,
+    };
+    body.innerHTML = `<div class="card"><h3 style="margin-bottom:12px">Sumber data</h3>
+      <p class="body-sm muted" style="margin-bottom:14px">Buyer ini didiscover dan diverifikasi lewat sumber-sumber berikut. Kalau muncul di 2+ sumber, cross-source dedup mengaggregasi data ke satu row canonical.</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${sources.length ? sources.map((s) => {
+          const link = srcLinks[s]?.(b.source_id || b.id, b.name);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--border-default);border-radius:10px">
+            <div><b class="body-sm">${esc(sourceLabels[s] || s)}</b>
+              <div class="caption muted-3">${s === 'gleif' ? 'LEI verified legal entity' :
+                s === 'companies_house_uk' ? 'UK Companies House official registry' :
+                s === 'sirene_fr' ? 'INSEE SIRENE (French national registry)' :
+                s === 'sec_edgar_us' ? 'US SEC EDGAR filings' :
+                s === 'wikidata' ? 'Wikidata linked open data' : 'Web / directory scrape'}</div>
+            </div>
+            ${link ? `<a class="btn btn-sm btn-neutral" href="${esc(link)}" target="_blank" rel="noopener">Buka sumber →</a>` : ''}
+          </div>`;
+        }).join('') : '<p class="muted body-sm">Sumber tidak diketahui.</p>'}
+      </div>
+      <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-default)">
+        <div class="caption muted-3">Data confidence: <b>${b.data_confidence || 60}%</b> · Enrichment: ${b.enriched ? '✓ selesai' : '⏳ dalam antrian'}</div>
+      </div></div>`;
   } else if (tab === 'notes') {
     const [notes, msgs] = await Promise.all([api('/api/notes?buyer_id=' + id), api('/api/outreach/messages?buyer_id=' + id)]);
     body.innerHTML = `<div class="grid grid-2">
