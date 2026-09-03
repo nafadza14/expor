@@ -36,63 +36,51 @@ BASE_MIRRORS = [
 
 UA = "EksporIn/1.0 (contact: hello@eksporin.id; +https://ekspor.zieads.com)"
 
-# OSM tags per HS category. IMPORTER-FIRST filter: we only surface
-# entities with the business scale to actually import (roasters,
-# wholesalers, food processors, industrial food companies, office
-# addresses tagged as commercial). Retail-only tags like shop=coffee
-# (a cafe selling cups) or amenity=cafe (a coffee bar) are deliberately
-# EXCLUDED. A local Berlin cafe does not import 20 tons of green
-# coffee from Indonesia; they buy from the roaster who does. We want
-# the roaster.
+# OSM tags per HS category. IMPORTER-FIRST filter: only real food /
+# coffee / spice industrial and craft tags. We deliberately DROP:
+#   - shop=wholesale        (too generic: could be plumbing, hardware)
+#   - office=company        (too generic: catches insurance, NGOs, etc)
+#   - amenity=cafe / shop=coffee / shop=tea / shop=spices (retail)
+# What is left is a small but 100%-relevant set of OSM tags that only
+# get applied to actual coffee roasters, tea processors, food
+# processors and licensed spice producers.
 TAGS_BY_HS: dict[str, list[tuple[str, str]]] = {
-    "0901": [
+    "0901": [  # coffee
         ("shop", "roastery"),
         ("industry", "coffee_roasting"),
         ("craft", "coffee_roaster"),
-        ("shop", "wholesale"),
-        ("office", "company"),
     ],
-    "0902": [
-        ("shop", "wholesale"),
+    "0902": [  # tea
         ("industry", "tea_processing"),
-        ("office", "company"),
     ],
     "0904": [  # pepper
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
     "0905": [  # vanilla
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
     "0906": [  # cinnamon
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
     "0907": [  # cloves
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
     "0908": [  # nutmeg
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
     "0910": [  # ginger, turmeric
-        ("shop", "wholesale"),
         ("industry", "food_processing"),
-        ("office", "company"),
+        ("industry", "spice_production"),
     ],
 }
 DEFAULT_TAGS = [
-    ("shop", "wholesale"),
     ("industry", "food_processing"),
-    ("office", "company"),
-    ("landuse", "commercial"),
+    ("industry", "coffee_roasting"),
 ]
 
 # Retail signals: if any of these tags is present the entity is almost
@@ -110,33 +98,23 @@ RETAIL_SHOPS = {"coffee", "tea", "spices", "greengrocer", "supermarket",
 COUNTRY_ISO_OK = {"US", "GB", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG", "SG", "CN"}
 
 
-def _size_from_osm(tags: dict) -> str | None:
-    # Wholesale + industrial + registered offices are always at least
-    # medium sized; coffee_roaster craft is usually medium.
-    if (tags.get("shop") == "wholesale"
-            or tags.get("industry") in ("food_processing", "coffee_roasting", "tea_processing")
-            or tags.get("office") == "company"):
-        return "medium"
-    if tags.get("craft") == "coffee_roaster":
-        return "medium"
-    return "small"
+def _size_from_osm(_tags: dict) -> str | None:
+    # All accepted entities are industrial-tier (roaster / processor).
+    return "medium"
 
 
 def _industry_from_tags(tags: dict) -> str | None:
     industry = tags.get("industry")
     craft = tags.get("craft")
     shop = tags.get("shop")
-    office = tags.get("office")
     if industry == "coffee_roasting" or craft == "coffee_roaster" or shop == "roastery":
         return "coffee roaster"
     if industry == "tea_processing":
         return "tea processor"
+    if industry == "spice_production":
+        return "spice producer"
     if industry == "food_processing":
         return "food processor"
-    if shop == "wholesale":
-        return "food wholesale"
-    if office == "company":
-        return "food import / distribution"
     return industry or craft or shop
 
 
@@ -196,21 +174,19 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
             continue
         if any(sig in tags for sig in RETAIL_SIGNALS):
             continue
-        # Reject rows with no contact / web / phone AND no wholesale
-        # signal. A real importer nearly always publishes either a
-        # website or a business phone. If it has none of that AND is
-        # not tagged as wholesale/industry, treat as noise.
+        # Require a food/coffee/spice-specific scale tag OR a real
+        # commercial contact. This is the last line of defense against
+        # a mis-tagged OSM entity slipping through.
         has_contact = any(k in tags for k in (
             "website", "contact:website", "phone", "contact:phone",
             "email", "contact:email",
         ))
         has_scale_tag = (
-            tags.get("shop") == "wholesale"
-            or tags.get("industry") in ("food_processing", "coffee_roasting", "tea_processing")
+            tags.get("industry") in ("food_processing", "coffee_roasting", "tea_processing", "spice_production")
             or tags.get("craft") == "coffee_roaster"
-            or tags.get("office") == "company"
+            or tags.get("shop") == "roastery"
         )
-        if not has_contact and not has_scale_tag:
+        if not (has_contact and has_scale_tag):
             continue
         # ---------------------------------------------------------------
 
