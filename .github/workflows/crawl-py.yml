@@ -1,0 +1,43 @@
+name: Crawl buyers (Python, aggressive)
+
+# Multi-source Python crawler. Runs every 3 hours to keep the pool
+# fresh without exhausting the shared LLM budget. Each invocation
+# is time-boxed to 20 minutes so a stuck site can never block the job.
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'Wall-clock budget for this run'
+        default: '20'
+      concurrency:
+        description: 'Parallel crawl slices'
+        default: '4'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python_scrapers/requirements.txt
+      - name: Run crawler
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL_POSTGRESS" ]; then
+            echo "::error::DATABASE_URL_POSTGRESS secret not set"
+            exit 1
+          fi
+          MIN="${{ github.event.inputs.minutes || '20' }}"
+          CONC="${{ github.event.inputs.concurrency || '4' }}"
+          python python_scrapers/main.py run --minutes "$MIN" --concurrency "$CONC"

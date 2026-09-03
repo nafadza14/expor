@@ -8,3 +8,11 @@ data/*
 *.db-wal
 .env
 .env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/

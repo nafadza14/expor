@@ -3261,7 +3261,7 @@ route(/^\/admin$/, async (app, m, params) => {
             <table class="tbl">
               <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
               <tbody>
-                ${['gleif','wikidata','importyeti','itpc'].map((s) => `<tr>
+                ${['gleif','kompass','europages','wikidata','importyeti','itpc'].map((s) => `<tr>
                   <td class="body-sm">${esc(s)}</td>
                   <td class="r num">${fmtN(bySrcMap[s] || 0)}</td>
                 </tr>`).join('')}
