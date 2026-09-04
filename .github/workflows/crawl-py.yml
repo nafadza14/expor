@@ -57,14 +57,16 @@ jobs:
       # silently no-ops and we fall back to cron + watchdog.
       - name: Chain next crawl-py
         if: always()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
         run: |
+          set +e
           if [ -z "$GH_TOKEN" ]; then
             echo "WORKFLOW_PAT not set. Skipping self-chain; relying on cron + watchdog."
             exit 0
           fi
-          # Small delay so we do not tight-loop when a run finishes fast.
           sleep 30
           gh workflow run crawl-py.yml --repo ${{ github.repository }} \
-            -f minutes=30 -f concurrency=10 || true
+            -f minutes=30 -f concurrency=10
+          exit 0

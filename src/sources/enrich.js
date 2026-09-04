@@ -20,8 +20,14 @@ function heuristicSize(name) {
   return 'small';
 }
 
+// Circuit breaker: if the LLM upstream reports a hard failure (401,
+// 403, blocked key, quota) we stop hitting it for the rest of the
+// process. Otherwise every buyer in the batch pays the network cost.
+let SUMOPOD_DEAD = null; // holds the failure reason string once tripped
+
 async function aiEnrich({ name, country, website_snippet }) {
   if (!SUMOPOD_AI_KEY) return null;
+  if (SUMOPOD_DEAD) return null;
   const sys = 'You classify foreign buyer companies for Indonesian exporters. Reply with a single JSON object, no prose. Keys: industry (short lowercase noun like "coffee roaster", "spice importer", "food wholesaler"), size_bucket ("small" | "medium" | "large"), description (one short English sentence, 15 words max, factual, no marketing fluff).';
   const usr = `Company: ${name}\nCountry: ${country || 'unknown'}${website_snippet ? '\nWebsite excerpt:\n' + website_snippet.slice(0, 1200) : ''}`;
   const body = {
@@ -34,12 +40,28 @@ async function aiEnrich({ name, country, website_snippet }) {
     max_tokens: 200,
     response_format: { type: 'json_object' },
   };
-  const res = await fetch(SUMOPOD_AI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUMOPOD_AI_KEY },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`sumopod_ai_${res.status}`);
+  let res;
+  try {
+    res = await fetch(SUMOPOD_AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUMOPOD_AI_KEY },
+      body: JSON.stringify(body),
+    });
+  } catch (netErr) {
+    console.warn('[enrich] Sumopod network error:', netErr.message);
+    return null;
+  }
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.text()).slice(0, 200); } catch {}
+    if ([401, 402, 403, 429].includes(res.status)) {
+      SUMOPOD_DEAD = `${res.status}: ${detail}`;
+      console.error(`[enrich] Sumopod AI disabled for this run (${SUMOPOD_DEAD}). Falling back to heuristic industry/size only.`);
+    } else {
+      console.warn(`[enrich] Sumopod ${res.status}: ${detail}`);
+    }
+    return null;
+  }
   const json = await res.json();
   const raw = json?.choices?.[0]?.message?.content || '';
   try {
