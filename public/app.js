@@ -1077,10 +1077,12 @@ route(/^\/login$/, (app) => {
     const password = String(fd.get('password') || '');
     const isDemo = email === 'demo@eksporin.id';
     // Local-backend-only test accounts (not registered in Supabase).
+    // admin@super-vanilla.com is now registered in Supabase, so it goes
+    // through the normal Supabase auth path plus the sync handler
+    // (which preserves the seeded plan=business on the local row).
     const LOCAL_ONLY_ACCOUNTS = new Set([
       'demo@eksporin.id',
       'test@zieads.com',
-      'admin@super-vanilla.com',
     ]);
     try {
       // Local-only accounts skip the Supabase round-trip.
