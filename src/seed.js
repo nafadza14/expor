@@ -103,6 +103,12 @@ function seed(db) {
       .run('demo@eksporin.id', hashPassword('demo1234'), 'Andi Prasetyo', 'PT Kopi Nusantara Ekspor', 'growth',
         JSON.stringify(['090111', '090121']), JSON.stringify(['US', 'DE', 'NL']));
 
+    // Business test account (Winston's testing profile).
+    db.prepare(`INSERT INTO users (email,password_hash,name,org_name,plan,hs_focus,target_countries,onboarded)
+      VALUES (?,?,?,?,?,?,?,1)`)
+      .run('admin@super-vanilla.com', hashPassword('supersekali'), 'Super Vanilla Admin', 'PT Super Vanilla',
+        'business', JSON.stringify(['090510', '090520']), JSON.stringify(['US', 'DE', 'FR', 'JP']));
+
     // Super admin
     db.prepare(`INSERT INTO users (email,password_hash,name,org_name,plan,is_admin,onboarded)
       VALUES (?,?,?,?,?,?,1)`)

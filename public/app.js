@@ -1076,9 +1076,15 @@ route(/^\/login$/, (app) => {
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const password = String(fd.get('password') || '');
     const isDemo = email === 'demo@eksporin.id';
+    // Local-backend-only test accounts (not registered in Supabase).
+    const LOCAL_ONLY_ACCOUNTS = new Set([
+      'demo@eksporin.id',
+      'test@zieads.com',
+      'admin@super-vanilla.com',
+    ]);
     try {
-      // Demo account & admin use local backend only (not in Supabase).
-      if (isDemo || email === 'test@zieads.com') {
+      // Local-only accounts skip the Supabase round-trip.
+      if (isDemo || LOCAL_ONLY_ACCOUNTS.has(email)) {
         const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
         ME = null;
         // Fetch /api/me to check is_admin, then route accordingly.
