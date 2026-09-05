@@ -564,6 +564,14 @@ async function handleApi(db, req, res, url, body) {
   // Supabase bridge: verify a Supabase access_token, upsert a local user row
   // that mirrors the Supabase user + profile, and issue a local session cookie so
   // the rest of the buyer-intelligence API continues to work unchanged.
+  // Force-plan lookup: emails in this map always get the plan on the
+  // right regardless of what the seed order or Supabase profile says.
+  // Use it for internal tester accounts we want to lock at a specific
+  // tier no matter what.
+  const FORCED_PLAN_BY_EMAIL = {
+    'admin@super-vanilla.com': 'business',
+  };
+
   if (route('POST', '/api/auth/supabase-sync')) {
     return (async () => {
       const { access_token } = body || {};
@@ -594,11 +602,14 @@ async function handleApi(db, req, res, url, body) {
         const goal = profile.goal || null;
         const onboarded = profile.onboarded ? 1 : 0;
 
+        const forcedPlan = FORCED_PLAN_BY_EMAIL[email.toLowerCase()] || null;
+
         let u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
         if (!u) {
-          db.prepare(`INSERT INTO users (email, password_hash, name, org_name, hs_focus, target_countries, export_status, goal, onboarded)
-                      VALUES (?,?,?,?,?,?,?,?,?)`)
+          db.prepare(`INSERT INTO users (email, password_hash, name, org_name, plan, hs_focus, target_countries, export_status, goal, onboarded)
+                      VALUES (?,?,?,?,?,?,?,?,?,?)`)
             .run(email, 'supabase:' + sbUser.id, displayName, orgName,
+                 forcedPlan || 'free',
                  JSON.stringify(hsFocus), JSON.stringify(targetCountries),
                  exportStatus, goal, onboarded);
           u = db.prepare('SELECT * FROM users WHERE email=?').get(email);
@@ -613,6 +624,14 @@ async function handleApi(db, req, res, url, body) {
                  exportStatus, goal,
                  (onboarded || u.onboarded) ? 1 : 0,
                  u.id);
+          u = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
+        }
+
+        // Apply forced plan even to existing rows so a stale free plan
+        // gets upgraded on next login, and downgrades from anywhere
+        // never stick for a locked tester email.
+        if (forcedPlan && u.plan !== forcedPlan) {
+          db.prepare('UPDATE users SET plan=? WHERE id=?').run(forcedPlan, u.id);
           u = db.prepare('SELECT * FROM users WHERE id=?').get(u.id);
         }
 
