@@ -54,3 +54,27 @@ public/            index.html, styles.css (design tokens), app.js (SPA)
 Terhadap arsitektur produksi di dokumen 02 (Laravel + FastAPI + NestJS + Elasticsearch + ClickHouse): MVP ini memampatkan semua bounded context ke satu proses, tetapi kontrak API, skema data (subset doc 04), formula skor (doc 03 §3.4), matriks fitur-per-tier (doc 03 §7), dan design system (doc 01 §12) mengikuti spesifikasi, sehingga migrasi per-service dapat dilakukan bertahap tanpa mengubah frontend.
 
 Belum termasuk: admin panel (doc 05), pipeline ingest Airflow (doc 08), OAuth Google/LinkedIn, pembayaran riil, email riil.
+
+## Data pipeline: crawler + AI research agent
+
+Semua data buyer live disimpan di tabel `scraped_buyers` (Supabase Postgres) dan langsung dibaca oleh direktori buyer di platform (filter per HS-4 di kolom `hs_codes`).
+
+**Daftar komoditas & negara target** ada di satu file: `config/commodities.json` (25 HS-4: kopi, rempah, kakao, kelapa & minyak kelapa, sawit, gula kelapa, udang, tuna, rumput laut, minyak atsiri, karet, furnitur, rotan, dll. × 38 negara). Dipakai oleh crawler Python, AI agent, dan pipeline Node.
+
+**Crawler berbasis aturan** (`python_scrapers/main.py`, workflow `crawl-py.yml`): OSM Overpass, Companies House UK, SIRENE France (by NAF), SEC EDGAR. Kompass/Europages dimatikan default (diblok Cloudflare), aktifkan lewat `CRAWL_SOURCES`.
+
+**AI research agent** (`python_scrapers/agent/`, workflow `agent.yml`, tiap 3 jam):
+
+1. Planner memilih misi (HS × negara) dengan prioritas tinggi + coverage rendah, skip pasangan yang sudah diriset < 10 hari.
+2. LLM (Sumopod, OpenAI-compatible tool calling) memakai tool `web_search`, `open_page`, `check_known`, `save_buyer`, `finish`, mencari importir/distributor/processor seperti riset manual, termasuk query bahasa lokal.
+3. `save_buyer` diverifikasi deterministik (`agent/verify.py`): halaman bukti harus benar-benar dibuka, kutipan harus ada di halaman, nama perusahaan muncul di halaman, email/telepon hanya disimpan jika terlihat di halaman, eksportir Indonesia / direktori / marketplace ditolak. Confidence dihitung dari bukti, bukan dari LLM.
+4. Upsert ke `scraped_buyers` (`source = ai_agent`, dedup lintas sumber sama seperti crawler), log misi ke `scrape_jobs` (tampil di admin).
+
+```bash
+pip install -r python_scrapers/requirements.txt
+python -m python_scrapers.tests.test_agent                       # self-test offline
+python -m python_scrapers.agent.run --dry-run --hs 1801 --country DE   # tanpa DB -> agent_output.jsonl
+python -m python_scrapers.agent.run --missions 6 --minutes 30          # live ke Supabase
+```
+
+Secrets GitHub Actions: `DATABASE_URL_POSTGRESS`, `SUMOPOD_AI_KEY` (wajib), `BRAVE_API_KEY` (opsional). Variable opsional: `AGENT_MODEL`.

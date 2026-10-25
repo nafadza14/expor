@@ -11,17 +11,12 @@ const { searchItpc } = require('./itpc');
 const {
   persistBuyers, enqueueJob, claimNextJob, completeJob,
 } = require('./persist');
-const { SEED_HS_CODES, SEED_COUNTRIES } = require('../scrape-config');
+const { SEED_HS_CODES, SEED_COUNTRIES, KEYWORD_BY_HS } = require('../scrape-config');
 
 const SOURCES = {
   gleif: {
     label: 'GLEIF LEI Registry',
-    keyword_for_hs: (hs) => {
-      const map = { '0901': 'coffee', '0902': 'tea', '0904': 'pepper',
-        '0905': 'vanilla', '0906': 'cinnamon', '0907': 'clove',
-        '0908': 'nutmeg', '0909': 'anise', '0910': 'ginger' };
-      return map[hs] || map[hs?.slice(0, 4)] || null;
-    },
+    keyword_for_hs: (hs) => KEYWORD_BY_HS[hs] || KEYWORD_BY_HS[hs?.slice(0, 4)] || null,
     run: async ({ hs_code, country, limit = 20 }) => {
       const kw = SOURCES.gleif.keyword_for_hs(hs_code) || hs_code;
       return searchGleif({ query: kw, country, limit });
@@ -85,14 +80,17 @@ async function enqueue({ source, hs_code, country }) {
   return enqueueJob({ source, hs_code, country });
 }
 
-// Seed the queue with the MVP matrix: every configured source x every seed
-// HS x every seed country. Used by admin "Seed queue" action and by GH
-// Actions on first run.
-async function seedQueue({ sources = ['gleif', 'wikidata', 'importyeti', 'itpc'] } = {}) {
+// Seed the queue with the matrix: every configured source x seed HS x seed
+// country, limited to priority <= maxPriority (config/commodities.json) so
+// the expanded commodity list does not flood the queue. Used by admin
+// "Seed queue" action and by GH Actions on first run.
+async function seedQueue({ sources = ['gleif', 'wikidata', 'importyeti', 'itpc'], maxPriority = 1 } = {}) {
   const jobs = [];
+  const hsList = SEED_HS_CODES.filter((h) => (h.priority || 2) <= maxPriority);
+  const coList = SEED_COUNTRIES.filter((c) => (c.priority || 2) <= maxPriority);
   for (const source of sources) {
-    for (const hs of SEED_HS_CODES) {
-      for (const co of SEED_COUNTRIES) {
+    for (const hs of hsList) {
+      for (const co of coList) {
         const id = await enqueueJob({ source, hs_code: hs.code, country: co.iso2 });
         jobs.push({ id, source, hs_code: hs.code, country: co.iso2 });
       }

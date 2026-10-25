@@ -6,11 +6,22 @@
 // exposed to the client). Falls back to a heuristic guess if the model
 // call errors so a bad AI day does not stop the pipeline.
 
-// Fallback matches src/api.js so local dev works without .env setup. Real
-// production key comes from env, injected by Vercel and GH Actions Secrets.
-const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || 'sk-jzbEVp009nE3qAPxXvbJSg';
+// Key comes only from env (Vercel env vars / GH Actions secrets / .env.local).
+// No hardcoded fallback: the old one leaked in git history and is blocked.
+const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || '';
 const SUMOPOD_AI_URL = 'https://ai.sumopod.com/v1/chat/completions';
-const MODEL = 'gpt-4o-mini';
+const MODEL = process.env.SUMOPOD_MODEL || process.env.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview';
+
+// Tolerates <think> blocks, ```json fences and prose around the object.
+function parseJsonLoose(text) {
+  const t = String(text || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').trim();
+  try { return JSON.parse(t); } catch (_e) { /* fall through */ }
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) { try { return JSON.parse(fence[1]); } catch (_e) { /* fall through */ } }
+  const a = t.indexOf('{'); const b = t.lastIndexOf('}');
+  if (a !== -1 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (_e) { /* give up */ } }
+  return null;
+}
 
 function heuristicSize(name) {
   if (!name) return 'small';
@@ -37,8 +48,8 @@ async function aiEnrich({ name, country, website_snippet }) {
       { role: 'user', content: usr },
     ],
     temperature: 0.2,
-    max_tokens: 200,
-    response_format: { type: 'json_object' },
+    max_tokens: 2000, // reasoning models spend tokens thinking before the JSON
+    // no response_format: not every Sumopod model supports json_object mode
   };
   let res;
   try {
@@ -65,7 +76,8 @@ async function aiEnrich({ name, country, website_snippet }) {
   const json = await res.json();
   const raw = json?.choices?.[0]?.message?.content || '';
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = parseJsonLoose(raw);
+    if (!parsed) return null;
     return {
       industry: typeof parsed.industry === 'string' ? parsed.industry.trim().slice(0, 80) : null,
       size_bucket: ['small', 'medium', 'large'].includes(parsed.size_bucket) ? parsed.size_bucket : null,

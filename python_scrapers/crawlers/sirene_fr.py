@@ -33,13 +33,32 @@ NAF_INDUSTRY = {
     "46.37": "coffee, tea and spice wholesale",
     "46.31": "fruit and vegetable wholesale",
     "10.84": "spice manufacturing",
+    "10.82": "cocoa and chocolate manufacturing",
+    "46.36": "sugar, chocolate and confectionery wholesale",
+    "10.41": "oils and fats manufacturing",
+    "46.33": "dairy, eggs and edible oils wholesale",
+    "46.38A": "fish and seafood wholesale",
+    "10.20": "fish and seafood processing",
+    "46.38B": "specialised food wholesale",
+    "46.39": "food wholesale",
+    "10.39": "fruit and vegetable processing",
+    "10.89": "food manufacturing",
+    "20.53": "essential oils manufacturing",
+    "20.59": "chemical products manufacturing",
+    "46.75": "chemical products wholesale",
+    "46.45": "perfume and cosmetics wholesale",
+    "46.76": "intermediate products wholesale",
+    "22.19": "rubber products manufacturing",
+    "46.47": "furniture and home furnishing wholesale",
+    "46.49": "household goods wholesale",
 }
 
 
 def _industry_from_naf(naf: str | None) -> str | None:
     if not naf:
         return None
-    for prefix, label in NAF_INDUSTRY.items():
+    # Longest prefix first so "46.37" beats the generic "46.".
+    for prefix, label in sorted(NAF_INDUSTRY.items(), key=lambda kv: -len(kv[0])):
         if naf.startswith(prefix):
             return label
     return f"NAF {naf}"
@@ -72,18 +91,12 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
     # activity (INDUSTRY-FIRST) instead of relying on a keyword hitting
     # the company name. This surfaces real coffee/spice wholesalers that
     # never call themselves "coffee" or "vanilla" but ARE the buyers.
-    NAF_BY_HS = {
-        "0901": ["46.37Z", "10.83Z"],  # coffee/tea/spice wholesale + coffee processing
-        "0902": ["46.37Z", "10.83Z"],
-        "0904": ["46.37Z", "10.84Z"],
-        "0905": ["46.37Z", "10.84Z"],
-        "0906": ["46.37Z", "10.84Z"],
-        "0907": ["46.37Z", "10.84Z"],
-        "0908": ["46.37Z", "10.84Z"],
-        "0910": ["46.37Z", "10.84Z"],
-    }
-    default_naf = ["46.37Z", "46.39A", "46.39B", "10.83Z", "10.84Z"]
-    naf_focus = NAF_BY_HS.get(hs_code, default_naf)
+    # NAF codes per HS live in config/commodities.json (`naf`).
+    from ..shared.commodities import by_hs
+    com = by_hs(hs_code or "")
+    naf_focus = list((com or {}).get("naf") or [])
+    if not naf_focus:
+        return []
     # Employee band 6+ (10+ staff). 12+ was too tight combined with the
     # narrow NAF filter; the intersection was near-empty.
     # Do NOT quote() the comma-separated NAF list. The API expects the

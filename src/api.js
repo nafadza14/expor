@@ -10,7 +10,7 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_--qPH
 const SUMOPOD_PAY_URL = process.env.SUMOPOD_PAY_URL || 'https://api-pay.sumopod.com/api/v1/payments';
 const SUMOPOD_PAY_KEY = process.env.SUMOPOD_PAY_KEY || 'a5b0c6a03795701fa3e84f5e5a02a20fca04be43fbaad1c7857455a7134f3993';
 const SUMOPOD_AI_URL = process.env.SUMOPOD_AI_URL || 'https://ai.sumopod.com/v1/chat/completions';
-const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || 'sk-jzbEVp009nE3qAPxXvbJSg';
+const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || '';
 // Default to gpt-4o-mini which is verified to return content on Sumopod.
 // MiniMax-M2.7-highspeed can be selected per-request via body.model when needed.
 const SUMOPOD_AI_MODEL = process.env.SUMOPOD_AI_MODEL || 'gpt-4o-mini';
@@ -1544,8 +1544,11 @@ async function handleApi(db, req, res, url, body) {
       const b = await pgClient.one(`
         SELECT id, source, source_id, name, country, city, address, website, email, phone,
                industry, size_bucket, description, hs_codes,
-               data_confidence, enriched_at, created_at, updated_at, sources_seen
-          FROM scraped_buyers WHERE id = $1`, [buyerId]);
+               data_confidence, enriched_at, created_at, updated_at, sources_seen,
+               -- to_jsonb() keeps this working before migration 003 adds the columns.
+               COALESCE(to_jsonb(sb)->>'evidence_url', raw_json->>'evidence_url') AS evidence_url,
+               COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type
+          FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
 
       // profile quota only counts first view of a buyer per period
@@ -1587,6 +1590,7 @@ async function handleApi(db, req, res, url, body) {
         industry: b.industry, size_bucket: b.size_bucket,
         description: b.description,
         sources_seen: b.sources_seen || [b.source],
+        evidence_url: b.evidence_url || null, buyer_type: b.buyer_type || null,
         data_confidence: b.data_confidence,
         enriched: !!b.enriched_at, enriched_at: b.enriched_at,
         first_seen: b.created_at, last_updated: b.updated_at,

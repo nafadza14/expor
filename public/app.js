@@ -2188,7 +2188,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const tab = params.get('tab') || 'overview';
   const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
-  const sourceLabels = { gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceLabels = { ai_agent: 'AI Research Agent', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
@@ -2312,6 +2312,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
       sirene_fr: (id) => `https://annuaire-entreprises.data.gouv.fr/entreprise/${id}`,
       sec_edgar_us: (id) => `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${id}`,
       wikidata: (id) => `https://www.wikidata.org/wiki/${id}`,
+      ai_agent: () => (/^https?:\/\//i.test(b.evidence_url || '') ? b.evidence_url : null),
     };
     body.innerHTML = `<div class="card"><h3 style="margin-bottom:12px">Sumber data</h3>
       <p class="body-sm muted" style="margin-bottom:14px">Buyer ini didiscover dan diverifikasi lewat sumber-sumber berikut. Kalau muncul di 2+ sumber, cross-source dedup mengaggregasi data ke satu row canonical.</p>
@@ -2324,7 +2325,8 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
                 s === 'companies_house_uk' ? 'UK Companies House official registry' :
                 s === 'sirene_fr' ? 'INSEE SIRENE (French national registry)' :
                 s === 'sec_edgar_us' ? 'US SEC EDGAR filings' :
-                s === 'wikidata' ? 'Wikidata linked open data' : 'Web / directory scrape'}</div>
+                s === 'wikidata' ? 'Wikidata linked open data' :
+                s === 'ai_agent' ? `Diverifikasi AI dari website perusahaan${b.buyer_type ? ' · ' + esc(b.buyer_type) : ''}` : 'Web / directory scrape'}</div>
             </div>
             ${link ? `<a class="btn btn-sm btn-neutral" href="${esc(link)}" target="_blank" rel="noopener">Buka sumber →</a>` : ''}
           </div>`;
@@ -3351,6 +3353,7 @@ route(/^\/admin$/, async (app, m, params) => {
               <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
               <tbody>
                 ${[
+                  ['ai_agent', 'AI Research Agent (web + LLM, verified)'],
                   ['gleif', 'GLEIF LEI Registry Crawler'],
                   ['companies_house_uk', 'UK Companies House Crawler'],
                   ['sirene_fr', 'France SIRENE NAF Crawler'],

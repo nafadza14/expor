@@ -43,6 +43,7 @@ jobs:
         env:
           DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
           SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+          SUMOPOD_MODEL: ${{ vars.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview' }}
         run: |
           if [ -z "$DATABASE_URL_POSTGRESS" ]; then
             echo "::error::DATABASE_URL_POSTGRESS secret not set"

@@ -36,52 +36,19 @@ BASE_MIRRORS = [
 
 UA = "EksporIn/1.0 (contact: hello@eksporin.id; +https://ekspor.zieads.com)"
 
-# OSM tags per HS category. IMPORTER-FIRST filter: only real food /
-# coffee / spice industrial and craft tags. We deliberately DROP:
-#   - shop=wholesale        (too generic: could be plumbing, hardware)
-#   - office=company        (too generic: catches insurance, NGOs, etc)
-#   - amenity=cafe / shop=coffee / shop=tea / shop=spices (retail)
-# What is left is a small but 100%-relevant set of OSM tags that only
-# get applied to actual coffee roasters, tea processors, food
-# processors and licensed spice producers.
-TAGS_BY_HS: dict[str, list[tuple[str, str]]] = {
-    "0901": [  # coffee
-        ("shop", "roastery"),
-        ("industry", "coffee_roasting"),
-        ("craft", "coffee_roaster"),
-    ],
-    "0902": [  # tea
-        ("industry", "tea_processing"),
-    ],
-    "0904": [  # pepper
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-    "0905": [  # vanilla
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-    "0906": [  # cinnamon
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-    "0907": [  # cloves
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-    "0908": [  # nutmeg
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-    "0910": [  # ginger, turmeric
-        ("industry", "food_processing"),
-        ("industry", "spice_production"),
-    ],
-}
-DEFAULT_TAGS = [
-    ("industry", "food_processing"),
-    ("industry", "coffee_roasting"),
-]
+# OSM tags per HS category come from config/commodities.json
+# (`osm_tags`). IMPORTER-FIRST filter: only industrial / craft tags that
+# OSM applies to roasters, processors and producers. Retail tags
+# (amenity=cafe, shop=coffee, shop=wholesale, office=company, ...) are
+# deliberately absent. Commodities with no OSM tags (furniture, seafood,
+# oils ...) are skipped by the runner.
+from ..shared.commodities import by_hs as _by_hs
+
+
+def tags_for(hs_code: str | None) -> list[tuple[str, str]]:
+    c = _by_hs(hs_code or "")
+    return [(k, v) for k, v in (c.get("osm_tags") or [])] if c else []
+
 
 # Retail signals: if any of these tags is present the entity is almost
 # certainly a small consumer-facing shop, not an importer.
@@ -95,7 +62,9 @@ RETAIL_SHOPS = {"coffee", "tea", "spices", "greengrocer", "supermarket",
 
 # OSM stores country boundaries with an ISO3166-1 tag on the top admin
 # area. All countries in our seed matrix are represented.
-COUNTRY_ISO_OK = {"US", "GB", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG", "SG", "CN"}
+# Every ISO-2 in config/commodities.json is a valid admin area in OSM.
+from ..shared.commodities import country_codes as _country_codes
+COUNTRY_ISO_OK = set(_country_codes())
 
 
 def _size_from_osm(_tags: dict) -> str | None:
@@ -115,6 +84,8 @@ def _industry_from_tags(tags: dict) -> str | None:
         return "spice producer"
     if industry == "food_processing":
         return "food processor"
+    if craft == "chocolatier":
+        return "chocolate maker"
     return industry or craft or shop
 
 
@@ -136,7 +107,10 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
     country = (country or "").upper()
     if country not in COUNTRY_ISO_OK:
         return []
-    tags = TAGS_BY_HS.get(hs_code or "", DEFAULT_TAGS)
+    tags = tags_for(hs_code)
+    if not tags:
+        return []
+    wanted = set(tags)
     query = _build_query(tags, country, limit)
 
     payload = None
@@ -181,11 +155,7 @@ async def crawl_one(keyword: str, country: str, hs_code: str | None = None,
             "website", "contact:website", "phone", "contact:phone",
             "email", "contact:email",
         ))
-        has_scale_tag = (
-            tags.get("industry") in ("food_processing", "coffee_roasting", "tea_processing", "spice_production")
-            or tags.get("craft") == "coffee_roaster"
-            or tags.get("shop") == "roastery"
-        )
+        has_scale_tag = any(tags.get(k) == v for k, v in wanted)
         if not (has_contact and has_scale_tag):
             continue
         # ---------------------------------------------------------------

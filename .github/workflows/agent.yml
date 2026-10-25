@@ -1,0 +1,71 @@
+name: AI research agent
+
+# LLM agent (python_scrapers/agent) that searches the web for real
+# foreign buyers of Indonesian export commodities, verifies them against
+# the pages it read, and upserts them into scraped_buyers (source =
+# ai_agent), the table the platform's buyer directory reads.
+#
+# Every 3 hours: 6 missions (HS x country pairs) picked by the planner,
+# which skips pairs researched in the last 10 days, so the whole
+# commodity x country matrix gets swept over time.
+#
+# Secrets: DATABASE_URL_POSTGRESS, SUMOPOD_AI_KEY (required),
+#          BRAVE_API_KEY (optional, more reliable search).
+# Variables (optional): AGENT_MODEL (default MiniMax-M3.1-Flash-Preview).
+
+on:
+  schedule:
+    - cron: '20 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      missions:
+        description: 'Missions (HS x country pairs) this run'
+        default: '6'
+      minutes:
+        description: 'Wall-clock budget (minutes)'
+        default: '40'
+      hs:
+        description: 'Optional: restrict to HS-4 list, e.g. 1801,0901'
+        default: ''
+      country:
+        description: 'Optional: restrict to ISO-2 list, e.g. DE,NL'
+        default: ''
+      target:
+        description: 'Buyers to find per mission'
+        default: '8'
+
+concurrency:
+  group: ai-agent
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - name: Install deps
+        run: pip install -r python_scrapers/requirements.txt
+      - name: Offline self-test
+        run: python -m python_scrapers.tests.test_agent
+      - name: Run agent
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview' }}
+          IN_MISSIONS: ${{ github.event.inputs.missions || '6' }}
+          IN_MINUTES: ${{ github.event.inputs.minutes || '40' }}
+          IN_TARGET: ${{ github.event.inputs.target || '8' }}
+          IN_HS: ${{ github.event.inputs.hs }}
+          IN_COUNTRY: ${{ github.event.inputs.country }}
+        run: |
+          ARGS=(--missions "$IN_MISSIONS" --minutes "$IN_MINUTES" --target "$IN_TARGET" --concurrency 2)
+          [ -n "$IN_HS" ] && ARGS+=(--hs "$IN_HS")
+          [ -n "$IN_COUNTRY" ] && ARGS+=(--country "$IN_COUNTRY")
+          python -m python_scrapers.agent.run "${ARGS[@]}"

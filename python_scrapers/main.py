@@ -25,50 +25,27 @@ from typing import Callable, Awaitable
 try:
     from .shared import db as db_mod
     from .shared.schema import BuyerRecord
+    from .shared import commodities as com_cfg
     from .crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us, google_business
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from python_scrapers.shared import db as db_mod  # type: ignore
     from python_scrapers.shared.schema import BuyerRecord  # type: ignore
+    from python_scrapers.shared import commodities as com_cfg  # type: ignore
     from python_scrapers.crawlers import kompass, europages, companies_house_uk, sirene_fr, sec_edgar_us, google_business  # type: ignore
 
 
-# Same HS list as src/scrape-config.js, but expressed here as
-# (hs_code, english keyword) so crawlers have a search term.
-HS_KEYWORDS: list[tuple[str, str]] = [
-    ("0901", "coffee"),
-    ("0901", "arabica"),
-    ("0901", "robusta"),
-    ("0901", "roastery"),
-    ("0901", "green coffee"),
-    ("0902", "tea"),
-    ("0904", "pepper"),
-    ("0904", "black pepper"),
-    ("0904", "chili"),
-    ("0905", "vanilla"),
-    ("0905", "vanilla bean"),
-    ("0906", "cinnamon"),
-    ("0906", "cassia"),
-    ("0907", "clove"),
-    ("0907", "cengkeh"),
-    ("0908", "nutmeg"),
-    ("0908", "cardamom"),
-    ("0910", "ginger"),
-    ("0910", "turmeric"),
-]
-
-COUNTRIES: list[str] = [
-    "GB", "US", "FR", "DE", "NL", "IT", "JP", "IN", "MY", "EG",
-    "ES", "BE", "AT", "CH", "SE", "PL", "PT", "DK", "IE", "NO",
-    "CA", "AU", "SG", "KR", "TW", "TH", "VN", "MX", "BR", "AE",
-]
+# HS keywords + countries come from config/commodities.json (shared with
+# the Node pipeline and the AI research agent).
+HS_KEYWORDS: list[tuple[str, str]] = com_cfg.hs_keywords()
+COUNTRIES: list[str] = com_cfg.country_codes()
 
 Crawler = Callable[[str, str, str], Awaitable[list[BuyerRecord]]]
 
 # Some crawlers only make sense for specific countries. If a crawler's
 # `only_countries` set is non-empty, we skip (source, hs, other-country)
 # slices for it.
-CRAWLERS: dict[str, Crawler] = {
+ALL_CRAWLERS: dict[str, Crawler] = {
     "google_business": lambda kw, co, hs: google_business.crawl_one(kw, co, hs),
     "companies_house_uk": lambda kw, co, hs: companies_house_uk.crawl_one(kw, co, hs),
     "sirene_fr": lambda kw, co, hs: sirene_fr.crawl_one(kw, co, hs),
@@ -76,6 +53,19 @@ CRAWLERS: dict[str, Crawler] = {
     "kompass": lambda kw, co, hs: kompass.crawl_one(kw, co, hs),
     "europages": lambda kw, co, hs: europages.crawl_one(kw, co, hs),
 }
+
+# Kompass (403 Cloudflare) and Europages (202 empty body) block GitHub
+# runner IPs, so every slice they got returned 0 and wasted a third of
+# the budget. They stay available but are off unless CRAWL_SOURCES lists
+# them (e.g. CRAWL_SOURCES=kompass,europages behind a residential proxy).
+DEFAULT_SOURCES = ["google_business", "companies_house_uk", "sirene_fr", "sec_edgar_us"]
+_enabled = [s.strip() for s in (os.environ.get("CRAWL_SOURCES") or "").split(",") if s.strip()] or DEFAULT_SOURCES
+CRAWLERS: dict[str, Crawler] = {k: v for k, v in ALL_CRAWLERS.items() if k in _enabled}
+
+# Crawlers that query by HS category (NAF code / OSM tag), not by keyword.
+# One slice per (hs, country) is enough; extra keywords just repeat the
+# identical request.
+KEYWORD_INSENSITIVE = {"sirene_fr", "google_business"}
 
 ONLY_COUNTRIES: dict[str, set[str]] = {
     "companies_house_uk": {"GB"},
@@ -92,7 +82,14 @@ def build_matrix() -> list[tuple[str, str, str, str]]:
     for source in CRAWLERS.keys():
         only = ONLY_COUNTRIES.get(source)
         countries = [c for c in COUNTRIES if not only or c in only]
+        seen_hs: set[str] = set()
         for hs, kw in HS_KEYWORDS:
+            if source in KEYWORD_INSENSITIVE:
+                if hs in seen_hs:
+                    continue
+                seen_hs.add(hs)
+                if source == "google_business" and not google_business.tags_for(hs):
+                    continue  # no industrial OSM tags for this commodity
             for co in countries:
                 triples.append((source, hs, kw, co))
     random.shuffle(triples)

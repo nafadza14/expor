@@ -1,29 +1,28 @@
 'use strict';
-// Seed HS codes and target countries for the MVP scrape queue. Chosen from
-// the highest-volume Indonesian export categories in coffee and spices, and
-// their top import destinations. Tweak by editing this file; the values are
-// consumed by src/sources/pipeline.js and by the /api/admin/scrape/seed
-// admin endpoint.
+// Seed HS codes and target countries for the scrape queue. The list now
+// lives in config/commodities.json so the Python crawlers, the AI
+// research agent and this Node pipeline all target the same matrix.
+// Edit that JSON file to add/remove commodities or countries.
 
-const SEED_HS_CODES = [
-  { code: '0901', label_id: 'Kopi', label_en: 'Coffee' },
-  { code: '0904', label_id: 'Lada', label_en: 'Pepper' },
-  { code: '0905', label_id: 'Vanili', label_en: 'Vanilla' },
-  { code: '0906', label_id: 'Kayu manis', label_en: 'Cinnamon' },
-  { code: '0907', label_id: 'Cengkeh', label_en: 'Cloves' },
-  { code: '0908', label_id: 'Pala', label_en: 'Nutmeg, mace, cardamom' },
-  { code: '0910', label_id: 'Jahe, kunyit', label_en: 'Ginger, turmeric, saffron, curry' },
-];
+const CONFIG = require('../config/commodities.json');
 
-const SEED_COUNTRIES = [
-  { iso2: 'US', name: 'United States', flag: '🇺🇸' },
-  { iso2: 'DE', name: 'Germany', flag: '🇩🇪' },
-  { iso2: 'NL', name: 'Netherlands', flag: '🇳🇱' },
-  { iso2: 'IT', name: 'Italy', flag: '🇮🇹' },
-  { iso2: 'JP', name: 'Japan', flag: '🇯🇵' },
-  { iso2: 'IN', name: 'India', flag: '🇮🇳' },
-  { iso2: 'MY', name: 'Malaysia', flag: '🇲🇾' },
-  { iso2: 'EG', name: 'Egypt', flag: '🇪🇬' },
-];
+const SEED_HS_CODES = CONFIG.commodities.map((c) => ({
+  code: c.hs4,
+  label_id: c.label_id,
+  label_en: c.label_en,
+  keywords: c.keywords || [],
+  priority: c.priority || 2,
+}));
 
-module.exports = { SEED_HS_CODES, SEED_COUNTRIES };
+const SEED_COUNTRIES = CONFIG.countries.map((c) => ({
+  iso2: c.iso2,
+  name: c.name,
+  priority: c.priority || 2,
+}));
+
+// First English keyword per HS, used by keyword-based sources (GLEIF, Wikidata).
+const KEYWORD_BY_HS = Object.fromEntries(
+  CONFIG.commodities.map((c) => [c.hs4, (c.keywords || [])[0] || c.label_en.toLowerCase()]),
+);
+
+module.exports = { SEED_HS_CODES, SEED_COUNTRIES, KEYWORD_BY_HS };
