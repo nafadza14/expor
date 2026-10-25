@@ -440,13 +440,14 @@ table.tbl { width: 100%; border-collapse: collapse; }
   object-fit: cover;
   z-index: 0;
   transform: scale(1.02);
+  object-position: center 40%; /* port cranes + ship deck (public/img/auth-bg.webp) */
 }
 .auth-bg-tint {
   position: absolute; inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(20, 12, 6, 0.15) 0%, rgba(20, 12, 6, 0.55) 100%),
-    radial-gradient(circle at 25% 25%, rgba(239, 77, 35, 0.25), transparent 55%);
+    linear-gradient(180deg, rgba(4, 16, 32, 0.10) 0%, rgba(4, 16, 32, 0.25) 45%, rgba(4, 16, 32, 0.70) 100%),
+    radial-gradient(circle at 20% 15%, rgba(239, 77, 35, 0.18), transparent 55%);
 }
 .auth-brand {
   position: relative;
