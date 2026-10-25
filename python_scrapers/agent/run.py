@@ -93,9 +93,11 @@ async def main_async(a: argparse.Namespace) -> int:
     print(f"[agent] SUMMARY missions={len(results)} saved={saved} new={new} "
           f"rejected={sum(r.rejected for r in results)} searches={searcher.calls} pages={fetcher.calls} tokens={tokens}")
     if llm.dead_reason():
-        # Annotate instead of failing: a dead key would otherwise email a
-        # failure on every scheduled run. The warning shows in the run UI.
-        print(f"::warning::Sumopod LLM unavailable: {llm.dead_reason()}")
+        print(f"::error::Sumopod LLM unavailable: {llm.dead_reason()}")
+        # Fail the run (red X) when the key is dead and nothing was saved,
+        # so a blocked key is not mistaken for a working agent.
+        if saved == 0:
+            return 3
     return 0
 
 
