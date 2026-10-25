@@ -1046,7 +1046,7 @@ route(/^\/quick-search$/, async (app, m, params) => {
 // ================= auth =================
 function authHero() {
   return `<div class="auth-hero">
-    <img class="auth-bg" src="/img/auth-bg.webp" alt="" aria-hidden="true" decoding="async">
+    <img class="auth-bg" src="/img/auth-bg.jpg" alt="" aria-hidden="true" decoding="async">
     <div class="auth-bg-tint"></div>
     <div class="auth-brand">${LOGO_SVG.replace(/#ef4d23/g, '#fff')} <span>EksporIn</span></div>
     <div class="auth-copy auth-glass">

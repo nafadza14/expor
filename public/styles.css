@@ -440,7 +440,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
   object-fit: cover;
   z-index: 0;
   transform: scale(1.02);
-  object-position: center 40%; /* port cranes + ship deck (public/img/auth-bg.webp) */
+  object-position: 45% center; /* ship + quay crane, top-down (public/img/auth-bg.jpg, 1200x1500 original) */
 }
 .auth-bg-tint {
   position: absolute; inset: 0;
