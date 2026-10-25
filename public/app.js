@@ -740,7 +740,7 @@ route(/^\/$/, async (app) => {
         <div class="lp-sources">
           <div class="lp-sources-title">Data kami berasal dari sumber publik yang bisa dicek</div>
           <div class="lp-sources-list">
-            ${['Daftar importir lembaga promosi dagang', 'Direktori asosiasi industri', 'Daftar peserta pameran dagang', 'Website resmi perusahaan', 'GLEIF (registri badan hukum global)', 'UN Comtrade (statistik perdagangan)', 'USITC (tarif impor AS)', 'WCO (kode HS)'].map((x) => `<span>${x}</span>`).join('')}
+            ${['Registri perusahaan resmi Inggris, Prancis & Norwegia', 'Daftar importir organik bersertifikat (Agence BIO)', 'OpenStreetMap', 'Daftar importir lembaga promosi dagang', 'Direktori asosiasi industri', 'Website resmi perusahaan', 'GLEIF (registri badan hukum global)', 'UN Comtrade (statistik perdagangan)', 'USITC (tarif impor AS)', 'WCO (kode HS)'].map((x) => `<span>${x}</span>`).join('')}
           </div>
         </div>
       </div>
@@ -2183,7 +2183,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const tab = params.get('tab') || 'overview';
   const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
-  const sourceLabels = { usda_oid: 'USDA Organic', trade_directory: 'Direktori Importir', ai_agent: 'Riset Website', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceLabels = { usda_oid: 'USDA Organic', trade_directory: 'Direktori Importir', ai_agent: 'Riset Website', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', brreg_no: 'Brønnøysund (Norwegia)', agencebio_fr: 'Agence BIO (importir organik)', osm: 'OpenStreetMap (© kontributor OSM)', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`

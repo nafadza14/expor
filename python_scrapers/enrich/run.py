@@ -34,7 +34,7 @@ SELECT id, name, country, city, website, email, phone, description
    AND (contact_checked_at IS NULL
         OR (email IS NULL AND contact_checked_at < NOW() - INTERVAL '30 days'))
  ORDER BY contact_checked_at NULLS FIRST,
-          (source IN ('ai_agent','usda_oid','trade_directory')) DESC,
+          (source IN ('ai_agent','usda_oid','trade_directory','agencebio_fr','brreg_no')) DESC,
           (website IS NOT NULL) DESC,
           data_confidence DESC, id
  LIMIT %s"""

@@ -94,6 +94,25 @@ function seed(db) {
       ['sample_response', 'en', 'email', 'Sample request response (EN)',
         'Your sample of {{hs_description}}: shipping details',
         `Dear {{buyer_name}} team,\n\nThank you for your interest in our {{hs_description}}. We will dispatch the sample within 3 working days via DHL Express, at no cost to you.\n\nCould you confirm the delivery address and the specification you want us to match (grade, moisture, packaging)?\n\nBest regards,\n{{user_name}}, {{org_name}}`],
+      // Opening letters in the buyer's language for the main markets.
+      ['first_touch', 'de', 'email', 'Erstkontakt: Vorstellung (DE)',
+        'Anfrage: Lieferung von {{hs_description}} aus Indonesien',
+        `Sehr geehrtes Team von {{buyer_name}},\n\nmein Name ist {{user_name}} von {{org_name}}, einem Exporteur von {{hs_description}} (HS {{hs_code}}) aus Indonesien.\n\nWir liefern in gleichbleibender Exportqualität und können Preise FOB indonesischer Hafen sowie die Lieferzeit nach {{buyer_country}} nennen.\n\nDürfen wir Ihnen unseren Produktkatalog und ein kostenloses Muster senden?\n\nMit freundlichen Grüßen\n{{user_name}}\n{{org_name}}, Indonesien`],
+      ['first_touch', 'fr', 'email', 'Premier contact : présentation (FR)',
+        'Proposition : {{hs_description}} en provenance d\'Indonésie',
+        `Madame, Monsieur,\n\nJe m\'appelle {{user_name}} et je représente {{org_name}}, exportateur indonésien de {{hs_description}} (SH {{hs_code}}).\n\nNous livrons une qualité export constante et pouvons vous communiquer nos prix FOB port indonésien ainsi que les délais vers {{buyer_country}}.\n\nPouvons-nous vous envoyer notre catalogue et un échantillon gratuit ?\n\nCordialement,\n{{user_name}}\n{{org_name}}, Indonésie`],
+      ['first_touch', 'es', 'email', 'Primer contacto: presentación (ES)',
+        'Propuesta: {{hs_description}} desde Indonesia',
+        `Estimado equipo de {{buyer_name}}:\n\nMi nombre es {{user_name}}, de {{org_name}}, exportador indonesio de {{hs_description}} (SA {{hs_code}}).\n\nOfrecemos calidad de exportación constante y podemos indicarles precios FOB puerto de Indonesia y plazos de entrega a {{buyer_country}}.\n\n¿Podemos enviarles nuestro catálogo y una muestra gratuita?\n\nAtentamente,\n{{user_name}}\n{{org_name}}, Indonesia`],
+      ['first_touch', 'ar', 'email', 'التواصل الأول: تعريف (AR)',
+        'عرض توريد {{hs_description}} من إندونيسيا',
+        `السادة فريق {{buyer_name}} المحترمين،\n\nأنا {{user_name}} من شركة {{org_name}}، مصدّر إندونيسي لمنتج {{hs_description}} (رمز النظام المنسق {{hs_code}}).\n\nنقدّم جودة تصدير ثابتة، ويمكننا إرسال أسعارنا على أساس فوب من الموانئ الإندونيسية ومدة الشحن إلى {{buyer_country}}.\n\nهل تسمحون لنا بإرسال الكتالوج وعينة مجانية؟\n\nمع خالص التحية،\n{{user_name}}\n{{org_name}}، إندونيسيا`],
+      ['first_touch', 'zh', 'email', '首次联系：公司介绍 (ZH)',
+        '来自印度尼西亚的{{hs_description}}供货',
+        `{{buyer_name}}采购团队您好：\n\n我是{{org_name}}的{{user_name}}，我们是印度尼西亚的{{hs_description}}（HS {{hs_code}}）出口商。\n\n我们提供稳定的出口品质，可报印度尼西亚港口FOB价格及到{{buyer_country}}的交货期。\n\n可否向贵公司寄送产品目录和免费样品？\n\n此致\n敬礼\n{{user_name}}\n{{org_name}}，印度尼西亚`],
+      ['first_touch', 'ja', 'email', '初回連絡：会社紹介 (JA)',
+        'インドネシア産{{hs_description}}のご提案',
+        `{{buyer_name}} ご購買ご担当者様\n\nインドネシアの{{hs_description}}（HS {{hs_code}}）輸出業者、{{org_name}}の{{user_name}}と申します。\n\n安定した輸出品質でお届けしており、インドネシア港FOB価格と{{buyer_country}}までの納期をご案内できます。\n\n製品カタログと無料サンプルをお送りしてもよろしいでしょうか。\n\nよろしくお願いいたします。\n{{user_name}}\n{{org_name}}（インドネシア）`],
     ];
     for (const t of T) insTpl.run(...t);
 
