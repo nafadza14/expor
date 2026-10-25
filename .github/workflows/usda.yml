@@ -1,0 +1,44 @@
+name: USDA Organic importers
+
+# Imports certified organic handlers / importers (coffee, cocoa, spices,
+# coconut, essential oils, ...) from the public USDA Organic Integrity
+# Database into scraped_buyers (source = usda_oid). Weekly, plus manual.
+
+on:
+  schedule:
+    - cron: '17 20 * * 0'   # Mondays 03:17 WIB
+  workflow_dispatch:
+    inputs:
+      keywords:
+        description: 'Comma list of product keywords (empty = default list)'
+        default: ''
+
+concurrency:
+  group: usda-oid
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - name: Install deps
+        run: |
+          pip install -r python_scrapers/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Import from USDA OID
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          IN_KEYWORDS: ${{ github.event.inputs.keywords }}
+        run: |
+          if [ -n "$IN_KEYWORDS" ]; then
+            python -m python_scrapers.crawlers.usda_oid --keywords "$IN_KEYWORDS" --outdir /tmp/oid
+          else
+            python -m python_scrapers.crawlers.usda_oid --outdir /tmp/oid
+          fi

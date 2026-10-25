@@ -26,6 +26,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
   '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2',
+  '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
 };
 
 let db = null;
@@ -35,6 +36,7 @@ function readBody(req) {
     let data = '';
     req.on('data', (c) => { data += c; if (data.length > 1e6) { reject(new Error('Payload terlalu besar')); req.destroy(); } });
     req.on('end', () => {
+      req.rawBody = data; // kept verbatim for webhook signature checks
       if (!data) return resolve(null);
       try { resolve(JSON.parse(data)); } catch { resolve(null); }
     });

@@ -23,6 +23,7 @@ from ..shared.commodities import country_name
 from .verify import Session, verify_candidate, BUYER_TYPES
 from .web import Searcher, Fetcher, search_queries_for, host_of, is_non_company_host
 from .store import Store
+from .harvest import harvest as harvest_listing
 
 
 TOOLS: list[dict] = [
@@ -64,6 +65,16 @@ TOOLS: list[dict] = [
             "industry": {"type": "string", "description": "short lowercase label e.g. 'cocoa importer'"}},
             "required": ["name", "country", "buyer_type", "evidence_url", "evidence_quote"]}}},
     {"type": "function", "function": {
+        "name": "harvest_directory",
+        "description": "Bulk-import every buyer listed on a DIRECTORY page you already opened: an importer list "
+                       "(often a PDF from a trade-promotion office or embassy), an association member list, or a trade "
+                       "fair exhibitor list for this product. Rows are verified against the page text. Use this whenever "
+                       "you find such a list; it is far more productive than saving companies one by one.",
+        "parameters": {"type": "object", "properties": {
+            "url": {"type": "string"},
+            "listing_type": {"type": "string", "description": "e.g. 'importer list', 'association members', 'trade fair exhibitors'"}},
+            "required": ["url", "listing_type"]}}},
+    {"type": "function", "function": {
         "name": "finish",
         "description": "End the mission when the target is reached or no more good leads exist.",
         "parameters": {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}}},
@@ -74,7 +85,7 @@ SYSTEM_PROMPT = """You are a B2B trade researcher working for EksporIn, a platfo
 Your job in each mission: find REAL companies based in the target country that BUY the target commodity in commercial volume: importers, distributors, wholesalers, traders, roasters/processors/manufacturers that use it as a raw material, or retail chains/brands that source it directly. Save each one with save_buyer.
 
 How to work:
-1. web_search with varied queries: buyer terms + country, the product name in the country's own language (e.g. German "Kakao Importeur", French "importateur de cacao", Japanese "カカオ豆 輸入"), trade-association member lists, trade-fair exhibitor lists, "where we source" pages.
+1. web_search with varied queries: buyer terms + country, the product name in the country's own language (e.g. German "Kakao Importeur", French "importateur de cacao", Japanese "カカオ豆 輸入"), and especially DIRECTORIES: "list of importers <product> <country> pdf", "<product> association members", trade-fair exhibitor lists, export-promotion / embassy importer lists. When you open such a list, call harvest_directory on it.
 2. open_page the company's OWN website (home, then the about/contact page listed in contact_links) to confirm what they do and get contact details. Directory/list pages are fine for discovery but always try to reach the company's own site.
 3. save_buyer with an exact quote from a page you opened that shows they deal in the product or import it.
 
@@ -108,10 +119,12 @@ class MissionResult:
     buyers: list[str] = field(default_factory=list)
     seconds: float = 0.0
     prose_replies: int = 0
+    harvested: int = 0
+    directories: list[str] = field(default_factory=list)
 
     def meta(self) -> dict:
         return {k: getattr(self, k) for k in
-                ("saved", "new", "rejected", "steps", "searches", "pages", "tokens", "summary", "buyers", "seconds")}
+                ("saved", "new", "rejected", "steps", "searches", "pages", "tokens", "summary", "buyers", "seconds", "harvested", "directories")}
 
 
 def _excerpt(text: str, focus: Optional[str], n: int) -> str:
@@ -221,6 +234,32 @@ class ResearchAgent:
             return {"saved": True, "id": row_id, "confidence": rec["data_confidence"],
                     "warnings": v.warnings, "progress": f"{res.saved}/{self.target}"}
 
+        if name == "harvest_directory":
+            url = str(args.get("url") or "")
+            page = session.get(url)
+            if not page or (page.error and not page.text):
+                return {"error": "open_page this URL first"}
+            if len(res.directories) >= 4:
+                return {"error": "directory limit reached for this mission"}
+            if page.final_url in res.directories:
+                return {"error": "already harvested"}
+            recs, st = await harvest_listing(page, commodity=commodity, mission_country=country,
+                                             listing_type=str(args.get("listing_type") or "directory"), model=self.model)
+            res.tokens += st.get("tokens", 0)
+            new = 0
+            for rec in recs:
+                if rec["name"].lower() in ctx["saved_lower"]:
+                    continue
+                _, is_new = self.store.save(rec)
+                ctx["saved_lower"].add(rec["name"].lower())
+                new += int(is_new)
+            res.harvested += len(recs)
+            res.new += new
+            res.directories.append(page.final_url)
+            self.log(f"  [{ctx['tag']}] HARVEST {page.final_url} -> {len(recs)} kept ({st})")
+            return {"saved": len(recs), "new": new, "stats": st,
+                    "sample": [r["name"] for r in recs[:10]]}
+
         if name == "finish":
             ctx["done"] = True
             res.summary = str(args.get("summary") or "")[:500]
@@ -306,7 +345,7 @@ class ResearchAgent:
             self.store.finish_job(job_id, saved=res.saved, error=res.error, meta=res.meta())
         except Exception as e:
             self.log(f"[agent] finish_job failed: {e}")
-        self.log(f"[agent] done {hs4}/{country}: saved={res.saved} new={res.new} rejected={res.rejected} "
+        self.log(f"[agent] done {hs4}/{country}: saved={res.saved} harvested={res.harvested} new={res.new} rejected={res.rejected} "
                  f"steps={res.steps} pages={res.pages} tokens={res.tokens} {res.error or ''}")
         return res
 

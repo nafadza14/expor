@@ -43,6 +43,16 @@ ID_ORIGIN_SIGNALS = re.compile(
     re.I)
 
 
+def _email_status(email):
+    if not email:
+        return None
+    from ..enrich.validate import classify, FREEMAIL, email_domain
+    if email_domain(email) in FREEMAIL:
+        return "freemail"
+    kind, _ = classify(email)
+    return "role" if kind == "role" else ("personal" if kind == "personal" else "domain")
+
+
 def _norm(s: str) -> str:
     s = unicodedata.normalize("NFKD", s or "")
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
@@ -223,6 +233,8 @@ def verify_candidate(
         "data_confidence": conf,
         "buyer_type": btype,
         "evidence_url": ev_page.final_url,
+        "email_status": _email_status(email),
+        "email_source_url": next((p.final_url for p in session.pages.values() if email and email in p.emails), None),
         "raw": {
             "evidence_url": ev_page.final_url,
             "evidence_quote": quote[:400],

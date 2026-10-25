@@ -31,6 +31,7 @@ module.exports = async (req, res) => {
       let data = '';
       req.on('data', (c) => { data += c; if (data.length > 1e6) { resolve(null); req.destroy(); } });
       req.on('end', () => {
+        req.rawBody = data; // kept verbatim for webhook signature checks
         if (!data) return resolve(null);
         try { resolve(JSON.parse(data)); } catch { resolve(null); }
       });

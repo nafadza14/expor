@@ -192,7 +192,36 @@ def test_mission_text_protocol():
     print("test_mission_text_protocol OK")
 
 
+def test_harvest_directory():
+    from python_scrapers.agent import harvest as hv
+    from python_scrapers.agent.web import extract_page
+    text_html = ("<html><body><h1>Importers of spices in Belgium</h1><p>Epices Bruxelles SA, Rue du Port 12, 1000 Brussels. "
+                 "Tel: +32 2 555 1234 Email: purchase@epices-bxl.be Web: www.epices-bxl.be Products: pepper, cloves.</p>"
+                 "<p>Vanilla House BV, Antwerp. Email: info@vanillahouse.be</p>" + "<p>filler text</p>" * 30 + "</body></html>")
+    page = extract_page("https://example.org/importers-belgium.pdf", text_html)
+
+    async def fake_chat(messages, tools=None, **kw):
+        return {"content": json.dumps({"companies": [
+            {"name": "Epices Bruxelles SA", "country": "Belgium", "city": "Brussels", "website": "www.epices-bxl.be",
+             "email": "purchase@epices-bxl.be", "phone": "+32 2 555 1234", "type": "importer"},
+            {"name": "Vanilla House BV", "country": "BE", "email": "sales@vanillahouse.be"},   # email not on page
+            {"name": "Imaginary Spice GmbH", "country": "DE"},                                # not on page
+            {"name": "PT Rempah Nusantara", "country": "Indonesia"}]}), "_usage": {"total_tokens": 50}}
+    orig = hv.llm.chat
+    hv.llm.chat = fake_chat
+    try:
+        recs, st = asyncio.run(hv.harvest(page, commodity=by_hs("0904"), mission_country="BE", listing_type="importer list"))
+    finally:
+        hv.llm.chat = orig
+    names = [r["name"] for r in recs]
+    assert names == ["Epices Bruxelles SA", "Vanilla House BV"], (names, st)
+    assert recs[0]["email"] == "purchase@epices-bxl.be" and recs[0]["website"] == "https://epices-bxl.be"
+    assert recs[1]["email"] is None and recs[0]["source"] == "trade_directory" and recs[0]["country"] == "BE"
+    print("test_harvest_directory OK", st)
+
+
 if __name__ == "__main__":
+    test_harvest_directory()
     test_json_parsing()
     test_mission_text_protocol()
     test_verify_units()

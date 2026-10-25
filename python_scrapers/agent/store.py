@@ -62,6 +62,15 @@ class DbStore:
                         )
                 except Exception as e:  # migration 003 not applied yet
                     print(f"[agent] note: could not set buyer_type/evidence_url ({str(e)[:80]}); run migrations")
+                if record.get("email") and record.get("email_status"):
+                    try:
+                        with c.cursor() as cur:
+                            cur.execute("""UPDATE scraped_buyers SET email_status = COALESCE(email_status, %s),
+                                              email_source_url = COALESCE(email_source_url, %s)
+                                            WHERE id = %s AND email = %s""",
+                                        (record["email_status"], record.get("email_source_url"), row_id, record["email"]))
+                    except Exception:
+                        pass
             return row_id, not existed
 
     def _meta_supported(self, cur) -> bool:

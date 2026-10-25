@@ -6,9 +6,9 @@ const { hashPassword, verifyPassword, createSession, getSessionUser, destroySess
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dbdzmhrofgcmkdszjxxq.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_--qPH56dWsGCxUzm7Mc_Aw_2P53hp3r';
 
-// Sumopod: payment gateway + LLM. Server-side only — never expose these keys.
-const SUMOPOD_PAY_URL = process.env.SUMOPOD_PAY_URL || 'https://api-pay.sumopod.com/api/v1/payments';
-const SUMOPOD_PAY_KEY = process.env.SUMOPOD_PAY_KEY || 'a5b0c6a03795701fa3e84f5e5a02a20fca04be43fbaad1c7857455a7134f3993';
+// Sumopod: payment gateway (src/sumopod.js, key from SUMOPOD_PAY_KEY env only) + LLM.
+const billing = require('./billing');
+const sumopod = require('./sumopod');
 const SUMOPOD_AI_URL = process.env.SUMOPOD_AI_URL || 'https://ai.sumopod.com/v1/chat/completions';
 const SUMOPOD_AI_KEY = process.env.SUMOPOD_AI_KEY || '';
 // Default to gpt-4o-mini which is verified to return content on Sumopod.
@@ -382,13 +382,8 @@ async function resolveUser(db, req) {
   return getSessionUser(db, req);
 }
 
-// ---------- plans (Feature-by-Tier matrix, doc 03 §7) ----------
-const PLANS = {
-  free:     { name: 'Free',     price: 0,      search: 20,  profile: 3,    saved: 10,  send: 5,    alerts: 0,    export: 0,     contacts: false, competitor: false, sys_templates: 3 },
-  starter:  { name: 'Starter',  price: 149000, search: 100, profile: 50,   saved: null, send: 50,   alerts: 5,    export: 100,   contacts: false, competitor: false, sys_templates: 10 },
-  growth:   { name: 'Growth',   price: 499000, search: 500, profile: 300,  saved: null, send: 300,  alerts: null, export: 500,   contacts: true,  competitor: false, sys_templates: null },
-  business: { name: 'Business', price: 999000, search: null, profile: null, saved: null, send: 2000, alerts: null, export: 10000, contacts: true,  competitor: true,  sys_templates: null },
-};
+// ---------- plans: defined in src/billing.js (QRIS passes + prepaid balance) ----------
+const PLANS = billing.PLANS;
 const COUNTRY_NAMES = { US: 'Amerika Serikat', JP: 'Jepang', NL: 'Belanda', AE: 'Uni Emirat Arab', AU: 'Australia', ID: 'Indonesia', VN: 'Vietnam', BR: 'Brasil', CO: 'Kolombia', IN: 'India', TH: 'Thailand', CN: 'Tiongkok', MY: 'Malaysia', EC: 'Ekuador', ET: 'Ethiopia' };
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
@@ -405,11 +400,11 @@ function bumpUsage(db, userId, meter, n = 1) {
   db.prepare(`INSERT INTO usage_meters (user_id,meter,period,used) VALUES (?,?,?,?)
     ON CONFLICT(user_id,meter,period) DO UPDATE SET used = used + excluded.used`).run(userId, meter, period(), n);
 }
-function quotaCheck(db, user, meter) {
-  const limit = PLANS[user.plan][meter];
-  if (limit === null || limit === undefined) return { ok: true, limit: null, used: getUsage(db, user.id, meter) };
-  const used = getUsage(db, user.id, meter);
-  return { ok: used < limit, limit, used };
+// Quota view for responses: what this cycle has used vs the plan limit,
+// plus the balance that pays for usage beyond it.
+function quotaView(acct, meter) {
+  const limit = acct.cfg[meter];
+  return { used: acct.used[meter] || 0, limit: limit === undefined ? null : limit, balance: acct.balance, rate: billing.RATES[meter] };
 }
 
 // Product Fit (F4): user's HS focus vs buyer's HS codes
@@ -481,7 +476,7 @@ function simulateTracking(db, msg) {
 
 // ---------- alerts materialization ----------
 function materializeAlerts(db, user) {
-  if (PLANS[user.plan].alerts === 0) return;
+  if ((PLANS[user.plan] || PLANS.expired).alerts === 0) return;
   const hsFocus = JSON.parse(user.hs_focus || '[]');
   const countries = JSON.parse(user.target_countries || '[]');
   const ins = db.prepare(`INSERT OR IGNORE INTO alerts (user_id,dedup_key,type,title,body,buyer_id,hs_code) VALUES (?,?,?,?,?,?,?)`);
@@ -650,7 +645,37 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, { ok: true });
   }
   if (route('GET', '/api/plans')) {
-    return json(res, 200, Object.entries(PLANS).map(([code, pl]) => ({ code, ...pl })));
+    return json(res, 200, { plans: billing.publicCatalog(), rates: billing.RATES, topup: billing.TOPUP, trial_days: PLANS.trial.days });
+  }
+
+  // Sumopod payment webhook (public; authenticated by signature/token).
+  // Configure in the Sumopod dashboard: POST https://<domain>/api/billing/webhook
+  if (route('POST', '/api/billing/webhook')) {
+    const raw = typeof req.rawBody === 'string' ? req.rawBody : JSON.stringify(body || {});
+    if (!sumopod.verifyWebhook(req.headers, raw)) return err(res, 401, 'invalid signature');
+    let evt; try { evt = JSON.parse(raw); } catch { return err(res, 400, 'bad json'); }
+    const type = String(evt.event_type || evt.type || '');
+    if (type === 'payment.test') return json(res, 200, { status: 'ignored' });
+    const d = evt.data || {};
+    if (!d.order_id) return json(res, 200, { status: 'ignored' });
+    try {
+      const key = `${d.payment_id || d.order_id}:${type}`;
+      const seen = await require('./pg').query(
+        `INSERT INTO billing_events (event_key, order_id, event_type, raw) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (event_key) DO NOTHING RETURNING event_key`, [key, d.order_id, type, raw.slice(0, 20000)]);
+      const order = await billing.getOrder(d.order_id);
+      if (!order) return json(res, 200, { status: 'unknown_order' });
+      if (type === 'payment.completed' || sumopod.normalizeStatus(d.status) === 'paid') {
+        const r = await billing.applyPaid(d.order_id, { paidAmount: d.amount ?? null, raw: d });
+        return json(res, 200, { status: r.ok ? 'applied' : r.reason, duplicate: !seen.length });
+      }
+      if (type === 'payment.expired') await billing.markOrder(d.order_id, 'expired');
+      if (type === 'payment.failed') await billing.markOrder(d.order_id, 'failed');
+      return json(res, 200, { status: 'recorded' });
+    } catch (e) {
+      console.error('[billing] webhook error', e.message);
+      return err(res, 500, 'webhook processing failed');
+    }
   }
 
   // Public preview: given a natural-language commodity query, resolve it to
@@ -724,17 +749,26 @@ async function handleApi(db, req, res, url, body) {
   // fall back to local session cookie (demo user).
   const user = await resolveUser(db, req);
   if (!user) return err(res, 401, 'Sesi tidak valid. Silakan masuk kembali.');
-  const plan = PLANS[user.plan];
+  // Plan, quota usage and balance come from Postgres (billing.js), never
+  // from the per-instance sql.js row or the client.
+  let acct;
+  try { acct = await billing.load(user); } catch (e) {
+    console.error('[billing] load failed:', e.message);
+    return err(res, 503, 'Layanan akun sedang gangguan. Coba lagi beberapa saat lagi.');
+  }
+  user.plan = acct.plan;
+  const plan = acct.cfg;
   const userHs = JSON.parse(user.hs_focus || '[]');
 
   if (route('GET', '/api/me')) {
     const meters = {};
-    for (const mKey of ['search', 'profile', 'send', 'export']) meters[mKey] = { used: getUsage(db, user.id, mKey), limit: plan[mKey === 'export' ? 'export' : mKey] ?? null };
+    for (const mKey of billing.METERS) meters[mKey] = quotaView(acct, mKey);
     return json(res, 200, {
       id: user.id, email: user.email, name: user.name, org_name: user.org_name, plan: user.plan,
       plan_name: plan.name, onboarded: !!user.onboarded, hs_focus: userHs,
       target_countries: JSON.parse(user.target_countries || '[]'), export_status: user.export_status, goal: user.goal,
-      quotas: meters, contacts_visible: plan.contacts,
+      quotas: meters, contacts_visible: true,
+      billing: billing.summarize(acct),
       saved: { used: savedCount(db, user.id), limit: plan.saved },
       unread_alerts: db.prepare('SELECT COUNT(*) c FROM alerts WHERE user_id=? AND read=0').get(user.id).c,
       is_admin: !!user.is_admin,
@@ -748,95 +782,97 @@ async function handleApi(db, req, res, url, body) {
     return json(res, 200, { ok: true });
   }
 
+  // Manual plan switch: only for local demo (no billing database) or admins.
   if (route('POST', '/api/me/plan')) {
+    if (billing.enabled() && !user.is_admin) return err(res, 403, 'Paket diaktifkan otomatis setelah pembayaran QRIS berhasil.');
     const { plan: newPlan } = body || {};
-    if (!PLANS[newPlan]) return err(res, 400, 'Paket tidak dikenal.');
+    if (!PLANS[newPlan] || !PLANS[newPlan].public) return err(res, 400, 'Paket tidak dikenal.');
+    if (billing.enabled()) await billing.adminSetPlan(user.email, newPlan);
     db.prepare('UPDATE users SET plan=? WHERE id=?').run(newPlan, user.id);
-    return json(res, 200, { ok: true, plan: newPlan, invoice: { number: 'INV-' + Date.now(), amount_idr: PLANS[newPlan].price, status: 'paid', provider: 'sumopod (simulasi)' } });
+    return json(res, 200, { ok: true, plan: newPlan });
   }
 
-  // Sumopod payment checkout — creates a real hosted QRIS payment for a paid plan upgrade.
-  // Server returns the payment_url; client redirects the user there.
+  if (route('GET', '/api/billing/summary')) {
+    const h = billing.enabled() ? await billing.history(acct.email, 20) : { orders: [], ledger: [] };
+    return json(res, 200, {
+      account: billing.summarize(acct), plans: billing.publicCatalog(), rates: billing.RATES,
+      topup: billing.TOPUP, orders: h.orders, ledger: h.ledger, gateway_ready: sumopod.configured(),
+    });
+  }
+
+  // Create a QRIS payment (Sumopod) for a 30-day plan or a balance top-up.
+  // The amount always comes from the server: the plan price, or a validated
+  // top-up value. The client only gets the hosted payment URL.
   if (route('POST', '/api/billing/checkout')) {
-    return (async () => {
-      const { plan: newPlan, method } = body || {};
-      if (!PLANS[newPlan]) return err(res, 400, 'Paket tidak dikenal.');
-      const price = PLANS[newPlan].price;
-      if (!price) return err(res, 400, 'Paket Free tidak butuh checkout.');
-      const orderId = `EKS-${user.id}-${newPlan}-${Date.now()}`;
-      const rawOrigin = (req.headers['origin'] || '').toString();
-      const host = (req.headers['x-forwarded-host'] || req.headers['host'] || '').toString();
-      // Sumopod rejects http and localhost URLs. Fall back to a public HTTPS
-      // domain when the request comes from local dev.
-      let base;
-      if (rawOrigin.startsWith('https://') && !rawOrigin.includes('localhost') && !rawOrigin.includes('127.0.0.1')) {
-        base = rawOrigin;
-      } else if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-        base = 'https://' + host;
-      } else {
-        base = process.env.PUBLIC_BASE_URL || 'https://eksporin.vercel.app';
-      }
-      try {
-        const r = await fetch(SUMOPOD_PAY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Api-Key': SUMOPOD_PAY_KEY },
-          body: JSON.stringify({
-            order_id: orderId,
-            amount: price,
-            currency: 'IDR',
-            expires_in_hours: 24,
-            success_return_url: base + '/?paid=1&order=' + encodeURIComponent(orderId) + '&plan=' + newPlan,
-            cancel_return_url: base + '/?cancelled=1&order=' + encodeURIComponent(orderId),
-            payment_method_type_code: method || 'QRIS',
-          }),
-        });
-        const bodyText = await r.text();
-        let data; try { data = JSON.parse(bodyText); } catch { data = { raw: bodyText }; }
-        if (!r.ok) {
-          console.error('[sumopod] checkout error', r.status, bodyText);
-          return err(res, 502, 'Sumopod: ' + (data.message || data.error || bodyText.slice(0, 200)));
-        }
-        return json(res, 200, {
-          ok: true,
-          order_id: orderId,
-          plan: newPlan,
-          amount: price,
-          payment_id: data.payment_id || null,
-          payment_url: data.payment_link_url || data.payment_url || data.checkout_url || data.url || data.data?.payment_link_url || data.data?.payment_url || null,
-          payment: data,
-        });
-      } catch (e) {
-        console.error('[sumopod] checkout threw', e);
-        return err(res, 502, 'Gagal buat pembayaran: ' + (e.message || 'network error'));
-      }
-    })();
+    if (!billing.enabled()) return err(res, 503, 'Pembayaran belum aktif di server ini (database billing belum dikonfigurasi).');
+    const kind = body?.kind === 'topup' ? 'topup' : 'plan';
+    let amount; let planCode = null;
+    if (kind === 'plan') {
+      planCode = String(body?.plan || '');
+      const cfg = PLANS[planCode];
+      if (!cfg || !cfg.public || !cfg.price) return err(res, 400, 'Paket tidak dikenal.');
+      amount = cfg.price;
+    } else {
+      const problem = billing.validateTopup(body?.amount);
+      if (problem) return err(res, 400, problem);
+      amount = Number(body.amount);
+    }
+    // Avoid piling up unpaid orders: reuse a pending one for the same thing from the last 30 minutes.
+    const pgc = require('./pg');
+    const reuse = await pgc.one(`SELECT order_id, payment_url FROM billing_orders
+       WHERE email=$1 AND kind=$2 AND COALESCE(plan,'')=COALESCE($3,'') AND amount_idr=$4 AND status='pending'
+         AND payment_url IS NOT NULL AND created_at > NOW() - INTERVAL '30 minutes'
+       ORDER BY created_at DESC LIMIT 1`, [acct.email, kind, planCode, amount]);
+    if (reuse) return json(res, 200, { ok: true, order_id: reuse.order_id, payment_url: reuse.payment_url, amount, kind, plan: planCode, reused: true });
+    const pending = await pgc.one(`SELECT COUNT(*)::int AS c FROM billing_orders WHERE email=$1 AND status='pending' AND created_at > NOW() - INTERVAL '1 hour'`, [acct.email]);
+    if ((pending?.c || 0) >= 5) return err(res, 429, 'Terlalu banyak tagihan yang belum dibayar. Selesaikan atau tunggu tagihan sebelumnya kedaluwarsa.');
+
+    const rawOrigin = (req.headers['origin'] || '').toString();
+    const host = (req.headers['x-forwarded-host'] || req.headers['host'] || '').toString();
+    let base;
+    if (process.env.PUBLIC_BASE_URL) base = process.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
+    else if (rawOrigin.startsWith('https://') && !/localhost|127\.0\.0\.1/.test(rawOrigin)) base = rawOrigin;
+    else if (host && !/localhost|127\.0\.0\.1/.test(host)) base = 'https://' + host;
+    else base = 'https://eksporin.vercel.app';
+
+    const orderId = await billing.createOrder({ email: acct.email, kind, plan: planCode, amount });
+    try {
+      const pay = await sumopod.createPayment({
+        orderId, amount,
+        successUrl: `${base}/?paid=1&order=${encodeURIComponent(orderId)}`,
+        cancelUrl: `${base}/?cancelled=1&order=${encodeURIComponent(orderId)}`,
+      });
+      if (!pay.payment_url) throw new Error('Sumopod tidak mengembalikan link pembayaran.');
+      await billing.attachPayment(orderId, { payment_id: pay.payment_id, payment_url: pay.payment_url, fee: pay.fee, net: pay.net, raw: pay.raw });
+      return json(res, 200, { ok: true, order_id: orderId, payment_url: pay.payment_url, amount, kind, plan: planCode, expires_at: pay.expires_at });
+    } catch (e) {
+      console.error('[billing] checkout failed', e.message);
+      await billing.markOrder(orderId, 'failed');
+      return err(res, 502, e.code === 'not_configured' ? 'Gateway pembayaran belum dikonfigurasi (SUMOPOD_PAY_KEY).' : 'Gagal membuat pembayaran QRIS. Coba lagi beberapa saat lagi.');
+    }
   }
 
-  // Sumopod payment verification — client polls this after returning from checkout.
-  // If Sumopod confirms the order is paid, we upgrade the user's plan locally.
+  // Check an order's status (after returning from the payment page). The
+  // webhook normally applies the payment first; this is the fallback that
+  // asks Sumopod directly. Only the order's owner can check it.
   if (route('POST', '/api/billing/verify')) {
-    return (async () => {
-      const { order_id, plan: newPlan } = body || {};
-      if (!order_id || !PLANS[newPlan]) return err(res, 400, 'order_id dan plan wajib.');
+    if (!billing.enabled()) return err(res, 503, 'Pembayaran belum aktif di server ini.');
+    const orderId = String(body?.order_id || '');
+    const order = orderId ? await billing.getOrder(orderId) : null;
+    if (!order || order.email !== acct.email) return err(res, 404, 'Tagihan tidak ditemukan.');
+    if (order.status === 'pending' && order.payment_id) {
       try {
-        const r = await fetch(SUMOPOD_PAY_URL + '/' + encodeURIComponent(order_id), {
-          headers: { 'X-Api-Key': SUMOPOD_PAY_KEY },
-        });
-        const bodyText = await r.text();
-        let data; try { data = JSON.parse(bodyText); } catch { data = { raw: bodyText }; }
-        if (!r.ok) {
-          return err(res, 502, 'Sumopod verify: ' + (data.message || bodyText.slice(0, 200)));
-        }
-        const status = (data.status || data.data?.status || '').toString().toLowerCase();
-        const paid = ['paid', 'success', 'completed', 'settled'].includes(status);
-        if (paid) {
-          db.prepare('UPDATE users SET plan=? WHERE id=?').run(newPlan, user.id);
-        }
-        return json(res, 200, { ok: true, paid, status, order_id, plan: newPlan });
-      } catch (e) {
-        return err(res, 502, 'Gagal verifikasi: ' + (e.message || 'network error'));
-      }
-    })();
+        const st = await sumopod.getPayment(order.payment_id);
+        if (st.ok && st.state === 'paid') await billing.applyPaid(orderId, { paidAmount: st.amount ?? null, raw: st.raw });
+        else if (st.ok && (st.state === 'expired' || st.state === 'failed')) await billing.markOrder(orderId, st.state);
+      } catch (e) { console.warn('[billing] verify lookup failed', e.message); }
+    }
+    const fresh = await billing.getOrder(orderId);
+    const acct2 = await billing.load(user);
+    return json(res, 200, {
+      ok: true, order_id: orderId, status: fresh.status, paid: fresh.status === 'paid', kind: fresh.kind,
+      plan: fresh.plan, amount: fresh.amount_idr, account: billing.summarize(acct2),
+    });
   }
 
   // Sumopod AI — natural-language commodity → HS mapping + cargo keywords + outreach angle.
@@ -1019,7 +1055,14 @@ async function handleApi(db, req, res, url, body) {
     const total = db.prepare('SELECT COUNT(*) c FROM users').get().c;
     const onboarded = db.prepare('SELECT COUNT(*) c FROM users WHERE onboarded=1').get().c;
     const admins = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin=1').get().c;
-    const byPlan = db.prepare("SELECT plan, COUNT(*) c FROM users GROUP BY plan ORDER BY c DESC").all();
+    let byPlan = db.prepare("SELECT plan, COUNT(*) c FROM users GROUP BY plan ORDER BY c DESC").all();
+    if (billing.enabled()) {
+      try {
+        const r = await require('./pg').query(`SELECT CASE WHEN plan_expires_at > NOW() THEN plan ELSE 'expired' END AS plan, COUNT(*)::int AS c
+                                                 FROM billing_accounts GROUP BY 1 ORDER BY 2 DESC`);
+        byPlan = r.rows || r;
+      } catch { /* sqlite fallback */ }
+    }
     const recent7d = db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= datetime('now','-7 days')").get().c;
     const recent30d = db.prepare("SELECT COUNT(*) c FROM users WHERE created_at >= datetime('now','-30 days')").get().c;
     const messages = db.prepare('SELECT COUNT(*) c FROM messages').get().c;
@@ -1048,9 +1091,24 @@ async function handleApi(db, req, res, url, body) {
       WHERE (? = '' OR u.email LIKE ? OR u.name LIKE ? OR u.org_name LIKE ?)
       ORDER BY u.created_at DESC LIMIT 200`)
       .all(search, '%' + search + '%', '%' + search + '%', '%' + search + '%');
+    // Plan and balance live in Postgres; the sqlite column can be stale.
+    const bill = {};
+    if (billing.enabled() && rows.length) {
+      try {
+        const br = await require('./pg').query(
+          `SELECT email, CASE WHEN plan_expires_at > NOW() THEN plan ELSE 'expired' END AS plan, plan_expires_at, balance_idr
+             FROM billing_accounts WHERE email = ANY($1)`, [rows.map((r) => String(r.email).toLowerCase())]);
+        for (const b of (br.rows || br)) bill[b.email] = b;
+      } catch { /* show sqlite values */ }
+    }
     return json(res, 200, {
       users: rows.map((r) => ({
         ...r,
+        ...(bill[String(r.email).toLowerCase()] ? {
+          plan: bill[String(r.email).toLowerCase()].plan,
+          plan_expires_at: bill[String(r.email).toLowerCase()].plan_expires_at,
+          balance_idr: Number(bill[String(r.email).toLowerCase()].balance_idr) || 0,
+        } : {}),
         is_admin: !!r.is_admin,
         onboarded: !!r.onboarded,
         hs_focus: JSON.parse(r.hs_focus || '[]'),
@@ -1061,8 +1119,11 @@ async function handleApi(db, req, res, url, body) {
 
   if (route('POST', '/api/admin/user/plan')) {
     if (!requireAdmin()) return;
-    const { user_id, plan } = body || {};
-    if (!user_id || !PLANS[plan]) return err(res, 400, 'user_id dan plan wajib.');
+    const { user_id, plan, days } = body || {};
+    if (!user_id || !PLANS[plan] || plan === 'expired') return err(res, 400, 'user_id dan plan wajib.');
+    const target = db.prepare('SELECT email FROM users WHERE id=?').get(user_id);
+    if (!target) return err(res, 404, 'User tidak ditemukan.');
+    if (billing.enabled()) await billing.adminSetPlan(target.email, plan, Math.min(Math.max(Number(days) || 30, 1), 366));
     db.prepare('UPDATE users SET plan=? WHERE id=?').run(plan, user_id);
     db.prepare('INSERT INTO audit_log (user_id, action, target, meta) VALUES (?,?,?,?)').run(user.id, 'admin.plan_change', String(user_id), JSON.stringify({ plan }));
     return json(res, 200, { ok: true, user_id, plan });
@@ -1147,18 +1208,26 @@ async function handleApi(db, req, res, url, body) {
 
   if (route('GET', '/api/admin/revenue')) {
     if (!requireAdmin()) return;
-    const planPrices = { free: 0, starter: 149000, growth: 499000, business: 999000 };
-    const byPlan = db.prepare('SELECT plan, COUNT(*) c FROM users GROUP BY plan').all();
-    let mrr = 0;
-    for (const p of byPlan) mrr += (planPrices[p.plan] || 0) * p.c;
-    const paidUsers = byPlan.filter((p) => planPrices[p.plan] > 0).reduce((s, p) => s + p.c, 0);
-    const arpu = paidUsers > 0 ? Math.round(mrr / paidUsers) : 0;
-    const paymentEvents = db.prepare(`SELECT action, target, meta, created_at FROM audit_log
-      WHERE action='admin.plan_change' ORDER BY created_at DESC LIMIT 50`).all();
+    // Real money from paid QRIS orders (billing_orders), not plan labels.
+    if (!billing.enabled()) return json(res, 200, { mrr: 0, arr: 0, arpu: 0, paid_users: 0, by_plan: [], plan_change_history: [], note: 'billing database not configured' });
+    const pgc = require('./pg');
+    const [byPlan, totals, recent, balances] = await Promise.all([
+      pgc.query(`SELECT plan, COUNT(*)::int AS c FROM billing_accounts WHERE plan_expires_at > NOW() GROUP BY plan ORDER BY c DESC`),
+      pgc.one(`SELECT COALESCE(SUM(amount_idr) FILTER (WHERE kind='plan'),0)::bigint AS plan_30d,
+                      COALESCE(SUM(amount_idr) FILTER (WHERE kind='topup'),0)::bigint AS topup_30d,
+                      COALESCE(SUM(net_idr),0)::bigint AS net_30d,
+                      COUNT(DISTINCT email)::int AS payers_30d
+                 FROM billing_orders WHERE status='paid' AND paid_at > NOW() - INTERVAL '30 days'`),
+      pgc.query(`SELECT order_id, email, kind, plan, amount_idr, status, created_at, paid_at FROM billing_orders ORDER BY created_at DESC LIMIT 50`),
+      pgc.one(`SELECT COALESCE(SUM(balance_idr),0)::bigint AS outstanding FROM billing_accounts`),
+    ]);
+    const mrr = Number(totals.plan_30d) + Number(totals.topup_30d);
     return json(res, 200, {
-      mrr, arr: mrr * 12, arpu, paid_users: paidUsers,
-      by_plan: byPlan.map((p) => ({ ...p, price: planPrices[p.plan] || 0, revenue: (planPrices[p.plan] || 0) * p.c })),
-      plan_change_history: paymentEvents,
+      mrr, arr: mrr * 12, arpu: totals.payers_30d ? Math.round(mrr / totals.payers_30d) : 0, paid_users: totals.payers_30d,
+      plan_revenue_30d: Number(totals.plan_30d), topup_revenue_30d: Number(totals.topup_30d), net_after_fees_30d: Number(totals.net_30d),
+      outstanding_balance: Number(balances.outstanding),
+      by_plan: byPlan.map((p) => ({ ...p, price: (PLANS[p.plan] || {}).price || 0, revenue: ((PLANS[p.plan] || {}).price || 0) * p.c })),
+      plan_change_history: recent.map((o) => ({ action: `${o.kind}:${o.status}`, target: o.email, meta: JSON.stringify({ plan: o.plan || 'saldo', amount: o.amount_idr }), created_at: o.paid_at || o.created_at })),
     });
   }
 
@@ -1191,7 +1260,9 @@ async function handleApi(db, req, res, url, body) {
       },
       integrations: {
         supabase: !!SUPABASE_URL,
-        sumopod_pay: !!SUMOPOD_PAY_KEY,
+        sumopod_pay: sumopod.configured(),
+        sumopod_webhook: !!(process.env.SUMOPOD_WEBHOOK_SECRET || process.env.SUMOPOD_WEBHOOK_TOKEN),
+        billing_db: billing.enabled(),
         sumopod_ai: !!SUMOPOD_AI_KEY,
         un_comtrade: !!COMTRADE_KEY,
         usitc_hts: true,
@@ -1390,8 +1461,9 @@ async function handleApi(db, req, res, url, body) {
 
   // ===== buyer search (F1) =====
   if (route('GET', '/api/search/buyers')) {
-    const qc = quotaCheck(db, user, 'search');
-    if (!qc.ok) return json(res, 402, { error: `Kuota pencarian bulan ini habis (${qc.used}/${qc.limit}). Upgrade paket untuk melanjutkan.`, quota: qc, upgrade: true });
+    // One search = one new query (page 1); paging through results is free.
+    const chargeSearch = parseInt(q.get('page') || '1', 10) <= 1;
+    if (chargeSearch && !billing.canAfford(acct, 'search').ok) return json(res, 402, billing.paymentRequired(acct, 'search'));
 
     // Live buyer pool from scraped_buyers (Postgres).
     // Filters: hs (4-digit), countries, sizes, has=email|phone|website|any,
@@ -1467,10 +1539,13 @@ async function handleApi(db, req, res, url, body) {
           email_status: x.email_status || null,
           hs_codes: x.hs_codes || [], sources: x.sources_seen || [x.source],
           score, score_label: score >= 70 ? 'HOT' : score >= 45 ? 'WARM' : 'COLD',
-          blurred: user.plan === 'free' && start + i >= 20,
+          blurred: false,
         };
       });
-      bumpUsage(db, user.id, 'search');
+      if (chargeSearch) {
+        const c = await billing.consume(acct, 'search', 1, 'search');
+        if (!c.ok) return json(res, 402, billing.paymentRequired(acct, 'search'));
+      }
       return json(res, 200, {
         total: r.total, page: pageN, per, results,
         facets: {
@@ -1478,7 +1553,7 @@ async function handleApi(db, req, res, url, body) {
           source: r.sourceFacet.map((f) => ({ value: f.source, count: f.c })),
           contact: r.contactFacet || {},
         },
-        quota: quotaCheck(db, user, 'search'),
+        quota: quotaView(acct, 'search'),
         source: 'scraped_buyers',
       });
     } catch (e) {
@@ -1490,8 +1565,7 @@ async function handleApi(db, req, res, url, body) {
   // Public to logged-in users. Filters: hs (4-digit HS), country (ISO-2),
   // q (free text against name). Quota-metered under the 'search' meter.
   if (route('GET', '/api/scraped-buyers')) {
-    const qc = quotaCheck(db, user, 'search');
-    if (!qc.ok) return json(res, 402, { error: `Kuota pencarian bulan ini habis (${qc.used}/${qc.limit}). Upgrade untuk pencarian tanpa batas.`, quota: qc, upgrade: true });
+    if (!billing.canAfford(acct, 'search').ok) return json(res, 402, billing.paymentRequired(acct, 'search'));
     try {
       const pgClient = require('./pg');
       const hs = String(q.get('hs') || '').trim();
@@ -1511,19 +1585,22 @@ async function handleApi(db, req, res, url, body) {
          WHERE ${conds.join(' AND ')}
          ORDER BY (enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC
          LIMIT $${params.length}`, params);
-      bumpUsage(db, user.id, 'search');
+      const c = await billing.consume(acct, 'search', 1, 'scraped-buyers');
+      if (!c.ok) return json(res, 402, billing.paymentRequired(acct, 'search'));
+      const open = await billing.unlockedSet(acct, 'contact', rows.map((r) => r.id));
       return json(res, 200, {
         results: rows.map((r) => ({
           id: r.id, source: r.source, name: r.name, country: r.country, city: r.city,
           website: r.website,
           // contacts follow the same paywall as the buyer profile
-          email: r.email ? (PLANS[user.plan].contacts ? r.email : maskContact('email', r.email)) : null,
-          phone: r.phone ? (PLANS[user.plan].contacts ? r.phone : maskContact('phone', r.phone)) : null,
+          email: r.email ? (open.has(Number(r.id)) ? r.email : maskContact('email', r.email)) : null,
+          phone: r.phone ? (open.has(Number(r.id)) ? r.phone : maskContact('phone', r.phone)) : null,
+          contacts_unlocked: open.has(Number(r.id)),
           industry: r.industry, size_bucket: r.size_bucket, description: r.description,
           hs_codes: r.hs_codes, confidence: r.data_confidence,
           enriched: !!r.enriched_at, updated_at: r.updated_at,
         })),
-        quota: quotaCheck(db, user, 'search'),
+        quota: quotaView(acct, 'search'),
       });
     } catch (e) {
       return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
@@ -1552,28 +1629,25 @@ async function handleApi(db, req, res, url, body) {
           FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
 
-      // profile quota only counts first view of a buyer per period
-      const seen = db.prepare('SELECT 1 FROM profile_views WHERE user_id=? AND buyer_id=? AND period=?').get(user.id, buyerId, period());
-      if (!seen) {
-        const qc = quotaCheck(db, user, 'profile');
-        if (!qc.ok) return json(res, 402, { error: `Kuota profil lengkap bulan ini habis (${qc.used}/${qc.limit}). Upgrade untuk membuka profil buyer tanpa batas.`, quota: qc, upgrade: true });
-        db.prepare('INSERT INTO profile_views (user_id,buyer_id,period) VALUES (?,?,?)').run(user.id, buyerId, period());
-        bumpUsage(db, user.id, 'profile');
-      }
+      // A buyer profile is paid once per plan cycle (quota, then balance).
+      const pv = await billing.unlock(acct, 'profile', buyerId);
+      if (!pv.ok) return json(res, 402, billing.paymentRequired(acct, 'profile'));
+      // Contacts are paid separately, once per buyer (POST /reveal-contact).
+      const contactsOpen = await billing.isUnlocked(acct, 'contact', buyerId);
 
       // Build contacts from the columns we scraped / enriched.
       const contacts = [];
       if (b.website) contacts.push({ contact_type: 'website', value: b.website, masked: false, source_url: null });
       if (b.email) contacts.push({
         contact_type: 'email',
-        value: plan.contacts ? b.email : maskContact('email', b.email),
-        masked: !plan.contacts, status: b.email_status || null,
-        source_url: plan.contacts ? (b.email_source_url || null) : null,
+        value: contactsOpen ? b.email : maskContact('email', b.email),
+        masked: !contactsOpen, status: b.email_status || null,
+        source_url: contactsOpen ? (b.email_source_url || null) : null,
       });
       if (b.phone) contacts.push({
         contact_type: 'phone',
-        value: plan.contacts ? b.phone : maskContact('phone', b.phone),
-        masked: !plan.contacts, source_url: plan.contacts ? (b.phone_source_url || null) : null,
+        value: contactsOpen ? b.phone : maskContact('phone', b.phone),
+        masked: !contactsOpen, source_url: contactsOpen ? (b.phone_source_url || null) : null,
       });
 
       const bHs = (b.hs_codes || []).map((code) => {
@@ -1597,16 +1671,41 @@ async function handleApi(db, req, res, url, body) {
         data_confidence: b.data_confidence,
         enriched: !!b.enriched_at, enriched_at: b.enriched_at,
         first_seen: b.created_at, last_updated: b.updated_at,
-        hs_codes: bHs, contacts, contacts_visible: plan.contacts,
+        hs_codes: bHs, contacts, contacts_visible: contactsOpen,
+        contact_price: { quota_left: billing.quotaLeft(acct, 'contact') === Infinity ? null : billing.quotaLeft(acct, 'contact'), rate: billing.RATES.contact, balance: acct.balance },
         supplier_countries: [],
         score: b.data_confidence, fit_score: fit,
         score_label: b.data_confidence >= 80 ? 'HOT' : b.data_confidence >= 60 ? 'WARM' : 'FRESH',
         score_components: { confidence: b.data_confidence, product_fit: fit, sources: (b.sources_seen || []).length * 20 },
         in_lists: inLists,
-        quota: quotaCheck(db, user, 'profile'),
+        quota: quotaView(acct, 'profile'),
       });
     } catch (e) {
       return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
+    }
+  }
+
+  // Open a buyer's email/phone: 1 contact quota, or Rp1.000 from the
+  // balance. Paid once per buyer, forever.
+  if ((m = route('POST', '/api/buyers/:id/reveal-contact'))) {
+    const buyerId = Number(m.id);
+    if (!buyerId) return err(res, 404, 'Buyer tidak ditemukan.');
+    try {
+      const pgc = require('./pg');
+      const b = await pgc.one(`SELECT id, email, phone, to_jsonb(sb)->>'email_source_url' AS email_source_url,
+                                      to_jsonb(sb)->>'phone_source_url' AS phone_source_url, to_jsonb(sb)->>'email_status' AS email_status
+                                 FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
+      if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
+      if (!b.email && !b.phone) return err(res, 409, 'Buyer ini belum punya email/telepon. Gunakan "Cari kontak sekarang" dulu.');
+      const u = await billing.unlock(acct, 'contact', buyerId);
+      if (!u.ok) return json(res, 402, billing.paymentRequired(acct, 'contact'));
+      return json(res, 200, {
+        ok: true, already: !!u.already, charged: u.charged || 0, balance: acct.balance,
+        email: b.email, phone: b.phone, email_status: b.email_status,
+        email_source_url: b.email_source_url, phone_source_url: b.phone_source_url,
+      });
+    } catch (e) {
+      return json(res, 503, { error: 'Gagal membuka kontak. Coba lagi.', detail: e.message });
     }
   }
 
@@ -1625,14 +1724,25 @@ async function handleApi(db, req, res, url, body) {
       const recent = b.checked && (Date.now() - new Date(b.checked).getTime()) < 24 * 3600 * 1000;
       if (recent && (b.email || b.phone)) return json(res, 200, { ok: true, cached: true, found: true });
       if (recent) return json(res, 200, { ok: true, cached: true, found: false, message: 'Kontak sudah dicari dalam 24 jam terakhir dan belum ditemukan di website perusahaan.' });
+      // Charged only when something new is found (quota, then balance).
+      if (!billing.canAfford(acct, 'find_contact').ok) return json(res, 402, billing.paymentRequired(acct, 'find_contact'));
       const ep = require('./sources/enricher-pipeline');
       const r = await Promise.race([
         ep.enrichOne(b),
         new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 50000)),
       ]);
       if (r.timeout) return json(res, 200, { ok: true, found: false, message: 'Website perusahaan lambat merespons. Coba lagi beberapa saat lagi.' });
+      const foundNew = !!(r.got_email || r.got_phone);
+      let charged = 0;
+      if (foundNew) {
+        const c = await billing.consume(acct, 'find_contact', 1, `buyer:${buyerId}`);
+        charged = c.cost || 0;
+        // The user paid to find it, so the contact is opened for them too.
+        await require('./pg').query(`INSERT INTO billing_unlocks (email, kind, buyer_id, cycle_key, paid_with)
+                                     VALUES ($1,'contact',$2,'*','find') ON CONFLICT DO NOTHING`, [acct.email, buyerId]).catch(() => {});
+      }
       return json(res, 200, { ok: true, found: !!(r.got_email || r.got_phone || b.email || b.phone), website: r.website || null,
-        got_email: r.got_email, got_phone: r.got_phone, got_website: r.got_website });
+        got_email: r.got_email, got_phone: r.got_phone, got_website: r.got_website, charged });
     } catch (e) {
       return json(res, 503, { error: 'Pencarian kontak gagal. Coba lagi nanti.', detail: e.message });
     }
@@ -1726,8 +1836,11 @@ async function handleApi(db, req, res, url, body) {
 
   // ===== export CSV =====
   if (route('GET', '/api/export/shipments')) {
-    const limit = plan.export;
-    if (!limit) return err(res, 402, 'Ekspor data tersedia mulai paket Starter. Upgrade untuk mengunduh CSV.');
+    // Rows come from the plan's export quota first, then Rp100/row from the balance.
+    const room = billing.quotaLeft(acct, 'export');
+    const affordable = room === Infinity ? 10000 : room + Math.floor(acct.balance / billing.RATES.export);
+    const limit = Math.min(10000, affordable);
+    if (!limit) return json(res, 402, billing.paymentRequired(acct, 'export'));
     const rows = db.prepare(`SELECT s.shipment_date, s.hs_code, b.name buyer, b.country, e.name exporter, e.country origin,
       s.origin_port, s.dest_port, s.weight_kg, s.value_usd, s.goods_description
       FROM shipments s JOIN buyers b ON b.id=s.buyer_id JOIN exporters e ON e.id=s.exporter_id
@@ -1736,7 +1849,10 @@ async function handleApi(db, req, res, url, body) {
     const head = Object.keys(rows[0] || { info: '' });
     const csv = [`# EksporIn export | ${user.email} | ${new Date().toISOString()} (watermarked)`, head.join(','),
       ...rows.map((r) => head.map((h) => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
-    bumpUsage(db, user.id, 'export', rows.length);
+    if (rows.length) {
+      const c = await billing.consume(acct, 'export', rows.length, 'export:shipments');
+      if (!c.ok) return json(res, 402, billing.paymentRequired(acct, 'export', rows.length));
+    }
     res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="eksporin-shipments.csv"' });
     return res.end(csv);
   }
@@ -1839,9 +1955,9 @@ async function handleApi(db, req, res, url, body) {
     const phone = db.prepare("SELECT value FROM buyer_contacts WHERE buyer_id=? AND contact_type='phone' LIMIT 1").get(buyer.id);
     return json(res, 200, {
       ...rendered, buyer_name: buyer.name,
-      to_email: email ? (plan.contacts ? email.value : maskContact('email', email.value)) : null,
-      to_phone: phone ? (plan.contacts ? phone.value : maskContact('phone', phone.value)) : null,
-      contacts_visible: plan.contacts,
+      to_email: email ? (acct.plan !== 'expired' ? email.value : maskContact('email', email.value)) : null,
+      to_phone: phone ? (acct.plan !== 'expired' ? phone.value : maskContact('phone', phone.value)) : null,
+      contacts_visible: acct.plan !== 'expired',
     });
   }
   if (route('POST', '/api/outreach/send')) {
@@ -1853,9 +1969,7 @@ async function handleApi(db, req, res, url, body) {
       const idx = db.prepare('SELECT COUNT(*) c FROM templates WHERE user_id IS NULL AND id < ?').get(tpl.id).c;
       if (idx >= plan.sys_templates) return json(res, 402, { error: 'Template ini terkunci di paket Anda. Upgrade untuk membuka semua template.', upgrade: true });
     }
-    const qc = quotaCheck(db, user, 'send');
-    if (!qc.ok || qc.used + ids.length > (qc.limit ?? Infinity))
-      return json(res, 402, { error: `Kuota kirim bulan ini tidak cukup (terpakai ${qc.used}/${qc.limit}). Upgrade paket untuk kuota lebih besar.`, upgrade: true });
+    if (!billing.canAfford(acct, 'send', ids.length).ok) return json(res, 402, billing.paymentRequired(acct, 'send', ids.length));
     // anti-abuse: same template to same buyer within 14 days
     const sent = [];
     for (const bid of ids) {
@@ -1864,15 +1978,16 @@ async function handleApi(db, req, res, url, body) {
       const buyer = db.prepare('SELECT * FROM buyers WHERE id=?').get(bid);
       if (!buyer) continue;
       const r = renderTemplate(db, tpl, buyer, user);
+      const c = await billing.consume(acct, 'send', 1, `buyer:${bid}`);
+      if (!c.ok) { sent.push({ buyer_id: bid, skipped: 'Kuota/saldo tidak cukup.' }); break; }
       db.prepare('INSERT INTO messages (user_id,buyer_id,template_id,channel,subject,body,status) VALUES (?,?,?,?,?,?,?)')
         .run(user.id, bid, tpl.id, body.channel || tpl.channel, r.subject, r.body, 'sent');
-      bumpUsage(db, user.id, 'send');
       // auto-update pipeline status new → contacted
       db.prepare(`UPDATE list_buyers SET status='contacted' WHERE buyer_id=? AND status='new'
         AND list_id IN (SELECT id FROM lists WHERE user_id=?)`).run(bid, user.id);
       sent.push({ buyer_id: bid, ok: true });
     }
-    return json(res, 200, { sent, quota: quotaCheck(db, user, 'send') });
+    return json(res, 200, { sent, quota: quotaView(acct, 'send') });
   }
   if (route('GET', '/api/outreach/messages')) {
     let rows = db.prepare(`SELECT msg.*, b.name buyer_name, b.country buyer_country FROM messages msg
@@ -2066,7 +2181,9 @@ async function handleApi(db, req, res, url, body) {
                                  ORDER BY (email IS NOT NULL) DESC, data_confidence DESC LIMIT 20`, [matched.hs]);
       }
     } catch (_e) { rows = []; }
-    const showContacts = !!PLANS[user.plan].contacts;
+    if (!billing.canAfford(acct, 'search').ok) return json(res, 402, billing.paymentRequired(acct, 'search'));
+    await billing.consume(acct, 'search', 1, 'discover');
+    const openSet = await billing.unlockedSet(acct, 'contact', rows.map((r) => r.id));
     const results = rows.map((b, idx) => {
       const domain = b.website ? String(b.website).replace(/https?:\/\/(www\.)?/, '').replace(/\/.*/, '') : null;
       const score = Number(b.quality_score) || 0;
@@ -2086,10 +2203,10 @@ async function handleApi(db, req, res, url, body) {
           sources: b.sources_seen || [b.source], evidence_url: b.evidence_url || null,
         },
         contacts: {
-          email: b.email ? (showContacts ? b.email : maskContact('email', b.email)) : null,
+          email: b.email ? (openSet.has(Number(b.id)) ? b.email : maskContact('email', b.email)) : null,
           email_status: b.email_status || null,
-          phone: b.phone ? (showContacts ? b.phone : maskContact('phone', b.phone)) : null,
-          website: b.website || null, masked: !showContacts,
+          phone: b.phone ? (openSet.has(Number(b.id)) ? b.phone : maskContact('phone', b.phone)) : null,
+          website: b.website || null, masked: !openSet.has(Number(b.id)),
           linkedin_search: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${b.name} ${(matched.titles || ['purchasing'])[0]}`)}`,
         },
         decision_makers: [],

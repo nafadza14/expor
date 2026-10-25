@@ -178,7 +178,7 @@ async function api(path, opts = {}) {
     if (!hasAdminToken && path !== '/api/me') location.hash = '#/login';
     throw { status: 401, data };
   }
-  if (res.status === 402) { upgradeModal(data && data.error); throw { status: 402, data, handled: true }; }
+  if (res.status === 402) { upgradeModal(data && data.error, data); throw { status: 402, data, handled: true }; }
   if (!res.ok) throw { status: res.status, data };
   return data;
 }
@@ -198,11 +198,16 @@ function modal(html, { wide = false } = {}) {
   $('.modal-overlay', root).addEventListener('click', (e) => { if (e.target.classList.contains('modal-overlay')) closeModal(); });
 }
 window.closeModal = () => { $('#modal-root').innerHTML = ''; };
-function upgradeModal(msg) {
-  modal(`<h2 style="margin-bottom:8px">Kuota Anda habis</h2>
-    <p class="muted" style="margin-bottom:20px">${esc(msg || 'Fitur ini membutuhkan paket lebih tinggi.')}</p>
-    <div style="display:flex;gap:10px"><button class="btn btn-upgrade" onclick="closeModal();location.hash='#/billing'">Lihat paket & upgrade</button>
-    <button class="btn btn-neutral" onclick="closeModal()">Nanti saja</button></div>`);
+function upgradeModal(msg, info) {
+  const bal = info && typeof info.balance === 'number' ? info.balance : null;
+  const need = info && info.needed ? Math.max(10000, Math.ceil(info.needed / 10000) * 10000) : 10000;
+  modal(`<h2 style="margin-bottom:8px">${info && info.plan === 'expired' ? 'Paket tidak aktif' : 'Kuota habis'}</h2>
+    <p class="muted" style="margin-bottom:${bal !== null ? 8 : 20}px">${esc(msg || 'Kuota paket Anda sudah habis.')}</p>
+    ${bal !== null ? `<p class="body-sm" style="margin-bottom:20px">Saldo Anda: <b>${fmtIDR(bal)}</b></p>` : ''}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="closeModal();openTopup(${need})">Isi saldo</button>
+      <button class="btn btn-upgrade" onclick="closeModal();location.hash='#/billing'">Lihat paket</button>
+      <button class="btn btn-neutral" onclick="closeModal()">Nanti saja</button></div>`);
 }
 
 // ================= SVG charts =================
@@ -292,7 +297,8 @@ function navItem(href, icon, label, badge = 0) {
 }
 function shell(content) {
   const u = ME;
-  const planPill = { free: 'pill-neutral', starter: 'pill-orange', growth: 'pill-success', business: 'pill-violet' }[u.plan] || 'pill-neutral';
+  const planPill = { trial: 'pill-neutral', hemat: 'pill-orange', growth: 'pill-success', business: 'pill-violet', expired: 'pill-danger' }[u.plan] || 'pill-neutral';
+  const bal = u.billing ? fmtIDR(u.billing.balance) : '';
   return `<div class="app-shell">
   <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
   <aside class="sidebar" id="sidebar">
@@ -315,7 +321,7 @@ function shell(content) {
       ${navItem('#/billing', I.card, 'Paket & Tagihan')}
       <a class="nav-item" href="#" id="nav-logout">${I.out}<span>Keluar</span></a>
     </nav>
-    ${u.plan === 'free' || u.plan === 'starter' ? `<div class="sidebar-cta"><h4>Upgrade ke Growth</h4><p>Buka kontak buyer, 500 pencarian, & alert tanpa batas.</p><button class="btn" onclick="location.hash='#/billing'">Lihat paket</button></div>` : '<div style="margin-top:auto"></div>'}
+    ${['trial', 'hemat', 'expired'].includes(u.plan) ? `<div class="sidebar-cta"><h4>${u.plan === 'expired' ? 'Paket tidak aktif' : u.plan === 'trial' ? 'Masa trial' : 'Butuh lebih banyak kontak?'}</h4><p>${u.plan === 'expired' ? 'Beli paket mulai Rp14.000 atau isi saldo untuk lanjut.' : 'Growth: 150 kontak & 1.000 pencarian per 30 hari.'}</p><button class="btn" onclick="location.hash='#/billing'">Lihat paket</button></div>` : '<div style="margin-top:auto"></div>'}
   </aside>
   <div class="main">
     <header class="topbar">
@@ -323,7 +329,7 @@ function shell(content) {
       <div class="topbar-brand-mobile"><span class="logo" style="width:28px;height:28px;border-radius:8px;background:var(--orange);display:inline-flex;align-items:center;justify-content:center">${I.logoW}</span><span style="font-weight:700">EksporIn</span></div>
       <div class="search-wrap">${I.search}<input class="input" id="global-search" placeholder="Cari buyer atau HS code… (Enter)"></div>
       <div class="topbar-right">
-        <span class="pill ${planPill} plan-pill">Paket ${esc(u.plan_name)}</span>
+        <a class="pill ${planPill} plan-pill" href="#/billing" id="plan-pill" title="Paket & saldo">${esc(u.plan_name || '')}${bal ? ' · ' + bal : ''}</a>
         <button class="bell" onclick="location.hash='#/alerts'" title="Notifikasi">${I.bell}${u.unread_alerts ? '<span class="dot"></span>' : ''}</button>
       </div>
     </header>
@@ -407,32 +413,44 @@ async function loadMeFromSupabase() {
       const { data, error } = await window.sb.from('profiles').select('*').eq('id', sbUser.id).maybeSingle();
       if (!error && data) profile = data;
     } catch (e) { console.warn('[eksporin] SB profile read:', e); }
-    const plan = profile.plan || 'free';
-    const planNames = { free: 'Free', starter: 'Starter', growth: 'Growth', business: 'Business' };
+    // Plan and balance are server-side (billing). Show a neutral placeholder
+    // until syncBilling() fills them in; never trust profile.plan.
+    const plan = 'trial';
     return {
       id: sbUser.id,
       email: sbUser.email,
       name: profile.name || (sbUser.user_metadata && sbUser.user_metadata.name) || sbUser.email.split('@')[0],
       org_name: profile.org_name || null,
       plan,
-      plan_name: planNames[plan] || 'Free',
+      plan_name: 'Paket',
       onboarded: !!profile.onboarded,
       hs_focus: Array.isArray(profile.hs_focus) ? profile.hs_focus : [],
       target_countries: Array.isArray(profile.target_countries) ? profile.target_countries : [],
       export_status: profile.export_status || null,
       goal: profile.goal || null,
       quotas: {
-        search: { used: 0, limit: 20 },
-        profile: { used: 0, limit: 3 },
-        send: { used: 0, limit: 5 },
-        export: { used: 0, limit: 0 },
+        search: { used: 0, limit: null }, profile: { used: 0, limit: null }, contact: { used: 0, limit: null },
+        find_contact: { used: 0, limit: null }, send: { used: 0, limit: null }, export: { used: 0, limit: null },
       },
-      contacts_visible: false,
-      saved: { used: 0, limit: 10 },
+      contacts_visible: true,
+      saved: { used: 0, limit: null },
       unread_alerts: 0,
       _fromSupabase: true,
     };
   } catch (e) { console.warn('[eksporin] loadMeFromSupabase:', e); return null; }
+}
+
+// Pull plan, quotas and balance from the server (Supabase profile has none we trust).
+let BILLING_SYNC = null;
+function syncBilling() {
+  if (BILLING_SYNC) return BILLING_SYNC;
+  BILLING_SYNC = api('/api/me').then((m) => {
+    if (!ME || !m) return;
+    Object.assign(ME, { plan: m.plan, plan_name: m.plan_name, quotas: m.quotas, billing: m.billing, saved: m.saved, contacts_visible: m.contacts_visible });
+    const pill = document.getElementById('plan-pill');
+    if (pill && m.billing) pill.textContent = `${m.plan_name} · ${fmtIDR(m.billing.balance)}`;
+  }).catch(() => {}).finally(() => { setTimeout(() => { BILLING_SYNC = null; }, 30000); });
+  return BILLING_SYNC;
 }
 
 async function requireMe() {
@@ -452,6 +470,7 @@ async function requireMe() {
     if (hasPendingOnboarding()) retryPendingOnboarding();
   }
   if (!ME.onboarded && parseHash().path !== '/onboarding') { location.hash = '#/onboarding'; throw { handled: true }; }
+  if (ME._fromSupabase && !ME.billing) await Promise.race([syncBilling(), new Promise((r) => setTimeout(r, 2500))]);
   return ME;
 }
 async function refreshMe() {
@@ -814,14 +833,13 @@ route(/^\/$/, async (app) => {
     <section class="landing-section" id="pricing">
       <div class="landing-section-inner">
         <div class="section-eyebrow">Harga</div>
-        <h2 class="section-title">Mulai gratis, upgrade sesuai skala Anda</h2>
-        <p class="section-lead">Semua paket bulanan tanpa kontrak. Bayar via QRIS (GoPay / OVO / DANA / ShopeePay / m-Banking). Garansi 7 hari uang kembali.</p>
-        <div class="price-grid">
+        <h2 class="section-title">Mulai dari Rp14.000, bayar sesuai pemakaian</h2>
+        <p class="section-lead">Akun baru langsung dapat <b>trial 3 hari</b> setara paket Hemat. Paket berlaku 30 hari, bayar sekali via QRIS (GoPay / OVO / DANA / ShopeePay / m-Banking), tanpa perpanjangan otomatis. Kuota habis? Lanjut pakai saldo.</p>
+        <div class="price-grid price-grid-3">
           ${[
-            { code: 'free', name: 'Free', price: 'Rp 0', tag: 'Selamanya', desc: 'Coba semua fitur inti.', feats: ['20 pencarian/bulan', '3 profil lengkap/bulan', 'Simpan 10 buyer', '5 kirim outreach', '3 template sistem'] },
-            { code: 'starter', name: 'Starter', price: 'Rp 149.000', tag: '/bulan', desc: 'UKM ekspor sesekali.', feats: ['100 pencarian/bulan', '50 profil lengkap/bulan', 'Simpan tanpa batas', '50 kirim outreach', '5 alert aktif', 'Ekspor CSV 100 baris'] },
-            { code: 'growth', name: 'Growth', price: 'Rp 499.000', tag: '/bulan', desc: 'Yang paling populer.', highlight: true, feats: ['500 pencarian/bulan', '300 profil lengkap/bulan', '✨ Kontak buyer terbuka penuh', '300 kirim outreach', 'Alert tanpa batas', 'Semua template', 'Ekspor CSV 500 baris'] },
-            { code: 'business', name: 'Business', price: 'Rp 999.000', tag: '/bulan', desc: 'Tim ekspor scaleup.', feats: ['Pencarian & profil tanpa batas', 'Kontak terbuka penuh', '2.000 kirim outreach', 'Intel kompetitor', 'Ekspor 10.000 baris', '3 kursi tim', 'Success manager'] },
+            { code: 'hemat', name: 'Hemat', price: 'Rp14.000', tag: '/30 hari', desc: 'Untuk mulai mencari buyer pertama.', feats: ['100 pencarian buyer', '30 profil buyer lengkap', '15 buka kontak (email/telepon)', '10 cari kontak otomatis', '20 kirim outreach', 'Simpan 50 buyer · 3 alert', 'Ekspor CSV pakai saldo'] },
+            { code: 'growth', name: 'Growth', price: 'Rp99.000', tag: '/30 hari', desc: 'Untuk eksportir yang aktif prospek.', highlight: true, feats: ['1.000 pencarian buyer', '300 profil buyer lengkap', '150 buka kontak', '100 cari kontak otomatis', '300 kirim outreach', 'Ekspor CSV 300 baris', 'Simpan, alert & template tanpa batas'] },
+            { code: 'business', name: 'Business', price: 'Rp299.000', tag: '/30 hari', desc: 'Untuk tim ekspor dengan banyak pasar.', feats: ['Pencarian & profil tanpa batas', '600 buka kontak', '400 cari kontak otomatis', '2.000 kirim outreach', 'Ekspor CSV 3.000 baris', 'Intel kompetitor', 'Semua fitur Growth'] },
           ].map((p) => `
             <div class="price-card${p.highlight ? ' price-card-featured' : ''}">
               ${p.highlight ? '<div class="price-badge">Paling Populer</div>' : ''}
@@ -829,8 +847,19 @@ route(/^\/$/, async (app) => {
               <div class="price-desc">${p.desc}</div>
               <div class="price-amt"><b>${p.price}</b><span>${p.tag}</span></div>
               <ul class="price-feats">${p.feats.map((f) => `<li>${f}</li>`).join('')}</ul>
-              <a href="#/register" class="btn ${p.highlight ? 'btn-primary' : 'btn-neutral'}" style="width:100%;border-radius:10px;padding:12px">${p.code === 'free' ? 'Mulai gratis' : 'Pilih paket'}</a>
+              <a href="#/register" class="btn ${p.highlight ? 'btn-primary' : 'btn-neutral'}" style="width:100%;border-radius:10px;padding:12px">Coba gratis 3 hari</a>
             </div>`).join('')}
+        </div>
+        <div class="price-saldo">
+          <div class="price-saldo-head">
+            <div><div class="price-name">Saldo pay-as-you-go</div>
+            <div class="price-desc">Dipakai otomatis saat kuota paket habis atau paket sudah berakhir. Saldo tidak hangus.</div></div>
+            <div class="price-saldo-topup">Isi saldo mulai <b>Rp10.000</b><span>kelipatan Rp10.000</span></div>
+          </div>
+          <div class="price-saldo-rates">
+            ${[['Pencarian buyer', 'Rp100'], ['Buka profil buyer', 'Rp300'], ['Buka kontak buyer', 'Rp1.000'], ['Cari kontak otomatis', 'Rp1.000', 'hanya jika ditemukan'], ['Kirim outreach', 'Rp200'], ['Ekspor CSV', 'Rp100', 'per baris']]
+              .map(([l, v, n]) => `<div class="price-rate"><span>${l}${n ? ` <i>(${n})</i>` : ''}</span><b>${v}</b></div>`).join('')}
+          </div>
         </div>
       </div>
     </section>
@@ -844,7 +873,7 @@ route(/^\/$/, async (app) => {
             <p>Bergabung dengan eksportir Indonesia yang sudah pakai data resmi UN Comtrade + USITC + AI untuk menemukan buyer luar negeri dalam hitungan menit.</p>
           </div>
           <div class="landing-cta-actions">
-            <a href="#/register" class="btn btn-primary btn-lg">Daftar gratis, tanpa kartu kredit →</a>
+            <a href="#/register" class="btn btn-primary btn-lg">Coba gratis 3 hari, tanpa kartu kredit →</a>
             <a href="#/login" class="btn btn-ghost btn-lg" style="color:#fff">Masuk</a>
           </div>
         </div>
@@ -1230,7 +1259,7 @@ route(/^\/terms$/, (app) => {
     </ul>
 
     <h2>4. Paket berbayar dan penagihan</h2>
-    <p>Kami menawarkan paket Free, Starter, Growth, dan Business. Detail harga dan kuota tercantum di halaman Harga. Pembayaran diproses melalui gateway pembayaran pihak ketiga. Langganan bulanan otomatis diperpanjang kecuali Anda menonaktifkannya dari menu Billing.</p>
+    <p>Kami menawarkan paket Hemat, Growth, dan Business yang masing-masing berlaku 30 hari sejak pembayaran, serta trial 3 hari untuk akun baru. Detail harga, kuota, dan tarif saldo tercantum di halaman Harga dan menu Paket & Saldo. Pembayaran diproses melalui QRIS oleh gateway pembayaran pihak ketiga (Sumopod). Paket tidak diperpanjang otomatis; Anda membeli ulang atau memperpanjang secara manual. Saldo yang diisi tidak hangus dan dipakai otomatis untuk tindakan berbayar ketika kuota paket habis atau paket berakhir.</p>
 
     <h2>5. Batasan tanggung jawab</h2>
     <p>EksporIn tidak bertanggung jawab atas kerugian yang timbul dari keputusan bisnis Anda berdasarkan data platform, termasuk gagal transaksi, buyer yang tidak merespons, perbedaan kurs, atau perubahan tarif bea masuk. Tanggung jawab maksimum kami dalam kondisi apa pun terbatas pada nilai langganan tiga bulan terakhir yang telah Anda bayarkan.</p>
@@ -1296,30 +1325,30 @@ route(/^\/privacy$/, (app) => {
 });
 
 route(/^\/refund$/, (app) => {
-  app.innerHTML = legalShell('Kebijakan Refund', '2 September 2026', `
-    <h2>1. Uji coba 7 hari</h2>
-    <p>Semua paket berbayar hadir dengan periode uji coba 7 hari. Anda bisa membatalkan langganan dalam 7 hari pertama dan mendapat refund penuh, tanpa perlu alasan.</p>
+  app.innerHTML = legalShell('Kebijakan Refund', '25 Oktober 2026', `
+    <h2>1. Trial 3 hari</h2>
+    <p>Setiap akun baru mendapat trial 3 hari setara paket Hemat tanpa pembayaran. Gunakan masa ini untuk menilai apakah data buyer untuk komoditas dan negara tujuan Anda sudah sesuai sebelum membeli paket.</p>
 
-    <h2>2. Setelah 7 hari</h2>
-    <p>Setelah masa uji coba berakhir, refund diberikan hanya jika:</p>
+    <h2>2. Paket 30 hari</h2>
+    <p>Paket dibayar sekali dan berlaku 30 hari, tanpa perpanjangan otomatis. Refund paket diberikan jika:</p>
     <ul>
-      <li>Layanan mengalami gangguan teknis di sisi kami yang berdampak signifikan pada penggunaan (downtime lebih dari 24 jam berturut-turut dalam periode tagihan).</li>
-      <li>Terjadi kesalahan penagihan ganda.</li>
-      <li>Fitur inti yang dijanjikan tidak tersedia dan tidak dapat kami perbaiki dalam waktu wajar.</li>
+      <li>Terjadi pembayaran ganda untuk pesanan yang sama.</li>
+      <li>Pembayaran berhasil tetapi paket tidak aktif dan tidak dapat kami perbaiki dalam 2 x 24 jam.</li>
+      <li>Layanan mengalami gangguan di sisi kami lebih dari 24 jam berturut-turut selama masa paket.</li>
     </ul>
 
-    <h2>3. Paket tahunan</h2>
-    <p>Untuk paket tahunan, refund pro rata tersedia dalam 30 hari pertama. Setelah 30 hari, langganan tahunan bersifat final namun akun tetap aktif hingga akhir periode tagihan.</p>
+    <h2>3. Saldo</h2>
+    <p>Saldo tidak hangus. Saldo yang belum terpakai dapat dikembalikan atas permintaan, dikurangi biaya transaksi QRIS yang sudah dibebankan gateway. Saldo yang sudah dipakai untuk membuka profil, kontak, pencarian, outreach, atau ekspor tidak dapat dikembalikan.</p>
 
     <h2>4. Yang tidak di-refund</h2>
     <ul>
-      <li>Ketidakpuasan terhadap kualitas atau kuantitas data buyer yang tersedia untuk komoditas atau negara Anda. Ini adalah karakter alami dari sumber data publik dan bisa Anda evaluasi selama uji coba 7 hari.</li>
-      <li>Perubahan kebijakan ekspor pemerintah, perubahan tarif bea masuk, atau kondisi pasar yang mempengaruhi bisnis Anda.</li>
-      <li>Kegagalan Anda menutup transaksi dengan buyer yang kami sajikan.</li>
+      <li>Kuota yang sudah terpakai, termasuk kontak yang sudah dibuka.</li>
+      <li>Ketidakpuasan terhadap jumlah data buyer untuk komoditas atau negara tertentu yang bisa Anda nilai selama trial.</li>
+      <li>Perubahan kebijakan ekspor, tarif bea masuk, atau kondisi pasar, serta transaksi dengan buyer yang tidak berhasil.</li>
     </ul>
 
     <h2>5. Cara mengajukan refund</h2>
-    <p>Kirim permintaan ke <a href="mailto:billing@eksporin.id">billing@eksporin.id</a> dengan subjek "Refund Request" dan sertakan nomor invoice. Kami memproses dalam 7 hari kerja. Dana dikembalikan ke metode pembayaran yang sama dengan yang Anda gunakan saat berlangganan.</p>
+    <p>Kirim permintaan ke <a href="mailto:billing@eksporin.id">billing@eksporin.id</a> dengan subjek "Refund Request" dan sertakan nomor pesanan (EKS-…) dari menu Paket & Saldo. Kami memproses dalam 7 hari kerja.</p>
   `);
 });
 
@@ -1590,7 +1619,7 @@ route(/^\/dashboard$/, async (app) => {
     if (e && e.handled) throw e; // redirect already scheduled
     console.error('[dashboard] requireMe failed:', e);
     // Fall through — use whatever ME we have or make a minimal one
-    if (!ME) ME = { email: 'guest@eksporin.id', name: 'Guest', onboarded: true, hs_focus: [], target_countries: [], plan: 'free', plan_name: 'Free', quotas: {}, unread_alerts: 0 };
+    if (!ME) ME = { email: 'guest@eksporin.id', name: 'Guest', onboarded: true, hs_focus: [], target_countries: [], plan: 'trial', plan_name: 'Trial', quotas: {}, unread_alerts: 0 };
   }
   ME = ME || {};
   // Ensure ME has all required fields with safe defaults — a partial ME (from
@@ -1598,8 +1627,8 @@ route(/^\/dashboard$/, async (app) => {
   ME.name = ME.name || (ME.email ? String(ME.email).split('@')[0] : 'User');
   ME.hs_focus = Array.isArray(ME.hs_focus) ? ME.hs_focus : [];
   ME.target_countries = Array.isArray(ME.target_countries) ? ME.target_countries : [];
-  ME.plan = ME.plan || 'free';
-  ME.plan_name = ME.plan_name || 'Free';
+  ME.plan = ME.plan || 'trial';
+  ME.plan_name = ME.plan_name || 'Trial';
   ME.unread_alerts = ME.unread_alerts || 0;
   ME.quotas = ME.quotas || { search: { used: 0, limit: null }, profile: { used: 0, limit: null }, send: { used: 0, limit: null }, export: { used: 0, limit: null } };
   // Render the shell with placeholders immediately so the user sees the app
@@ -1903,7 +1932,7 @@ function renderDiscoverResult(r) {
               ${lead.contacts.website ? `<div class="body-sm" style="padding:4px 0">🌐 <a href="${esc(lead.contacts.website)}" target="_blank" rel="noopener">${esc(lead.company.domain || lead.contacts.website)}</a></div>` : ''}
               ${!lead.contacts.email && !lead.contacts.phone ? '<div class="caption muted" style="padding:4px 0">Email/telepon belum tersedia. Buka profil untuk mencari kontak.</div>' : ''}
               <a class="caption" href="${esc(lead.contacts.linkedin_search)}" target="_blank" rel="noopener" style="color:var(--orange)">Cari PIC pembelian di LinkedIn →</a>
-              ${lead.contacts.masked && (lead.contacts.email || lead.contacts.phone) ? '<div class="caption muted-3" style="margin-top:6px">🔒 Kontak lengkap mulai paket Growth</div>' : ''}
+              ${lead.contacts.masked && (lead.contacts.email || lead.contacts.phone) ? '<div class="caption muted-3" style="margin-top:6px">🔒 Buka kontak di profil buyer</div>' : ''}
             </div>
           </div>
           <div class="lead-pitch">
@@ -2067,7 +2096,6 @@ route(/^\/cari$/, async (app, m, params) => {
             ${[['score', 'Urut: Paling lengkap'], ['recent', 'Urut: Terbaru'], ['name', 'Urut: Nama A-Z']].map(([v, l]) => `<option value="${v}" ${state.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select></div>
         <label class="chk" style="margin-bottom:12px"><input type="checkbox" id="f-contact" ${state.has.includes('any') ? 'checked' : ''}> Hanya buyer yang punya email / telepon</label>
-        ${ME.plan === 'free' && d.total > 20 ? '<div class="banner banner-warning">🔒 Paket Free menampilkan detail 20 buyer teratas. Baris selanjutnya diblur. <a href="#/billing">Upgrade</a></div>' : ''}
         <div class="tbl-wrap"><table class="tbl"><thead><tr>
           <th>#</th><th>Buyer</th><th>Negara</th><th>Kontak</th><th>Produk</th><th>Skor</th><th></th></tr></thead><tbody>
           ${d.results.length ? d.results.map((b) => `<tr class="clickable ${b.blurred ? 'row-blurred' : ''}" ${b.blurred ? '' : `onclick="location.hash='#/buyer/${b.id}'"`}>
@@ -2118,7 +2146,6 @@ route(/^\/cari$/, async (app, m, params) => {
     $('#pg-prev').onclick = () => { state.page--; draw(); };
     $('#pg-next').onclick = () => { state.page++; draw(); };
     $('#btn-export').onclick = async () => {
-      if (!ME.quotas.export.limit && ME.plan === 'free') return upgradeModal('Ekspor CSV tersedia mulai paket Starter.');
       window.open('/api/export/shipments' + (state.hs ? '' : ''), '_blank');
     };
   };
@@ -2266,12 +2293,29 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
               <a href="https://www.google.com/search?q=${googleQ}" target="_blank" rel="noopener">Google</a> ·
               <a href="https://www.linkedin.com/search/results/companies/?keywords=${liQ}" target="_blank" rel="noopener">LinkedIn</a></div>
           </div>` : ''}
-        ${!b.contacts_visible && (hasEmail || hasPhone) ? `<div class="banner banner-info" style="margin-top:12px">🔒 Email & telepon lengkap tersedia mulai paket <b>Growth</b>. <a href="#/billing">Upgrade</a></div>` : ''}
+        ${!b.contacts_visible && (hasEmail || hasPhone) ? (() => {
+          const cp = b.contact_price || {};
+          const how = cp.quota_left === null ? 'termasuk paket Anda'
+            : cp.quota_left > 0 ? `pakai 1 kuota kontak (sisa ${cp.quota_left})`
+            : `Rp${Number(cp.rate || 1000).toLocaleString('id-ID')} dari saldo (saldo Rp${Number(cp.balance || 0).toLocaleString('id-ID')})`;
+          return `<div style="margin-top:14px"><button class="btn btn-primary btn-sm" id="btn-reveal">🔓 Buka kontak</button>
+            <div class="caption muted-3" style="margin-top:6px">${how} · sekali bayar, kontak terbuka selamanya</div></div>`;
+        })() : ''}
         ${hasEmail && b.contacts_visible ? `<div class="caption muted-3" style="margin-top:12px">Tips: kirim penawaran yang personal dan relevan untuk perusahaan ini, bukan email massal.</div>` : ''}</div>
       <div class="card"><h3 style="margin-bottom:14px">Kelengkapan data</h3>${scorePanel}</div>
       <div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:14px">Produk yang dibeli</h3>
         ${(b.hs_codes || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.hs_codes.map((h) => `<span class="tag"><b>${(h.hs_code || h).replace(/^(\d{4})/, '$1.')}</b>${h.description_id ? ' · ' + esc(h.description_id) : ''}</span>`).join('')}</div>` : '<p class="muted body-sm">Belum ada data produk untuk buyer ini.</p>'}
         <p class="caption muted-3" style="margin-top:12px">Sumber data: ${sources.map((s) => sourceLabels[s] || s).join(', ') || '-'} · Diperbarui ${b.last_updated ? fmtDate(b.last_updated) : '-'}</p></div></div>`;
+    const rv = $('#btn-reveal');
+    if (rv) rv.onclick = async () => {
+      rv.disabled = true; rv.textContent = 'Membuka…';
+      try {
+        const r = await api(`/api/buyers/${id}/reveal-contact`, { method: 'POST' });
+        toast(r.already ? 'Kontak sudah terbuka' : r.charged ? `Kontak dibuka · Rp${Number(r.charged).toLocaleString('id-ID')} dari saldo` : 'Kontak dibuka ✓');
+        syncBilling && syncBilling().catch(() => {});
+        render();
+      } catch (e) { rv.disabled = false; rv.textContent = '🔓 Buka kontak'; if (!e.handled) toast(e.message || e.data?.error || 'Gagal membuka kontak', true); }
+    };
     const fc = $('#btn-find-contact');
     if (fc) fc.onclick = async () => {
       fc.disabled = true; fc.textContent = 'Mencari di website perusahaan… (±30 detik)';
@@ -2572,7 +2616,7 @@ window.composeTo = async (buyerIds) => {
       <div class="input" style="height:auto;white-space:pre-wrap;background:var(--bg-surface-alt);max-height:260px;overflow-y:auto">${esc(prev.body)}</div></div>
       <p class="caption ${prev.contacts_visible ? 'muted' : ''}" style="margin-bottom:12px">
         ${prev.to_email ? `📧 Tujuan: <b>${esc(prev.to_email)}</b>` : '📧 Email buyer belum tersedia. Gunakan mode salin.'}
-        ${!prev.contacts_visible && prev.to_email ? ' <span class="masked-chip">🔒 kontak penuh di paket Growth+</span>' : ''}</p>`;
+        ${!prev.contacts_visible && prev.to_email ? ' <span class="masked-chip">🔒 buka kontak di profil buyer dulu</span>' : ''}</p>`;
   };
   modal(`<h2 style="margin-bottom:4px">Kirim outreach</h2>
     <p class="muted body-sm" style="margin-bottom:16px">${ids.length} buyer dipilih · Kuota kirim: <b class="num">${ME.quotas.send.used}${ME.quotas.send.limit ? '/' + ME.quotas.send.limit : ''}</b></p>
@@ -2667,7 +2711,7 @@ route(/^\/alerts$/, async (app) => {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div><h1>Notifikasi</h1><p class="muted body-sm">Intel proaktif: buyer baru, aktivitas shipment, gerakan kompetitor, dan pengingat follow-up.</p></div>
       ${!d.locked && d.alerts.length ? '<button class="btn btn-sm btn-neutral" id="mark-all">Tandai semua dibaca</button>' : ''}</div>
-    ${d.locked ? `<div class="card empty"><div class="ic">🔔</div><h3>Alert tersedia mulai paket Starter</h3>
+    ${d.locked ? `<div class="card empty"><div class="ic">🔔</div><h3>Alert tidak tersedia di status akun Anda</h3>
       <p class="muted" style="margin-bottom:16px">Dapatkan notifikasi saat buyer baru muncul di HS code Anda, buyer tersimpan punya shipment baru, atau kompetitor Indonesia bergerak.</p>
       <button class="btn btn-upgrade" onclick="location.hash='#/billing'">Upgrade sekarang</button></div>`
     : d.alerts.length ? `<div class="tbl-wrap" style="background:#fff">${d.alerts.map((a) => `
@@ -2925,97 +2969,169 @@ route(/^\/settings$/, async (app) => {
 });
 
 // ================= billing =================
-route(/^\/billing$/, async (app) => {
+const METER_UI = {
+  search: ['Pencarian buyer', 'pencarian'], profile: ['Buka profil buyer', 'profil'], contact: ['Buka kontak (email + telepon)', 'kontak'],
+  find_contact: ['Cari kontak di website', 'pencarian kontak'], send: ['Kirim outreach', 'pesan'], export: ['Ekspor CSV', 'baris'],
+};
+const qty = (v, unit) => (v === null || v === undefined ? `${unit[0].toUpperCase()}${unit.slice(1)} tanpa batas` : v === 0 ? `${unit[0].toUpperCase()}${unit.slice(1)} pakai saldo` : `${nf.format(v)} ${unit}`);
+function planFeatures(p) {
+  const q = p.quotas;
+  const out = [
+    `${qty(q.search, 'pencarian')}`, `${qty(q.profile, 'profil buyer')}`, `${qty(q.contact, 'buka kontak')}`,
+    `${qty(q.find_contact, 'cari kontak di website')}`, `${qty(q.send, 'kirim outreach')}`,
+    q.export ? `Ekspor CSV ${nf.format(q.export)} baris` : 'Ekspor CSV pakai saldo',
+    p.saved === null ? 'Simpan buyer tanpa batas' : `Simpan ${p.saved} buyer`,
+    p.alerts === null ? 'Notifikasi tanpa batas' : `${p.alerts} notifikasi aktif`,
+  ];
+  if (p.competitor) out.push('Intel kompetitor Indonesia');
+  return out;
+}
+async function startCheckout(body, btn) {
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Menyiapkan QRIS…'; }
+  try {
+    const r = await api('/api/billing/checkout', { method: 'POST', body });
+    if (!r.payment_url) throw new Error('Link pembayaran tidak tersedia.');
+    try { localStorage.setItem('eksporin_pending_payment', JSON.stringify({ order_id: r.order_id, at: Date.now() })); } catch {}
+    toast('Mengarahkan ke halaman pembayaran QRIS…');
+    window.location.href = r.payment_url;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    if (!e.handled) toast(e.data?.error || e.message || 'Gagal membuat pembayaran.', true);
+  }
+}
+window.openTopup = (preset) => {
+  location.hash = '#/billing?topup=1' + (preset ? '&amount=' + preset : '');
+};
+
+route(/^\/billing$/, async (app, m, params) => {
   await requireMe();
-  const plans = await api('/api/plans');
-  const feats = {
-    free: ['20 pencarian/bulan', '3 profil lengkap/bulan', 'Simpan 10 buyer', '5 kirim outreach', '3 template sistem'],
-    starter: ['100 pencarian/bulan', '50 profil lengkap/bulan', 'Simpan tanpa batas', '50 kirim/bulan', '5 alert aktif', 'Ekspor 100 baris CSV'],
-    growth: ['500 pencarian/bulan', '300 profil lengkap/bulan', '✨ Kontak buyer terbuka penuh', '300 kirim/bulan', 'Alert tanpa batas', 'Semua template', 'Ekspor 500 baris'],
-    business: ['Pencarian & profil tanpa batas', 'Kontak terbuka penuh', '2.000 kirim/bulan', 'Intel kompetitor', 'Ekspor 10.000 baris', '3 kursi tim', 'Success manager'],
+  let d;
+  try { d = await api('/api/billing/summary'); } catch (e) {
+    app.innerHTML = shell(`<div class="empty"><h3>Gagal memuat tagihan</h3><p class="muted">${esc(e.data?.error || 'Coba lagi beberapa saat lagi.')}</p></div>`); bindShell(); return;
+  }
+  const a = d.account;
+  ME.billing = a; ME.plan = a.plan; ME.plan_name = a.plan_name;
+  const step = d.topup.step; const min = d.topup.min;
+  const presetAmt = Math.max(min, Math.round((Number(params.get('amount')) || min) / step) * step);
+  const statusPill = { paid: 'pill-success', pending: 'pill-warning', expired: 'pill-neutral', failed: 'pill-danger' };
+  const statusText = { paid: 'Lunas', pending: 'Menunggu bayar', expired: 'Kedaluwarsa', failed: 'Gagal' };
+  const reasonText = (r) => r === 'topup' ? 'Top-up saldo' : r.startsWith('usage:') ? 'Pemakaian: ' + (METER_UI[r.slice(6)]?.[0] || r.slice(6)) : r;
+  const planCard = (p) => {
+    const isCur = a.active && a.plan === p.code;
+    return `<div class="plan-card ${isCur ? 'current' : ''} ${p.code === 'growth' ? 'featured' : ''}">
+      <div class="overline">${esc(p.name)}${p.code === 'growth' ? ' · paling populer' : ''}</div>
+      <div class="pr num">${fmtIDR(p.price)}</div>
+      <div class="caption muted-3">per ${p.days} hari · bayar sekali via QRIS, tanpa perpanjang otomatis</div>
+      <ul>${planFeatures(p).map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+      <button class="btn ${isCur ? 'btn-neutral' : 'btn-upgrade'}" data-plan="${p.code}">${isCur ? 'Perpanjang 30 hari' : 'Beli paket'}</button></div>`;
   };
   app.innerHTML = shell(`
-    <h1 style="margin-bottom:4px">Paket & Tagihan</h1>
-    <p class="muted" style="margin-bottom:24px">Paket Anda saat ini: <b>${esc(ME.plan_name)}</b>. Pembayaran via Midtrans/Xendit (disimulasikan di demo ini). Garansi 7 hari uang kembali.</p>
-    <div class="plan-grid">${plans.map((p) => `
-      <div class="plan-card ${p.code === ME.plan ? 'current' : ''}">
-        <div class="overline">${esc(p.name)}</div>
-        <div class="pr num">${p.price ? fmtIDR(p.price) : 'Gratis'}</div>
-        <div class="caption muted-3">${p.price ? 'per bulan · hemat 17% tahunan' : 'selamanya'}</div>
-        <ul>${feats[p.code].map((f) => `<li>${f}</li>`).join('')}</ul>
-        ${p.code === ME.plan ? '<button class="btn btn-neutral" disabled>Paket aktif ✓</button>'
-        : `<button class="btn ${p.price > (plans.find((x) => x.code === ME.plan)?.price || 0) ? 'btn-upgrade' : 'btn-neutral'}" data-plan="${p.code}">${p.price > (plans.find((x) => x.code === ME.plan)?.price || 0) ? 'Upgrade' : 'Pilih'}</button>`}</div>`).join('')}</div>
-    <div class="card" style="margin-top:24px"><h3 style="margin-bottom:12px">Pemakaian bulan ini</h3>
-      <div class="grid grid-4">${Object.entries({ search: 'Pencarian', profile: 'Profil lengkap', send: 'Kirim outreach', export: 'Baris ekspor' }).map(([k, lbl]) => {
-        const mtr = ME.quotas[k];
-        return `<div><div class="caption muted">${lbl}</div><div class="numeric-lg num">${mtr.used}<span class="muted-3" style="font-size:14px">${mtr.limit ? ' / ' + mtr.limit : ' · ∞'}</span></div></div>`;
-      }).join('')}</div></div>`);
+    <h1 style="margin-bottom:4px">Paket & Saldo</h1>
+    <p class="muted" style="margin-bottom:20px">Bayar dengan QRIS (GoPay, OVO, DANA, ShopeePay, LinkAja, m-Banking). Paket berlaku ${d.plans[0]?.days || 30} hari dan tidak diperpanjang otomatis.</p>
+    ${!d.gateway_ready ? '<div class="banner banner-warning" style="margin-bottom:16px">Pembayaran sedang dalam pemeliharaan. Coba beberapa saat lagi.</div>' : ''}
+    <div class="grid grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="caption muted-3">Paket aktif</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin:4px 0 6px"><h2 style="margin:0">${esc(a.plan_name)}</h2>
+          ${a.active ? `<span class="pill pill-success">${a.days_left} hari lagi</span>` : '<span class="pill pill-danger">Tidak aktif</span>'}</div>
+        <div class="caption muted">${a.active ? 'Berlaku sampai ' + fmtDate(a.expires_at) : 'Beli paket atau gunakan saldo untuk melanjutkan.'}</div>
+      </div>
+      <div class="card">
+        <div class="caption muted-3">Saldo</div>
+        <div class="numeric-lg num" style="margin:4px 0 6px">${fmtIDR(a.balance)}</div>
+        <div class="caption muted">Dipakai otomatis saat kuota paket habis atau paket tidak aktif.</div>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px" id="btn-topup-open">+ Isi saldo</button>
+      </div>
+    </div>
+    <div class="card" id="topup-card" style="margin-bottom:24px;${params.get('topup') ? '' : 'display:none'}">
+      <h3 style="margin-bottom:6px">Isi saldo</h3>
+      <p class="caption muted" style="margin-bottom:14px">Minimal ${fmtIDR(min)}, kelipatan ${fmtIDR(step)}, maksimal ${fmtIDR(d.topup.max)} per transaksi.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${[10000, 20000, 50000, 100000, 200000].map((v) => `<button class="btn btn-sm btn-neutral" data-amt="${v}">${fmtIDR(v)}</button>`).join('')}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-neutral btn-sm" id="amt-minus" aria-label="Kurangi">−</button>
+        <input class="input num" id="topup-amt" type="number" min="${min}" step="${step}" value="${presetAmt}" style="max-width:180px;text-align:center">
+        <button class="btn btn-neutral btn-sm" id="amt-plus" aria-label="Tambah">+</button>
+        <button class="btn btn-primary" id="btn-topup-pay">Bayar via QRIS</button>
+      </div>
+      <div class="caption" id="topup-err" style="color:var(--danger-text);margin-top:8px"></div>
+    </div>
+    <h3 style="margin-bottom:12px">Pilih paket</h3>
+    <div class="plan-grid">${d.plans.map(planCard).join('')}</div>
+    <div class="grid grid-2" style="margin-top:24px">
+      <div class="card"><h3 style="margin-bottom:12px">Kuota ${a.active ? 'paket ' + esc(a.plan_name) : ''}</h3>
+        ${Object.entries(METER_UI).map(([k, [lbl]]) => { const q = a.quotas[k];
+          const lim = q.limit === null ? '∞' : nf.format(q.limit);
+          const pct = q.limit ? Math.min(100, Math.round(q.used / q.limit * 100)) : 0;
+          return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between" class="body-sm"><span>${lbl}</span><b class="num">${nf.format(q.used)} / ${lim}</b></div>
+            ${q.limit ? `<div class="admin-bar"><div style="width:${pct}%;background:var(--orange)"></div></div>` : ''}</div>`; }).join('')}
+      </div>
+      <div class="card"><h3 style="margin-bottom:4px">Tarif pakai saldo</h3>
+        <p class="caption muted" style="margin-bottom:12px">Berlaku setelah kuota paket habis atau paket tidak aktif.</p>
+        <table class="tbl"><tbody>${Object.entries(METER_UI).map(([k, [lbl, unit]]) => `<tr><td class="body-sm">${lbl}</td><td class="r num">${fmtIDR(d.rates[k])} / ${unit}</td></tr>`).join('')}</tbody></table>
+        <p class="caption muted-3" style="margin-top:10px">Kontak yang sudah dibuka tidak ditagih lagi. "Cari kontak" hanya ditagih jika email/telepon baru ditemukan.</p>
+      </div>
+    </div>
+    <div class="card" style="margin-top:24px"><h3 style="margin-bottom:12px">Riwayat pembayaran</h3>
+      ${d.orders.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tanggal</th><th>Keterangan</th><th class="r">Jumlah</th><th>Status</th><th></th></tr></thead><tbody>
+        ${d.orders.map((o) => `<tr><td class="body-sm">${fmtDate(o.created_at)}</td><td class="body-sm">${o.kind === 'plan' ? 'Paket ' + esc((d.plans.find((p) => p.code === o.plan) || {}).name || o.plan) : 'Top-up saldo'}<div class="caption muted-3">${esc(o.order_id)}</div></td>
+          <td class="r num">${fmtIDR(o.amount_idr)}</td><td><span class="pill ${statusPill[o.status] || 'pill-neutral'}">${statusText[o.status] || o.status}</span></td>
+          <td>${o.status === 'pending' && o.payment_url ? `<a class="btn btn-sm btn-neutral" href="${esc(o.payment_url)}">Bayar</a> <button class="btn btn-sm btn-ghost" data-verify="${esc(o.order_id)}">Cek status</button>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted body-sm">Belum ada pembayaran.</p>'}
+    </div>
+    <div class="card" style="margin-top:24px"><h3 style="margin-bottom:12px">Mutasi saldo</h3>
+      ${d.ledger.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Waktu</th><th>Keterangan</th><th class="r">Perubahan</th><th class="r">Saldo</th></tr></thead><tbody>
+        ${d.ledger.map((l) => `<tr><td class="body-sm">${fmtDate(l.created_at)}</td><td class="body-sm">${esc(reasonText(l.reason))}</td>
+          <td class="r num" style="color:${Number(l.delta_idr) >= 0 ? 'var(--secondary-600)' : 'var(--text-primary)'}">${Number(l.delta_idr) >= 0 ? '+' : '−'}${fmtIDR(Math.abs(Number(l.delta_idr)))}</td><td class="r num">${fmtIDR(Number(l.balance_after))}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted body-sm">Belum ada mutasi saldo.</p>'}
+    </div>`);
   bindShell();
+  const amtEl = $('#topup-amt');
+  const norm = (v) => Math.min(d.topup.max, Math.max(min, Math.round(v / step) * step));
+  const validate = () => {
+    const v = Number(amtEl.value);
+    const msg = !Number.isInteger(v) ? 'Nominal harus angka bulat.' : v < min ? `Minimal ${fmtIDR(min)}.` : v % step ? `Harus kelipatan ${fmtIDR(step)}.` : v > d.topup.max ? `Maksimal ${fmtIDR(d.topup.max)}.` : '';
+    $('#topup-err').textContent = msg; return !msg;
+  };
+  $('#btn-topup-open').onclick = () => { $('#topup-card').style.display = ''; $('#topup-card').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+  $$('[data-amt]').forEach((el) => el.onclick = () => { amtEl.value = el.dataset.amt; validate(); });
+  $('#amt-minus').onclick = () => { amtEl.value = norm(Number(amtEl.value || min) - step); validate(); };
+  $('#amt-plus').onclick = () => { amtEl.value = norm(Number(amtEl.value || min) + step); validate(); };
+  amtEl.oninput = validate;
+  amtEl.onblur = () => { if (amtEl.value) { amtEl.value = norm(Number(amtEl.value)); validate(); } };
+  $('#btn-topup-pay').onclick = (e) => { if (validate()) startCheckout({ kind: 'topup', amount: Number(amtEl.value) }, e.target); };
   $$('[data-plan]').forEach((el) => el.onclick = () => {
-    const code = el.dataset.plan;
-    const p = plans.find((x) => x.code === code);
-    modal(`<h2 style="margin-bottom:10px">Konfirmasi ${p.price ? 'pembayaran' : 'perubahan paket'}</h2>
+    const p = d.plans.find((x) => x.code === el.dataset.plan);
+    const extend = a.active && a.plan === p.code;
+    modal(`<h2 style="margin-bottom:10px">${extend ? 'Perpanjang' : 'Beli'} paket ${esc(p.name)}</h2>
       <div class="card card-compact" style="margin-bottom:16px;background:var(--bg-surface-alt)">
-        <div style="display:flex;justify-content:space-between"><span>Paket ${esc(p.name)} (bulanan)</span><b class="num">${p.price ? fmtIDR(p.price) : 'Rp 0'}</b></div>
-        <div class="caption muted-3" style="margin-top:6px">${p.price ? 'Metode: QRIS (scan pakai apa saja: GoPay, OVO, DANA, ShopeePay, m-Banking)' : 'Turun ke paket gratis (fitur premium dinonaktifkan)'}</div></div>
-      <button class="btn btn-primary" id="pay-now" style="width:100%">${p.price ? 'Bayar sekarang via QRIS' : 'Ganti ke Free'}</button>`);
-    $('#pay-now').onclick = async () => {
-      const btn = $('#pay-now');
-      btn.disabled = true;
-      const orig = btn.textContent;
-      btn.textContent = 'Menyiapkan…';
-      try {
-        if (!p.price) {
-          // Free downgrade — no payment needed
-          await api('/api/me/plan', { method: 'POST', body: { plan: code } });
-          closeModal(); toast('Paket Free aktif.');
-          ME = null; render();
-          return;
-        }
-        // Create QRIS payment via backend gateway
-        const r = await api('/api/billing/checkout', { method: 'POST', body: { plan: code, method: 'QRIS' } });
-        if (!r.payment_url) {
-          throw new Error('Gagal membuat halaman pembayaran.');
-        }
-        // Remember what plan we're paying for, so on return we can auto-verify
-        try { localStorage.setItem('eksporin_pending_payment', JSON.stringify({ order_id: r.order_id, plan: code, amount: r.amount, at: String(Date.now()) })); } catch {}
-        closeModal();
-        toast('Mengarahkan ke halaman pembayaran QRIS…');
-        // Redirect user to hosted checkout
-        window.location.href = r.payment_url;
-      } catch (e) {
-        console.error('[billing] checkout failed:', e);
-        btn.disabled = false; btn.textContent = orig;
-        toast(e.data?.error || e.message || 'Gagal membuat pembayaran.', true);
-      }
-    };
+        <div style="display:flex;justify-content:space-between"><span>Paket ${esc(p.name)} · ${p.days} hari</span><b class="num">${fmtIDR(p.price)}</b></div>
+        <div class="caption muted-3" style="margin-top:6px">${extend ? `Masa aktif ditambah ${p.days} hari dari tanggal berakhir sekarang; kuota diisi ulang.` : a.active && a.plan !== p.code ? `Paket ${esc(a.plan_name)} Anda diganti mulai hari ini; sisa hari paket lama tidak dibawa.` : `Aktif langsung setelah pembayaran berhasil.`} Saldo Anda tidak berubah.</div></div>
+      <button class="btn btn-primary" id="pay-now" style="width:100%">Bayar ${fmtIDR(p.price)} via QRIS</button>`);
+    $('#pay-now').onclick = (e) => startCheckout({ kind: 'plan', plan: p.code }, e.target);
   });
-  // Auto-verify: if the user just returned from Sumopod checkout, poll the verify endpoint.
-  (async () => {
-    try {
-      const raw = localStorage.getItem('eksporin_pending_payment');
-      if (!raw) return;
-      const p = JSON.parse(raw);
-      const params = new URLSearchParams(location.hash.split('?')[1] || '');
-      const cameBack = params.get('paid') === '1' || params.get('order') === p.order_id;
-      if (!cameBack) return;
-      toast('Memverifikasi pembayaran…');
-      // Poll a few times in case Sumopod webhook is still catching up
-      for (let i = 0; i < 6; i++) {
-        try {
-          const v = await api('/api/billing/verify', { method: 'POST', body: { order_id: p.order_id, plan: p.plan } });
-          if (v.paid) {
-            try { localStorage.removeItem('eksporin_pending_payment'); } catch {}
-            toast(`Pembayaran sukses. Paket ${p.plan} aktif ✓`);
-            ME = null; render();
-            return;
-          }
-        } catch (e) { console.warn('[billing] verify attempt failed:', e); }
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      toast('Pembayaran belum terkonfirmasi. Refresh halaman ini kalau QRIS-nya sudah dibayar.', true);
-    } catch {}
-  })();
+  const verify = async (orderId, quiet) => {
+    for (let i = 0; i < (quiet ? 1 : 8); i++) {
+      try {
+        const v = await api('/api/billing/verify', { method: 'POST', body: { order_id: orderId } });
+        if (v.paid) {
+          try { localStorage.removeItem('eksporin_pending_payment'); } catch {}
+          toast(v.kind === 'topup' ? `Saldo bertambah ${fmtIDR(v.amount)} ✓` : `Paket ${v.account.plan_name} aktif sampai ${fmtDate(v.account.expires_at)} ✓`);
+          ME = null; location.hash = '#/billing'; render(); return true;
+        }
+        if (v.status === 'expired' || v.status === 'failed') { toast('Tagihan ' + (v.status === 'expired' ? 'kedaluwarsa' : 'gagal') + '.', true); return false; }
+      } catch (e) { if (e.status === 404) return false; }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!quiet) toast('Pembayaran belum terkonfirmasi. Jika QRIS sudah dibayar, tekan "Cek status" sebentar lagi.', true);
+    return false;
+  };
+  $$('[data-verify]').forEach((el) => el.onclick = async () => { el.disabled = true; await verify(el.dataset.verify, false); el.disabled = false; });
+  // Returned from the QRIS page: confirm the payment.
+  const back = params.get('order');
+  let pending = null; try { pending = JSON.parse(localStorage.getItem('eksporin_pending_payment') || 'null'); } catch {}
+  if (params.get('cancelled') === '1') toast('Pembayaran dibatalkan.', true);
+  else if (back || (params.get('paid') === '1' && pending)) { toast('Memeriksa pembayaran…'); verify(back || pending.order_id, false); }
 });
 
 // boot: if a Supabase session exists in localStorage (returning user),
@@ -3186,7 +3302,7 @@ route(/^\/admin$/, async (app, m, params) => {
       ]);
       const plansBar = s.users.by_plan.map((p) => {
         const pct = s.users.total ? (p.c / s.users.total) * 100 : 0;
-        const color = { free: '#9ca3af', starter: '#3b82f6', growth: '#ef4d23', business: '#7c3aed' }[p.plan] || '#9ca3af';
+        const color = { trial: '#9ca3af', expired: '#d1d5db', hemat: '#3b82f6', growth: '#ef4d23', business: '#7c3aed' }[p.plan] || '#9ca3af';
         return `<div class="admin-bar-row">
           <span class="body-sm" style="text-transform:capitalize;font-weight:500">${esc(p.plan)}</span>
           <div class="admin-bar"><div style="width:${pct}%;background:${color}"></div></div>
@@ -3287,8 +3403,10 @@ route(/^\/admin$/, async (app, m, params) => {
               </td>
               <td>
                 <select class="input" data-plan-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:100px">
-                  ${['free', 'starter', 'growth', 'business'].map((p) => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
+                  ${u.plan === 'expired' ? '<option value="" selected disabled>expired</option>' : ''}
+                  ${['trial', 'hemat', 'growth', 'business'].map((p) => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
                 </select>
+                ${u.balance_idr ? `<div class="caption muted-3">Saldo Rp${Number(u.balance_idr).toLocaleString('id-ID')}</div>` : ''}
               </td>
               <td>
                 <select class="input" data-status-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:110px">
@@ -3649,7 +3767,7 @@ async function boot() {
     const q = new URLSearchParams(window.location.search);
     if (q.get('paid') === '1' || q.get('cancelled') === '1') {
       const hashParams = new URLSearchParams();
-      for (const k of ['paid', 'cancelled', 'order', 'plan']) if (q.get(k)) hashParams.set(k, q.get(k));
+      for (const k of ['paid', 'cancelled', 'order']) if (q.get(k)) hashParams.set(k, q.get(k));
       window.history.replaceState(null, '', window.location.pathname + '#/billing?' + hashParams.toString());
     }
   }

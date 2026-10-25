@@ -26,6 +26,7 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/128.0 Safari/537.36"
 )
 MAX_BYTES = 600_000
+MAX_PDF_BYTES = 8_000_000
 FETCH_TIMEOUT = 15.0
 PER_HOST_DELAY = 1.0  # seconds between requests to the same host
 
@@ -407,6 +408,31 @@ def extract_page(url: str, html: str, status: int = 200) -> Page:
                 meta_description=meta_desc)
 
 
+def pdf_page(url: str, final_url: str, data: bytes, status: int) -> Page:
+    """Text of a PDF (trade-promotion importer lists are often PDFs)."""
+    try:
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(data))
+        parts = []
+        for pg in reader.pages[:60]:
+            try:
+                parts.append(pg.extract_text() or "")
+            except Exception:
+                continue
+        text = "\n".join(parts)
+    except Exception as e:
+        return Page(url=url, final_url=final_url, status=status, error=f"pdf parse failed: {str(e)[:80]}")
+    html = "<html><body><pre>" + text.replace("&", "&amp;").replace("<", "&lt;") + "</pre></body></html>"
+    page = extract_page(final_url, html, status)
+    page.url = url
+    page.text = _clean(text)
+    page.title = page.title or final_url.rsplit("/", 1)[-1]
+    if status >= 400:
+        page.error = f"HTTP {status}"
+    return page
+
+
 class Fetcher:
     def __init__(self, respect_robots: bool = True) -> None:
         self.respect_robots = respect_robots
@@ -456,6 +482,13 @@ class Fetcher:
                         return Page(url=url, final_url=url, status=0, error="blocked by robots.txt")
                     async with c.stream("GET", url) as r:
                         ctype = r.headers.get("content-type", "")
+                        if "pdf" in ctype or str(r.url).lower().split("?")[0].endswith(".pdf"):
+                            buf = bytearray()
+                            async for chunk in r.aiter_bytes():
+                                buf.extend(chunk)
+                                if len(buf) > MAX_PDF_BYTES:
+                                    break
+                            return pdf_page(url, str(r.url), bytes(buf), r.status_code)
                         if "html" not in ctype and "text" not in ctype:
                             return Page(url=url, final_url=str(r.url), status=r.status_code,
                                         error=f"non-html content ({ctype[:40]})")
