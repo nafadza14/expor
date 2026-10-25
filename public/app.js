@@ -59,7 +59,8 @@ const I = {
   out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
   chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
-  logoW: '<svg viewBox="0 0 32 32" fill="none"><path d="M8 22 L14 12 L18 17 L24 8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // EksporIn mark "Kawung Keluar": four kawung (batik) petals, the north-east one steps outward.
+  logoW: '<svg viewBox="44 44 168 168" width="22" height="22" aria-hidden="true"><path fill="#fff" d="M111.51 127.51A43.77 43.77 0 0 1 54.95 70.95A43.77 43.77 0 0 1 111.51 127.51ZM111.51 144.49A43.77 43.77 0 0 1 54.95 201.05A43.77 43.77 0 0 1 111.51 144.49ZM128.49 144.49A43.77 43.77 0 0 1 185.05 201.05A43.77 43.77 0 0 1 128.49 144.49ZM146.87 109.13A43.77 43.77 0 0 1 203.44 52.56A43.77 43.77 0 0 1 146.87 109.13Z"/></svg>',
   ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>',
   chevronRight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>',
   trendUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m23 6-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>',
@@ -75,8 +76,8 @@ const I = {
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
 };
 
-// EksporIn logo SVG (8-petal flower, orange)
-const LOGO_SVG = `<svg viewBox="0 0 32 32" width="32" height="32"><circle cx="16" cy="6" r="3.5" fill="#ef4d23"/><circle cx="16" cy="26" r="3.5" fill="#ef4d23"/><circle cx="6" cy="16" r="3.5" fill="#ef4d23"/><circle cx="26" cy="16" r="3.5" fill="#ef4d23"/><circle cx="8.9" cy="8.9" r="3.5" fill="#ef4d23"/><circle cx="23.1" cy="23.1" r="3.5" fill="#ef4d23"/><circle cx="23.1" cy="8.9" r="3.5" fill="#ef4d23"/><circle cx="8.9" cy="23.1" r="3.5" fill="#ef4d23"/><circle cx="16" cy="16" r="3.5" fill="#ef4d23"/></svg>`;
+// EksporIn logo "Kawung Keluar" (orange). Masters + concepts: brand/concepts/.
+const LOGO_SVG = `<svg viewBox="44 44 168 168" width="32" height="32" aria-hidden="true"><path fill="#ef4d23" d="M111.51 127.51A43.77 43.77 0 0 1 54.95 70.95A43.77 43.77 0 0 1 111.51 127.51ZM111.51 144.49A43.77 43.77 0 0 1 54.95 201.05A43.77 43.77 0 0 1 111.51 144.49ZM128.49 144.49A43.77 43.77 0 0 1 185.05 201.05A43.77 43.77 0 0 1 128.49 144.49ZM146.87 109.13A43.77 43.77 0 0 1 203.44 52.56A43.77 43.77 0 0 1 146.87 109.13Z"/></svg>`;
 
 // Arc gauge (Convix-style tick marks)
 function arcGauge(value, { color = '#ef4d23', showLabels = false, min = '', max = '' } = {}) {
@@ -481,7 +482,7 @@ route(/^\/$/, async (app) => {
   // and hide the homepage. Users click Masuk or the dashboard link in the nav explicitly.
   let loggedIn = false;
   try { ME = await api('/api/me'); loggedIn = !!ME; } catch { /* not logged in — expected */ }
-  const FLOWER = `<svg class="flower-logo" viewBox="0 0 32 32" fill="#ef4d23">${Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4;return `<circle cx="${(16+10*Math.cos(a)).toFixed(2)}" cy="${(16+10*Math.sin(a)).toFixed(2)}" r="3.5"/>`;}).join('')}<circle cx="16" cy="16" r="3.5"/></svg>`;
+  const FLOWER = `<svg class="flower-logo" viewBox="44 44 168 168" aria-hidden="true"><path fill="#ef4d23" d="M111.51 127.51A43.77 43.77 0 0 1 54.95 70.95A43.77 43.77 0 0 1 111.51 127.51ZM111.51 144.49A43.77 43.77 0 0 1 54.95 201.05A43.77 43.77 0 0 1 111.51 144.49ZM128.49 144.49A43.77 43.77 0 0 1 185.05 201.05A43.77 43.77 0 0 1 128.49 144.49ZM146.87 109.13A43.77 43.77 0 0 1 203.44 52.56A43.77 43.77 0 0 1 146.87 109.13Z"/></svg>`;
   const CHEVRON_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   const CHEVRON_RIGHT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
   const CART_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>';
@@ -494,11 +495,7 @@ route(/^\/$/, async (app) => {
   <div class="landing-wrap">
     <!-- Hero container (clipped) -->
     <div class="landing-hero-container">
-      <video class="landing-video" autoplay loop muted playsinline preload="auto" disableremoteplayback
-        webkit-playsinline="true" x5-playsinline="true"
-        poster="https://images.unsplash.com/photo-1557683316-973673baf926?w=1600&q=60">
-        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260424_064411_9e9d7f84-9277-41f4-ab10-59172d89e6be.mp4" type="video/mp4">
-      </video>
+      <div class="landing-hero-bg" role="img" aria-label="Kapal kontainer berlayar di laut lepas"></div>
       <div class="landing-video-overlay"></div>
       <div class="landing-fg">
         <!-- Floating pill navbar -->

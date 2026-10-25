@@ -564,7 +564,19 @@ table.tbl { width: 100%; border-collapse: collapse; }
 .landing-hero-container { position: relative; width: 100%; height: calc(100vh - 24px); overflow: hidden; background: #d9d9d9; border-radius: 16px; display: flex; flex-direction: column; }
 @media (min-width: 640px) { .landing-hero-container { height: calc(100vh - 32px); border-radius: 24px; } }
 .landing-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.landing-video-overlay { position: absolute; inset: 0; background: rgba(255,255,255,.1); }
+/* Hero background: aerial container ship (public/img/hero-bg.webp). The ship sits
+   in the lower half of the photo, so on wide screens we anchor to ~62% so the
+   bow and wake stay visible under the dashboard tray. */
+.landing-hero-container { background: #0b2a4a; }
+.landing-hero-bg { position: absolute; inset: 0; background: #0b2a4a url('/img/hero-bg.webp') center 62% / cover no-repeat; pointer-events: none; }
+@media (max-width: 640px) { .landing-hero-bg { background-position: center 70%; } }
+/* Deep-sea overlay keeps the white headline readable over clouds and water. */
+.landing-video-overlay { position: absolute; inset: 0; background: radial-gradient(ellipse 60% 45% at 50% 42%, rgba(4,16,32,.55) 0%, rgba(4,16,32,0) 100%), linear-gradient(180deg, rgba(4,16,32,.55) 0%, rgba(5,22,42,.42) 45%, rgba(5,22,42,.22) 72%, rgba(4,16,32,.45) 100%); }
+.landing-hero-container .hero-headline { color: #fff; text-shadow: 0 2px 24px rgba(0,0,0,.25); }
+.landing-hero-container .hero-sub { color: rgba(255,255,255,.92); text-shadow: 0 1px 12px rgba(0,0,0,.45); }
+.landing-hero-container .hero-try-label b { color: #fff; text-shadow: 0 1px 12px rgba(0,0,0,.45); }
+.landing-hero-container .hero-demo-hint { color: rgba(255,255,255,.85); text-shadow: 0 1px 10px rgba(0,0,0,.5); }
+.landing-hero-container .hero-demo-hint a { color: #fff; }
 .landing-fg { position: relative; z-index: 10; display: flex; flex-direction: column; height: 100%; }
 
 /* Floating pill navbar */
@@ -1435,3 +1447,7 @@ table.tbl { width: 100%; border-collapse: collapse; }
   h2, .h2 { font-size: 18px; line-height: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Hero search: let the input shrink on phones so the button stays inside the pill. */
+.hero-search input { min-width: 0; }
+.hero-search button { flex-shrink: 0; white-space: nowrap; }
