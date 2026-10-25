@@ -295,16 +295,76 @@ class Page:
     phones: list[str] = field(default_factory=list)
     contact_links: list[str] = field(default_factory=list)
     error: str | None = None
+    meta_description: str = ""
+
+
+OBFUSCATED_EMAIL_RE = re.compile(
+    r"([a-z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|\s+at\s+|\s*\[@\]\s*|\s*\(@\)\s*|\s*&#64;\s*)\s*"
+    r"([a-z0-9-]+(?:(?:\.(?=[a-z0-9])|\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\(\s*punkt\s*\)|\[\s*punkt\s*\])\s*)[a-z0-9-]+)+)",
+    re.I)
+DOT_TOKEN = re.compile(r"\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\(\s*punkt\s*\)|\[\s*punkt\s*\])\s*", re.I)
+PHONE_LABEL_RE = re.compile(
+    r"(?:tel(?:efon|ephone|éfono|efone)?|phone|fon|t\.|ph\.|call|電話|电话|전화)\s*[:.]?\s*(\+?[\d][\d\s().\-/]{6,20}\d)", re.I)
+
+
+def decode_cfemail(hexstr: str) -> str | None:
+    """Cloudflare email protection: first byte is the XOR key."""
+    try:
+        key = int(hexstr[:2], 16)
+        return "".join(chr(int(hexstr[i:i + 2], 16) ^ key) for i in range(2, len(hexstr), 2))
+    except Exception:
+        return None
+
+
+def _jsonld_contacts(soup) -> tuple[set[str], list[str]]:
+    import json as _json
+    emails: set[str] = set()
+    phones: list[str] = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                kl = k.lower()
+                if kl == "email" and isinstance(v, str):
+                    emails.add(v.replace("mailto:", "").strip().lower())
+                elif kl in ("telephone", "phone") and isinstance(v, str):
+                    phones.append(v.strip())
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+    for sc in soup.select('script[type="application/ld+json"]'):
+        try:
+            walk(_json.loads(sc.string or sc.get_text() or "{}"))
+        except Exception:
+            continue
+    return emails, phones
 
 
 def extract_page(url: str, html: str, status: int = 200) -> Page:
     soup = BeautifulSoup(html, "lxml")
     title = _clean(soup.title.get_text(" ")) if soup.title else ""
     emails: set[str] = set()
-    for a in soup.select('a[href^="mailto:"]'):
+    for a in soup.select('a[href^="mailto:"], a[href^="MAILTO:"]'):
         e = unquote(a["href"][7:].split("?")[0]).strip().lower()
         if "@" in e:
             emails.add(e)
+    # Cloudflare-protected addresses
+    for el in soup.select("[data-cfemail]"):
+        e = decode_cfemail(el.get("data-cfemail", ""))
+        if e and "@" in e:
+            emails.add(e.lower())
+    for a in soup.select('a[href*="/cdn-cgi/l/email-protection#"]'):
+        e = decode_cfemail(a["href"].split("#", 1)[1])
+        if e and "@" in e:
+            emails.add(e.lower())
+    ld_emails, ld_phones = _jsonld_contacts(soup)
+    emails |= ld_emails
+    meta_desc = ""
+    md = soup.select_one('meta[name="description"], meta[property="og:description"]')
+    if md and md.get("content"):
+        meta_desc = _clean(md["content"])[:400]
     contact_links: list[str] = []
     base_host = host_of(url)
     for a in soup.find_all("a", href=True):
@@ -318,28 +378,33 @@ def extract_page(url: str, html: str, status: int = 200) -> Page:
         if CONTACT_HINT.search(href) or CONTACT_HINT.search(label):
             if absu not in contact_links:
                 contact_links.append(absu)
+    tel_links = [_clean(a["href"][4:]) for a in soup.select('a[href^="tel:"]')]
     for tag in soup(["script", "style", "noscript", "svg", "iframe", "template"]):
         tag.decompose()
     text = _clean(soup.get_text(" "))
     for m in EMAIL_RE.findall(text):
         emails.add(m.lower())
-    emails_l = [e for e in emails if not BAD_EMAIL.search(e) and not BAD_EMAIL_EXT.search(e)]
-    phones: list[str] = []
-    for a in soup.select('a[href^="tel:"]'):
-        phones.append(_clean(a["href"][4:]))
+    for local, dom in OBFUSCATED_EMAIL_RE.findall(text):
+        dom = DOT_TOKEN.sub(".", dom).replace(" ", "")
+        if "." in dom and len(local) <= 40:
+            emails.add(f"{local}@{dom}".lower())
+    emails_l = sorted({e.strip(".,;:") for e in emails
+                       if not BAD_EMAIL.search(e) and not BAD_EMAIL_EXT.search(e) and EMAIL_RE.fullmatch(e.strip(".,;:"))})
+    phones: list[str] = list(tel_links) + ld_phones
+    for m in PHONE_LABEL_RE.findall(text):
+        phones.append(m.strip())
     for m in PHONE_RE.findall(text):
-        digits = re.sub(r"\D", "", m)
-        if 8 <= len(digits) <= 15:
-            phones.append(m.strip())
+        phones.append(m.strip())
     seen_d: set[str] = set()
     phones_u: list[str] = []
     for p in phones:
         d = re.sub(r"\D", "", p)
-        if d and d not in seen_d:
+        if 8 <= len(d) <= 15 and d not in seen_d and not re.fullmatch(r"(19|20)\d{6,}", d):
             seen_d.add(d)
             phones_u.append(p)
     return Page(url=url, final_url=url, status=status, title=title, text=text,
-                emails=sorted(emails_l)[:8], phones=phones_u[:5], contact_links=contact_links[:8])
+                emails=emails_l[:10], phones=phones_u[:5], contact_links=contact_links[:10],
+                meta_description=meta_desc)
 
 
 class Fetcher:

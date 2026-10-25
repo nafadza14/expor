@@ -1393,12 +1393,12 @@ async function handleApi(db, req, res, url, body) {
     const qc = quotaCheck(db, user, 'search');
     if (!qc.ok) return json(res, 402, { error: `Kuota pencarian bulan ini habis (${qc.used}/${qc.limit}). Upgrade paket untuk melanjutkan.`, quota: qc, upgrade: true });
 
-    // All buyer intel is now live data from scraped_buyers in Postgres.
-    // Filters supported: hs (4-digit code), countries (comma list),
-    // sizes (comma list of small|medium|large), has=email|phone|website,
-    // q (name substring). Score = data_confidence; sort supports score, name.
+    // Live buyer pool from scraped_buyers (Postgres).
+    // Filters: hs (4-digit), countries, sizes, has=email|phone|website|any,
+    // min_score (quality 0-100), q (name). Sort: score (quality) | recent | name.
+    // Hidden rows (not a buyer / unreachable) are never shown to users.
     const hs = (q.get('hs') || '').trim();
-    const countries = (q.get('countries') || '').split(',').filter(Boolean).map((c) => c.toUpperCase());
+    const countries = (q.get('countries') || '').split(',').filter(Boolean).map((c) => c.toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c));
     const sizes = (q.get('sizes') || '').split(',').filter(Boolean);
     const has = (q.get('has') || '').split(',').filter(Boolean);
     const minScore = parseInt(q.get('min_score') || '0', 10);
@@ -1407,84 +1407,76 @@ async function handleApi(db, req, res, url, body) {
     const pageN = Math.max(1, parseInt(q.get('page') || '1', 10));
     const per = Math.min(100, parseInt(q.get('per') || '25', 10));
 
-    try {
-      const pgClient = require('./pg');
+    const build = (v2) => {
       const conds = ['TRUE']; const params = [];
-      if (hs) {
-        const hs4 = hs.slice(0, 4);
-        params.push(hs4);
-        conds.push(`hs_codes @> ARRAY[$${params.length}]::text[]`);
-      }
-      if (countries.length) {
-        const placeholders = countries.map((_c) => { params.push(_c); return `$${params.length}`; }).join(',');
-        conds.push(`country IN (${placeholders})`);
-      }
-      if (sizes.length) {
-        const placeholders = sizes.map((_s) => { params.push(_s); return `$${params.length}`; }).join(',');
-        conds.push(`size_bucket IN (${placeholders})`);
-      }
+      if (v2) conds.push('is_hidden = FALSE');
+      if (hs) { params.push(hs.slice(0, 4)); conds.push(`hs_codes @> ARRAY[$${params.length}]::text[]`); }
+      if (countries.length) conds.push(`country IN (${countries.map((c) => { params.push(c); return `$${params.length}`; }).join(',')})`);
+      if (sizes.length) conds.push(`size_bucket IN (${sizes.map((x) => { params.push(x); return `$${params.length}`; }).join(',')})`);
       if (text) { params.push('%' + text.toLowerCase() + '%'); conds.push(`LOWER(name) LIKE $${params.length}`); }
       if (has.includes('email')) conds.push('email IS NOT NULL');
       if (has.includes('phone')) conds.push('phone IS NOT NULL');
       if (has.includes('website')) conds.push('website IS NOT NULL');
-      if (minScore > 0) { params.push(minScore); conds.push(`data_confidence >= $${params.length}`); }
-
+      if (has.includes('any')) conds.push('(email IS NOT NULL OR phone IS NOT NULL)');
+      if (minScore > 0) { params.push(minScore); conds.push(`${v2 ? 'quality_score' : 'data_confidence'} >= $${params.length}`); }
+      const scoreCol = v2 ? 'quality_score' : 'data_confidence';
       const orderBy = {
-        score: '(enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC',
+        score: `${scoreCol} DESC, (email IS NOT NULL) DESC, data_confidence DESC, updated_at DESC`,
         name: 'LOWER(name) ASC',
         recent: 'updated_at DESC',
-      }[sort] || '(enriched_at IS NOT NULL) DESC, data_confidence DESC, updated_at DESC';
+      }[sort] || `${scoreCol} DESC, data_confidence DESC, updated_at DESC`;
+      const extra = v2 ? ', quality_score, email_status, buyer_type' : ', data_confidence AS quality_score, NULL::text AS email_status, NULL::text AS buyer_type';
+      return { conds, params, orderBy, extra };
+    };
 
-      const totalRow = await pgClient.one(
-        `SELECT COUNT(*)::int AS c FROM scraped_buyers WHERE ${conds.join(' AND ')}`, params,
-      );
-      const total = totalRow?.c || 0;
-
-      params.push(per, (pageN - 1) * per);
-      const rows = await pgClient.query(
-        `SELECT id, source, name, country, city, address, website, email, phone,
-                industry, size_bucket, description, hs_codes,
-                data_confidence, enriched_at, updated_at, sources_seen
-           FROM scraped_buyers
-          WHERE ${conds.join(' AND ')}
-          ORDER BY ${orderBy}
-          LIMIT $${params.length - 1} OFFSET $${params.length}`, params,
-      );
-
+    try {
+      const pgClient = require('./pg');
+      let v2 = true; let b;
+      const run = async () => {
+        b = build(v2);
+        const where = b.conds.join(' AND ');
+        const totalRow = await pgClient.one(`SELECT COUNT(*)::int AS c FROM scraped_buyers WHERE ${where}`, b.params);
+        const rows = await pgClient.query(
+          `SELECT id, source, name, country, city, website, email IS NOT NULL AS has_email, phone IS NOT NULL AS has_phone,
+                  industry, size_bucket, description, hs_codes, data_confidence, enriched_at, updated_at, sources_seen${b.extra}
+             FROM scraped_buyers WHERE ${where}
+            ORDER BY ${b.orderBy}
+            LIMIT $${b.params.length + 1} OFFSET $${b.params.length + 2}`, [...b.params, per, (pageN - 1) * per]);
+        const [countryFacet, sourceFacet, contactFacet] = await Promise.all([
+          pgClient.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers WHERE ${where} AND country IS NOT NULL GROUP BY country ORDER BY c DESC LIMIT 20`, b.params),
+          pgClient.query(`SELECT source, COUNT(*)::int AS c FROM scraped_buyers WHERE ${where} GROUP BY source ORDER BY c DESC`, b.params),
+          pgClient.one(`SELECT COUNT(*) FILTER (WHERE email IS NOT NULL)::int AS email, COUNT(*) FILTER (WHERE phone IS NOT NULL)::int AS phone,
+                               COUNT(*) FILTER (WHERE website IS NOT NULL)::int AS website FROM scraped_buyers WHERE ${where}`, b.params),
+        ]);
+        return { total: totalRow?.c || 0, rows, countryFacet, sourceFacet, contactFacet };
+      };
+      let r;
+      try { r = await run(); } catch (e) {
+        if (e.code !== '42703') throw e; // undefined column: migration 004 not applied yet
+        v2 = false; r = await run();
+      }
       const start = (pageN - 1) * per;
-      const pageRows = rows.map((b, i) => ({
-        rank: start + i + 1, id: Number(b.id), name: b.name,
-        country: b.country, country_name: COUNTRY_NAMES[b.country] || b.country,
-        city: b.city, industry: b.industry || null,
-        size_bucket: b.size_bucket || 'medium',
-        website: b.website, email: b.email, phone: b.phone,
-        description: b.description,
-        hs_codes: b.hs_codes || [],
-        sources: b.sources_seen || [b.source],
-        score: b.data_confidence,
-        score_label: b.data_confidence >= 80 ? 'HOT' : b.data_confidence >= 60 ? 'WARM' : 'FRESH',
-        enriched: !!b.enriched_at,
-        // free tier: rows beyond 20 are teaser-blurred (F1 edge case)
-        blurred: user.plan === 'free' && start + i >= 20,
-        // Legacy shipment-based fields not applicable to scraped data; set to null.
-        shipments_12mo: null, volume_12mo_kg: null, value_12mo_usd: null,
-        last_shipment_date: null, yoy_percent: null, has_indonesian_supplier: false,
-      }));
-
-      // Facets from a lightweight second query so pagination does not distort counts.
-      const facetParams = params.slice(0, params.length - 2);
-      const facetWhere = conds.join(' AND ');
-      const [countryFacet, sourceFacet] = await Promise.all([
-        pgClient.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers WHERE ${facetWhere} AND country IS NOT NULL GROUP BY country ORDER BY c DESC LIMIT 15`, facetParams),
-        pgClient.query(`SELECT source, COUNT(*)::int AS c FROM scraped_buyers WHERE ${facetWhere} GROUP BY source ORDER BY c DESC`, facetParams),
-      ]);
-
+      const results = r.rows.map((x, i) => {
+        const score = Number(x.quality_score) || 0;
+        return {
+          rank: start + i + 1, id: Number(x.id), name: x.name,
+          country: x.country, country_name: COUNTRY_NAMES[x.country] || x.country,
+          city: x.city, industry: x.industry || null, buyer_type: x.buyer_type || null,
+          size_bucket: x.size_bucket || null,
+          website: x.website, has_email: !!x.has_email, has_phone: !!x.has_phone, has_website: !!x.website,
+          email_status: x.email_status || null,
+          hs_codes: x.hs_codes || [], sources: x.sources_seen || [x.source],
+          score, score_label: score >= 70 ? 'HOT' : score >= 45 ? 'WARM' : 'COLD',
+          blurred: user.plan === 'free' && start + i >= 20,
+        };
+      });
       bumpUsage(db, user.id, 'search');
       return json(res, 200, {
-        total, page: pageN, per, results: pageRows,
+        total: r.total, page: pageN, per, results,
         facets: {
-          country: countryFacet.map((f) => ({ value: f.country, count: f.c })),
-          source: sourceFacet.map((f) => ({ value: f.source, count: f.c })),
+          country: r.countryFacet.map((f) => ({ value: f.country, count: f.c })),
+          source: r.sourceFacet.map((f) => ({ value: f.source, count: f.c })),
+          contact: r.contactFacet || {},
         },
         quota: quotaCheck(db, user, 'search'),
         source: 'scraped_buyers',
@@ -1523,7 +1515,10 @@ async function handleApi(db, req, res, url, body) {
       return json(res, 200, {
         results: rows.map((r) => ({
           id: r.id, source: r.source, name: r.name, country: r.country, city: r.city,
-          website: r.website, email: r.email, phone: r.phone,
+          website: r.website,
+          // contacts follow the same paywall as the buyer profile
+          email: r.email ? (PLANS[user.plan].contacts ? r.email : maskContact('email', r.email)) : null,
+          phone: r.phone ? (PLANS[user.plan].contacts ? r.phone : maskContact('phone', r.phone)) : null,
           industry: r.industry, size_bucket: r.size_bucket, description: r.description,
           hs_codes: r.hs_codes, confidence: r.data_confidence,
           enriched: !!r.enriched_at, updated_at: r.updated_at,
@@ -1547,7 +1542,13 @@ async function handleApi(db, req, res, url, body) {
                data_confidence, enriched_at, created_at, updated_at, sources_seen,
                -- to_jsonb() keeps this working before migration 003 adds the columns.
                COALESCE(to_jsonb(sb)->>'evidence_url', raw_json->>'evidence_url') AS evidence_url,
-               COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type
+               COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type,
+               to_jsonb(sb)->>'email_status' AS email_status,
+               to_jsonb(sb)->>'email_source_url' AS email_source_url,
+               to_jsonb(sb)->>'phone_source_url' AS phone_source_url,
+               to_jsonb(sb)->>'website_method' AS website_method,
+               to_jsonb(sb)->>'contact_checked_at' AS contact_checked_at,
+               COALESCE((to_jsonb(sb)->>'quality_score')::int, data_confidence) AS quality_score
           FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
 
@@ -1562,16 +1563,17 @@ async function handleApi(db, req, res, url, body) {
 
       // Build contacts from the columns we scraped / enriched.
       const contacts = [];
-      if (b.website) contacts.push({ contact_type: 'website', value: b.website, confidence: b.data_confidence, masked: false });
+      if (b.website) contacts.push({ contact_type: 'website', value: b.website, masked: false, source_url: null });
       if (b.email) contacts.push({
         contact_type: 'email',
         value: plan.contacts ? b.email : maskContact('email', b.email),
-        confidence: b.data_confidence, masked: !plan.contacts,
+        masked: !plan.contacts, status: b.email_status || null,
+        source_url: plan.contacts ? (b.email_source_url || null) : null,
       });
       if (b.phone) contacts.push({
         contact_type: 'phone',
         value: plan.contacts ? b.phone : maskContact('phone', b.phone),
-        confidence: b.data_confidence, masked: !plan.contacts,
+        masked: !plan.contacts, source_url: plan.contacts ? (b.phone_source_url || null) : null,
       });
 
       const bHs = (b.hs_codes || []).map((code) => {
@@ -1591,6 +1593,7 @@ async function handleApi(db, req, res, url, body) {
         description: b.description,
         sources_seen: b.sources_seen || [b.source],
         evidence_url: b.evidence_url || null, buyer_type: b.buyer_type || null,
+        quality_score: Number(b.quality_score) || 0, contact_checked_at: b.contact_checked_at || null,
         data_confidence: b.data_confidence,
         enriched: !!b.enriched_at, enriched_at: b.enriched_at,
         first_seen: b.created_at, last_updated: b.updated_at,
@@ -1604,6 +1607,34 @@ async function handleApi(db, req, res, url, body) {
       });
     } catch (e) {
       return json(res, 503, { error: 'buyer_pool_unavailable', detail: e.message });
+    }
+  }
+
+  // On-demand contact search for one buyer (button "Cari kontak" on the
+  // profile). Visits the company's own website (Impressum / contact pages)
+  // within the request; cached for 24h per buyer so it cannot be hammered.
+  if ((m = route('POST', '/api/buyers/:id/find-contact'))) {
+    const buyerId = Number(m.id);
+    if (!buyerId) return err(res, 404, 'Buyer tidak ditemukan.');
+    try {
+      const pg = require('./pg');
+      const b = await pg.one(`SELECT id, name, country, city, website, email, phone, industry, size_bucket, description,
+                                     to_jsonb(sb)->>'contact_checked_at' AS checked
+                                FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
+      if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
+      const recent = b.checked && (Date.now() - new Date(b.checked).getTime()) < 24 * 3600 * 1000;
+      if (recent && (b.email || b.phone)) return json(res, 200, { ok: true, cached: true, found: true });
+      if (recent) return json(res, 200, { ok: true, cached: true, found: false, message: 'Kontak sudah dicari dalam 24 jam terakhir dan belum ditemukan di website perusahaan.' });
+      const ep = require('./sources/enricher-pipeline');
+      const r = await Promise.race([
+        ep.enrichOne(b),
+        new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 50000)),
+      ]);
+      if (r.timeout) return json(res, 200, { ok: true, found: false, message: 'Website perusahaan lambat merespons. Coba lagi beberapa saat lagi.' });
+      return json(res, 200, { ok: true, found: !!(r.got_email || r.got_phone || b.email || b.phone), website: r.website || null,
+        got_email: r.got_email, got_phone: r.got_phone, got_website: r.got_website });
+    } catch (e) {
+      return json(res, 503, { error: 'Pencarian kontak gagal. Coba lagi nanti.', detail: e.message });
     }
   }
 
@@ -2015,99 +2046,67 @@ async function handleApi(db, req, res, url, body) {
       }
     }
 
-    // Step 2: Trade Records & Company Retrieval
-    const buyers = db.prepare(`
-      SELECT b.*, SUM(bh.shipment_count) as shipment_count, SUM(bh.total_value_usd) as hs_value
-      FROM buyers b
-      JOIN buyer_hs bh ON bh.buyer_id = b.id
-      WHERE bh.hs_code LIKE ?
-      GROUP BY b.id
-      ORDER BY b.base_score DESC, hs_value DESC
-      LIMIT 20
-    `).all(matched.hs + '%');
-
-    // Step 3: Decision Maker Enrichment (simulated Apollo.io)
-    const FIRST_NAMES = ['James', 'Sarah', 'Michael', 'Emma', 'David', 'Yuki', 'Kenji', 'Lars', 'Sanne', 'Ahmed', 'Olivia', 'Tom', 'Mei', 'Anna', 'John'];
-    const LAST_NAMES = ['Miller', 'Chen', 'Tanaka', 'De Vries', 'Al Rashid', 'Wilson', 'Taylor', 'Brown', 'Smith', 'Johnson'];
-    const rng = (seed) => { let s = seed; return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; };
-
-    const results = buyers.map((b, idx) => {
-      const r = rng(b.id * 7 + 31);
-      const contacts = db.prepare('SELECT * FROM buyer_contacts WHERE buyer_id=?').all(b.id);
-      const bHs = db.prepare('SELECT hs_code FROM buyer_hs WHERE buyer_id=?').all(b.id).map((x) => x.hs_code);
-      const website = contacts.find((c) => c.contact_type === 'website');
-      const domain = website ? website.value.replace(/https?:\/\/(www\.)?/, '').replace(/\/.*/, '') : null;
-
-      // Simulated decision makers
-      const numContacts = Math.floor(r() * 3) + 1;
-      const decisionMakers = [];
-      for (let i = 0; i < numContacts; i++) {
-        const fn = FIRST_NAMES[Math.floor(r() * FIRST_NAMES.length)];
-        const ln = LAST_NAMES[Math.floor(r() * LAST_NAMES.length)];
-        const title = matched.titles[Math.floor(r() * matched.titles.length)];
-        decisionMakers.push({
-          full_name: `${fn} ${ln}`,
-          job_title: title,
-          email: domain ? `${fn.toLowerCase()}.${ln.toLowerCase()}@${domain}` : null,
-          email_status: r() > 0.3 ? 'verified' : 'unverified',
-          linkedin_url: `https://linkedin.com/in/${fn.toLowerCase()}-${ln.toLowerCase()}-${Math.floor(r() * 9000 + 1000)}`,
-          phone: contacts.find((c) => c.contact_type === 'phone')?.value || null,
-        });
+    // Step 2: real buyers for this HS from the live pool (scraped_buyers),
+    // best-documented first. No synthetic people or guessed emails: every
+    // contact shown was observed on a public page.
+    let rows = [];
+    try {
+      const pgc = require('./pg');
+      try {
+        rows = await pgc.query(`SELECT id, name, country, city, website, email, phone, industry, buyer_type, description,
+                                       hs_codes, sources_seen, source, quality_score, email_status, evidence_url
+                                  FROM scraped_buyers
+                                 WHERE is_hidden = FALSE AND hs_codes @> ARRAY[$1]::text[]
+                                 ORDER BY quality_score DESC, (email IS NOT NULL) DESC, data_confidence DESC LIMIT 20`, [matched.hs]);
+      } catch (e) {
+        if (e.code !== '42703') throw e;
+        rows = await pgc.query(`SELECT id, name, country, city, website, email, phone, industry, NULL AS buyer_type, description,
+                                       hs_codes, sources_seen, source, data_confidence AS quality_score, NULL AS email_status, NULL AS evidence_url
+                                  FROM scraped_buyers WHERE hs_codes @> ARRAY[$1]::text[]
+                                 ORDER BY (email IS NOT NULL) DESC, data_confidence DESC LIMIT 20`, [matched.hs]);
       }
-
-      // Step 4: Match Score & Outreach Angle
-      const idSup = b.has_indonesian_supplier;
-      const activityBonus = b.shipments_12mo > 8 ? 20 : b.shipments_12mo > 3 ? 10 : 0;
-      const growthBonus = (b.yoy_percent || 0) > 0 ? 15 : 0;
-      const volumeBonus = b.volume_12mo_kg > 100000 ? 15 : b.volume_12mo_kg > 30000 ? 10 : 5;
-      const untappedBonus = !idSup ? 20 : 5;
-      const matchScore = Math.min(100, Math.max(10, 30 + activityBonus + growthBonus + volumeBonus + untappedBonus + Math.floor(r() * 10)));
-
-      const angles = {
-        high_growth: `${b.name} menunjukkan pertumbuhan impor ${b.yoy_percent || 0}% YoY. Timing tepat untuk masuk sebagai pemasok baru dengan penawaran harga FOB kompetitif dan sampel gratis.`,
-        untapped: `${b.name} belum pernah impor dari Indonesia. Ini peluang first-mover: tonjolkan keunggulan origin Indonesia, sertifikasi, dan tawarkan trial shipment.`,
-        existing: `${b.name} sudah familiar dengan pemasok Indonesia. Diferensiasi lewat kualitas konsisten, lead time lebih pendek, dan harga yang bersaing.`,
-        volume: `${b.name} mengimpor volume besar (${Math.round(b.volume_12mo_kg / 1000)} ton/tahun). Tawarkan kontrak jangka panjang dengan harga volume discount.`,
-      };
-      let angle = angles.untapped;
-      if (idSup) angle = angles.existing;
-      if ((b.yoy_percent || 0) > 10) angle = angles.high_growth;
-      if (b.volume_12mo_kg > 200000) angle = angles.volume;
-
+    } catch (_e) { rows = []; }
+    const showContacts = !!PLANS[user.plan].contacts;
+    const results = rows.map((b, idx) => {
+      const domain = b.website ? String(b.website).replace(/https?:\/\/(www\.)?/, '').replace(/\/.*/, '') : null;
+      const score = Number(b.quality_score) || 0;
+      const kind = b.buyer_type || b.industry || 'buyer';
+      const cname = COUNTRY_NAMES[b.country] || b.country;
+      const angle = b.email
+        ? `Kirim email singkat ke ${b.name}: perkenalkan ${matched.desc_en} Indonesia (grade, kapasitas per bulan, sertifikasi), tawarkan sampel, dan sebutkan harga FOB/CIF indikatif.`
+        : b.website
+          ? `Buka website ${domain} untuk memahami produk mereka, lalu hubungi lewat formulir kontak atau telepon dengan penawaran ${matched.desc_en} yang spesifik.`
+          : `Cari PIC pembelian ${b.name} di LinkedIn (${(matched.titles || []).slice(0, 2).join(' / ')}), lalu kirim pesan perkenalan singkat.`;
       return {
         rank: idx + 1,
         company: {
-          id: b.id, name: b.name, country: b.country,
-          country_name: COUNTRY_NAMES[b.country] || b.country,
-          city: b.city, industry: b.industry, size_bucket: b.size_bucket,
-          domain, website: website?.value,
-          annual_import_frequency: b.total_shipments,
-          last_shipment_date: b.last_shipment_date,
-          imported_hs_codes: bHs,
-          primary_source_countries: [],
-          company_tier: b.size_bucket === 'XL' ? 'Enterprise' : b.size_bucket === 'L' ? 'Mid-Market' : 'SMB',
+          id: Number(b.id), name: b.name, country: b.country, country_name: cname,
+          city: b.city, industry: kind, domain, website: b.website || null,
+          description: b.description || null, imported_hs_codes: b.hs_codes || [],
+          sources: b.sources_seen || [b.source], evidence_url: b.evidence_url || null,
         },
-        decision_makers: decisionMakers,
+        contacts: {
+          email: b.email ? (showContacts ? b.email : maskContact('email', b.email)) : null,
+          email_status: b.email_status || null,
+          phone: b.phone ? (showContacts ? b.phone : maskContact('phone', b.phone)) : null,
+          website: b.website || null, masked: !showContacts,
+          linkedin_search: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${b.name} ${(matched.titles || ['purchasing'])[0]}`)}`,
+        },
+        decision_makers: [],
         scoring: {
-          match_score: matchScore,
-          score_label: matchScore >= 80 ? 'Hot Lead' : matchScore >= 60 ? 'Warm Lead' : matchScore >= 40 ? 'Worth Exploring' : 'Low Priority',
-          reasoning: `Skor ${matchScore}/100 berdasarkan: aktivitas impor ${b.shipments_12mo}x/tahun, volume ${Math.round(b.volume_12mo_kg / 1000)} ton, ${idSup ? 'sudah impor dari Indonesia' : 'belum pernah dari Indonesia (untapped)'}, growth ${b.yoy_percent || 0}% YoY.`,
+          match_score: score,
+          score_label: score >= 70 ? 'Siap dihubungi' : score >= 45 ? 'Cukup lengkap' : 'Perlu riset',
+          reasoning: [b.email && 'email bisnis', b.phone && 'telepon', b.website && 'website', (b.sources_seen || []).length > 1 && `${(b.sources_seen || []).length} sumber`].filter(Boolean).join(' · ') || 'data kontak belum lengkap',
           customized_pitch_angle: angle,
         },
-        trade_data: {
-          shipments_12mo: b.shipments_12mo,
-          volume_12mo_kg: b.volume_12mo_kg,
-          value_12mo_usd: b.value_12mo_usd,
-          yoy_percent: b.yoy_percent,
-          has_indonesian_supplier: !!b.has_indonesian_supplier,
-        },
+        trade_data: null,
       };
     });
-
-    results.sort((a, b) => b.scoring.match_score - a.scoring.match_score);
-
-    const verifiedContacts = results.reduce((a, r) => a + r.decision_makers.filter((dm) => dm.email_status === 'verified').length, 0);
-    const totalContacts = results.reduce((a, r) => a + r.decision_makers.length, 0);
+    const withEmail = results.filter((r) => r.contacts.email).length;
+    const withPhone = results.filter((r) => r.contacts.phone).length;
+    const verifiedContacts = withEmail;
+    const totalContacts = withEmail + withPhone;
+    const buyers = rows;
 
     return json(res, 200, {
       query,
@@ -2122,9 +2121,9 @@ async function handleApi(db, req, res, url, body) {
       },
       pipeline_steps: [
         { step: 1, name: 'Input Interpretation & HS Mapping', status: 'completed', result: `${matched.ai ? 'AI: ' : ''}Mapped "${query}" → HS ${matched.hs} (${matched.desc_en})` },
-        { step: 2, name: 'Trade Records & Company Retrieval', status: 'completed', result: `${buyers.length} importir ditemukan dari ${new Set(buyers.map((b) => b.country)).size} negara` },
-        { step: 3, name: 'Decision Maker Enrichment', status: 'completed', result: `${totalContacts} kontak ditemukan, ${verifiedContacts} email terverifikasi` },
-        { step: 4, name: 'Scoring & Final Synthesis', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 80).length} hot leads, ${results.filter((r) => r.scoring.match_score >= 60 && r.scoring.match_score < 80).length} warm leads` },
+        { step: 2, name: 'Cari buyer di database', status: 'completed', result: `${buyers.length} buyer ditemukan dari ${new Set(buyers.map((b) => b.country)).size} negara` },
+        { step: 3, name: 'Kontak terverifikasi', status: 'completed', result: `${verifiedContacts} buyer dengan email, ${withPhone} dengan telepon (dari website resmi perusahaan)` },
+        { step: 4, name: 'Prioritas & saran pendekatan', status: 'completed', result: `${results.filter((r) => r.scoring.match_score >= 70).length} siap dihubungi, ${results.filter((r) => r.scoring.match_score >= 45 && r.scoring.match_score < 70).length} cukup lengkap` },
       ],
       total_leads: results.length,
       leads: results,

@@ -760,7 +760,7 @@ route(/^\/$/, async (app) => {
         <div class="how-grid">
           ${[
             { n: '01', title: 'Deskripsikan komoditas', desc: 'Ketik dalam Bahasa Indonesia atau Inggris. AI + WCO nomenclature (6.941 kode) memetakan ke HS 6-digit yang tepat.', chips: ['AI', '📚 WCO 6.941 kode', '🇮🇩 → 🌐'] },
-            { n: '02', title: 'Temukan buyer aktif', desc: 'Pipeline AI 4-step: HS mapping, trade retrieval dari data bea cukai, contact enrichment, dan lead scoring 0–100.', chips: ['📦 Bill of Lading', '🔎 200+ buyer', '⚡ 4-step pipeline'] },
+            { n: '02', title: 'Temukan buyer aktif', desc: 'Importir, distributor, dan pabrik pengolah dari daftar resmi dan website perusahaan, lengkap dengan email & telepon yang terverifikasi.', chips: ['🏢 Importir & distributor', '✉️ Kontak terverifikasi', '🎯 Skor kelengkapan'] },
             { n: '03', title: 'Evaluasi dengan data resmi', desc: 'Match Score, riwayat shipment tahunan, duty rate USITC untuk pasar USA, dan angle outreach yang di-personalize per buyer.', chips: ['🇺🇸 USITC duty', '🌐 UN Comtrade', '🎯 Match Score'] },
             { n: '04', title: 'Kirim outreach multi-bahasa', desc: 'Template siap kirim di 5 bahasa (EN/ES/AR/ZH/JA), email + WhatsApp. Lacak status dibuka & dibalas dari dashboard.', chips: ['✉️ 10 template', '🌍 5 bahasa', '📊 Tracking'] },
           ].map((s) => `
@@ -1744,10 +1744,10 @@ route(/^\/discover$/, async (app) => {
   let pipelineStep = 0;
 
   const PIPELINE = [
-    { icon: '🧠', name: 'Input Interpretation & HS Mapping', desc: 'LLM memetakan input ke HS Code 6-digit, sinonim kargo internasional, dan target industri buyer.' },
-    { icon: '🚢', name: 'Trade Records & Company Retrieval', desc: 'Query database B/L (US Customs feeds) untuk mengambil daftar entitas importir (Consignee).' },
-    { icon: '👤', name: 'Decision Maker Enrichment', desc: 'Hit API enrichment untuk mencari PIC dengan jabatan relevan (Procurement, Sourcing, Supply Chain).' },
-    { icon: '🎯', name: 'Scoring & Final Synthesis', desc: 'LLM memberikan Match Score (0-100) dan Outreach Angle yang dipersonalisasi.' },
+    { icon: '🧠', name: 'Kenali produk Anda', desc: 'Deskripsi produk dipetakan ke kode HS dan jenis buyer yang biasa membelinya.' },
+    { icon: '🏢', name: 'Cari buyer di database', desc: 'Importir, distributor, dan pabrik pengolah dari daftar resmi dan website perusahaan.' },
+    { icon: '✉️', name: 'Kontak terverifikasi', desc: 'Email dan telepon yang tercantum di website resmi perusahaan (halaman kontak / Impressum).' },
+    { icon: '🎯', name: 'Prioritas & saran pendekatan', desc: 'Buyer diurutkan dari yang paling siap dihubungi, lengkap dengan saran cara menghubungi.' },
   ];
 
   const draw = () => {
@@ -1760,7 +1760,7 @@ route(/^\/discover$/, async (app) => {
           </div>
           <div style="flex:1">
             <h1 style="margin-bottom:4px;letter-spacing:-.02em">AI Buyer <span class="serif-italic">Discovery</span> Engine</h1>
-            <p class="muted body-sm">Deskripsikan komoditas ekspor Anda. AI akan menjalankan pipeline 4-step: HS mapping, trade retrieval, contact enrichment, dan lead scoring.</p>
+            <p class="muted body-sm">Tulis produk ekspor Anda. Kami carikan buyer luar negeri yang membeli produk itu, lengkap dengan kontak dari website resmi mereka.</p>
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:18px">
@@ -1858,7 +1858,7 @@ function renderDiscoverResult(r) {
           <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.target_industry_segments.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
         <div style="margin-bottom:10px"><div class="caption muted-3" style="margin-bottom:4px">Jabatan PIC Target</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.buyer_job_titles_to_target.map((s) => `<span class="pill pill-orange">${esc(s)}</span>`).join('')}</div></div>
-        ${interp.trade_manifest_keywords?.length ? `<div><div class="caption muted-3" style="margin-bottom:4px">Kata Kunci Kargo B/L</div>
+        ${interp.trade_manifest_keywords?.length ? `<div><div class="caption muted-3" style="margin-bottom:4px">Kata kunci produk</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">${interp.trade_manifest_keywords.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card">
@@ -1867,9 +1867,9 @@ function renderDiscoverResult(r) {
           <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
             <div class="numeric-lg" style="color:var(--orange)">${r.total_leads}</div><div class="caption muted">Total Leads</div></div>
           <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
-            <div class="numeric-lg" style="color:var(--danger-text)">${r.leads.filter((l) => l.scoring.match_score >= 60).length}</div><div class="caption muted">Hot/Warm</div></div>
+            <div class="numeric-lg" style="color:var(--danger-text)">${r.leads.filter((l) => l.scoring.match_score >= 70).length}</div><div class="caption muted">Siap dihubungi</div></div>
           <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
-            <div class="numeric-lg" style="color:var(--success-text)">${r.leads.reduce((a, l) => a + l.decision_makers.length, 0)}</div><div class="caption muted">Kontak</div></div>
+            <div class="numeric-lg" style="color:var(--success-text)">${r.leads.filter((l) => l.contacts && (l.contacts.email || l.contacts.phone)).length}</div><div class="caption muted">Punya kontak</div></div>
           <div style="background:var(--bg-surface-alt);border-radius:var(--radius-lg);padding:14px;text-align:center">
             <div class="numeric-lg">${new Set(r.leads.map((l) => l.company.country)).size}</div><div class="caption muted">Negara</div></div>
         </div>
@@ -1878,7 +1878,7 @@ function renderDiscoverResult(r) {
 
     <!-- Leads -->
     <div class="card">
-      <div class="card-header"><h3>Leads Siap Eksekusi</h3>
+      <div class="card-header"><h3>Buyer untuk produk Anda</h3>
         <div style="display:flex;gap:8px;align-items:center">
           <span class="caption muted">${r.total_leads} buyer ditemukan</span>
           ${r.leads.length ? `<button class="btn btn-sm btn-primary" onclick="batchSaveLeads([${r.leads.map((l) => l.company.id).join(',')}])">Simpan semua</button>` : ''}
@@ -1891,30 +1891,23 @@ function renderDiscoverResult(r) {
                 <span style="width:28px;height:28px;border-radius:50%;background:var(--bg-surface-alt);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary)">${lead.rank}</span>
                 <h3 style="margin:0"><a href="#/buyer/${lead.company.id}" style="color:inherit">${esc(lead.company.name)}</a></h3>
                 ${scorePill(lead.scoring.match_score, lead.scoring.score_label)}
-                ${!lead.trade_data.has_indonesian_supplier ? '<span class="pill pill-success">Untapped</span>' : ''}
               </div>
-              <p class="muted body-sm">${flag(lead.company.country)} ${esc(lead.company.country_name)} · ${esc(lead.company.city || '')} · ${esc(lead.company.industry || '')} · ${esc(lead.company.company_tier)}</p>
-              <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap">
-                <div><span class="caption muted-3">Shipment/tahun</span><br><b class="num">${fmtN(lead.trade_data.shipments_12mo)}</b></div>
-                <div><span class="caption muted-3">Volume 12 bln</span><br><b class="num">${fmtKg(lead.trade_data.volume_12mo_kg)}</b></div>
-                <div><span class="caption muted-3">Nilai 12 bln</span><br><b class="num">${fmtUSD(lead.trade_data.value_12mo_usd)}</b></div>
-                <div><span class="caption muted-3">Growth YoY</span><br><b class="num" style="color:${(lead.trade_data.yoy_percent || 0) >= 0 ? 'var(--success-text)' : 'var(--danger-text)'}">${(lead.trade_data.yoy_percent || 0) >= 0 ? '↑' : '↓'} ${Math.abs(lead.trade_data.yoy_percent || 0)}%</b></div>
-              </div>
+              <p class="muted body-sm">${flag(lead.company.country)} ${esc(lead.company.country_name)}${lead.company.city ? ' · ' + esc(lead.company.city) : ''}${lead.company.industry ? ' · ' + esc(lead.company.industry) : ''}</p>
+              ${lead.company.description ? `<p class="body-sm" style="margin-top:8px">${esc(lead.company.description)}</p>` : ''}
+              <div class="caption muted-3" style="margin-top:8px">${esc(lead.scoring.reasoning)}</div>
             </div>
             <div style="min-width:280px">
-              <div class="caption muted-3" style="margin-bottom:6px">Decision Makers</div>
-              ${lead.decision_makers.map((dm) => `
-                <div style="padding:8px 0;border-bottom:1px dotted var(--border-subtle)">
-                  <b class="body-sm">${esc(dm.full_name)}</b> <span class="caption muted">· ${esc(dm.job_title)}</span>
-                  <div style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap">
-                    ${dm.email ? `<span class="caption" title="${dm.email_status}">✉️ ${esc(dm.email)} ${dm.email_status === 'verified' ? '<span class="pill pill-success" style="font-size:9px">verified</span>' : ''}</span>` : ''}
-                    ${dm.linkedin_url ? `<a class="caption" href="${esc(dm.linkedin_url)}" target="_blank" style="color:var(--orange)">LinkedIn</a>` : ''}
-                  </div>
-                </div>`).join('')}
+              <div class="caption muted-3" style="margin-bottom:6px">Kontak</div>
+              ${lead.contacts.email ? `<div class="body-sm" style="padding:4px 0">✉️ ${lead.contacts.masked ? `<span class="masked-chip">${esc(lead.contacts.email)} 🔒</span>` : `<a href="mailto:${esc(lead.contacts.email)}">${esc(lead.contacts.email)}</a>`}</div>` : ''}
+              ${lead.contacts.phone ? `<div class="body-sm" style="padding:4px 0">📞 ${lead.contacts.masked ? `<span class="masked-chip">${esc(lead.contacts.phone)} 🔒</span>` : esc(lead.contacts.phone)}</div>` : ''}
+              ${lead.contacts.website ? `<div class="body-sm" style="padding:4px 0">🌐 <a href="${esc(lead.contacts.website)}" target="_blank" rel="noopener">${esc(lead.company.domain || lead.contacts.website)}</a></div>` : ''}
+              ${!lead.contacts.email && !lead.contacts.phone ? '<div class="caption muted" style="padding:4px 0">Email/telepon belum tersedia. Buka profil untuk mencari kontak.</div>' : ''}
+              <a class="caption" href="${esc(lead.contacts.linkedin_search)}" target="_blank" rel="noopener" style="color:var(--orange)">Cari PIC pembelian di LinkedIn →</a>
+              ${lead.contacts.masked && (lead.contacts.email || lead.contacts.phone) ? '<div class="caption muted-3" style="margin-top:6px">🔒 Kontak lengkap mulai paket Growth</div>' : ''}
             </div>
           </div>
           <div class="lead-pitch">
-            <div class="caption muted-3" style="margin-bottom:4px">Outreach Angle</div>
+            <div class="caption muted-3" style="margin-bottom:4px">Saran pendekatan</div>
             <p class="body-sm" style="line-height:20px;margin:0">${esc(lead.scoring.customized_pitch_angle)}</p>
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
@@ -2041,7 +2034,7 @@ route(/^\/cari$/, async (app, m, params) => {
   await requireMe();
   const state = {
     hs: params.get('hs') || '', q: params.get('q') || '', countries: (params.get('countries') || '').split(',').filter(Boolean),
-    sizes: [], activity: '', has: [], min_score: 0, sort: 'score', page: 1,
+    sizes: [], activity: '', has: params.get('all') ? [] : ['any'], min_score: 0, sort: 'score', page: 1,
   };
   const doSearch = async () => {
     const qs = new URLSearchParams();
@@ -2071,21 +2064,26 @@ route(/^\/cari$/, async (app, m, params) => {
           <input class="input" id="f-hs" placeholder="Kode HS (mis. 0901)" value="${esc(state.hs)}" style="max-width:170px">
           <input class="input" id="f-q" placeholder="Nama buyer…" value="${esc(state.q)}">
           <select class="input" id="f-sort" style="max-width:190px">
-            ${[['score', 'Urut: Skor tertinggi'], ['volume', 'Urut: Volume 12 bln'], ['shipments', 'Urut: Frekuensi'], ['recent', 'Urut: Shipment terbaru'], ['name', 'Urut: Nama A-Z']].map(([v, l]) => `<option value="${v}" ${state.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
+            ${[['score', 'Urut: Paling lengkap'], ['recent', 'Urut: Terbaru'], ['name', 'Urut: Nama A-Z']].map(([v, l]) => `<option value="${v}" ${state.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select></div>
+        <label class="chk" style="margin-bottom:12px"><input type="checkbox" id="f-contact" ${state.has.includes('any') ? 'checked' : ''}> Hanya buyer yang punya email / telepon</label>
         ${ME.plan === 'free' && d.total > 20 ? '<div class="banner banner-warning">🔒 Paket Free menampilkan detail 20 buyer teratas. Baris selanjutnya diblur. <a href="#/billing">Upgrade</a></div>' : ''}
         <div class="tbl-wrap"><table class="tbl"><thead><tr>
-          <th>#</th><th>Buyer</th><th>Negara</th><th class="r">Volume 12 bln</th><th class="r">Frek/thn</th><th>Shipment terakhir</th><th>Skor</th><th></th></tr></thead><tbody>
+          <th>#</th><th>Buyer</th><th>Negara</th><th>Kontak</th><th>Produk</th><th>Skor</th><th></th></tr></thead><tbody>
           ${d.results.length ? d.results.map((b) => `<tr class="clickable ${b.blurred ? 'row-blurred' : ''}" ${b.blurred ? '' : `onclick="location.hash='#/buyer/${b.id}'"`}>
             <td class="muted num">${b.rank}</td>
-            <td><b>${esc(b.name)}</b><div class="caption muted-3">${esc(b.city || '')} · ${esc(b.industry || '')} · ${b.size_bucket}</div></td>
-            <td>${flag(b.country)} ${esc(b.country_name)}</td>
-            <td class="r num">${fmtKg(b.volume_12mo_kg)}<div class="caption muted-3">${fmtUSD(b.value_12mo_usd)}</div></td>
-            <td class="r num">${b.shipments_12mo}</td>
-            <td class="num body-sm">${fmtDate(b.last_shipment_date)} ${b.yoy_percent != null ? `<div class="caption ${b.yoy_percent >= 0 ? 'delta-up' : 'delta-down'}" style="color:${b.yoy_percent >= 0 ? 'var(--secondary-600)' : 'var(--danger-text)'}">${b.yoy_percent >= 0 ? '↑' : '↓'} ${Math.abs(b.yoy_percent)}% YoY</div>` : ''}</td>
+            <td><b>${esc(b.name)}</b><div class="caption muted-3">${[b.city, b.buyer_type || b.industry].filter(Boolean).map(esc).join(' · ')}</div></td>
+            <td>${flag(b.country)} ${esc(b.country_name || '')}</td>
+            <td style="white-space:nowrap">
+              <span title="Email" style="opacity:${b.has_email ? 1 : 0.2}">✉️</span>
+              <span title="Telepon" style="opacity:${b.has_phone ? 1 : 0.2}">📞</span>
+              <span title="Website" style="opacity:${b.has_website ? 1 : 0.2}">🌐</span></td>
+            <td>${(b.hs_codes || []).slice(0, 3).map((h) => `<span class="tag" style="font-size:11px">${esc(String(h))}</span>`).join(' ')}</td>
             <td>${scorePill(b.score, b.score_label)}</td>
             <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();saveToList(${b.id})">+ Simpan</button></td></tr>`).join('')
-          : '<tr><td colspan="8"><div class="empty"><div class="ic">🕵️</div><h3>Tidak ada hasil</h3><p class="muted">Coba perluas filter atau gunakan kode HS level lebih tinggi (mis. 09 alih-alih 090111).</p></div></td></tr>'}
+          : `<tr><td colspan="7"><div class="empty"><div class="ic">🕵️</div><h3>Tidak ada hasil</h3>
+              <p class="muted">${state.has.includes('any') ? 'Belum ada buyer dengan email/telepon untuk filter ini. Data kontak terus bertambah setiap hari.' : 'Coba perluas filter atau gunakan kode HS 4 digit (mis. 0901).'}</p>
+              ${state.has.includes('any') ? '<button class="btn btn-sm btn-secondary" id="show-all">Tampilkan semua buyer</button>' : ''}</div></td></tr>`}
         </tbody></table></div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
           <span class="caption muted">Halaman ${d.page} dari ${totalPages}</span>
@@ -2096,10 +2094,7 @@ route(/^\/cari$/, async (app, m, params) => {
       <aside class="filter-panel card card-compact">
         <h4 style="margin-bottom:14px">Filter</h4>
         ${chkGroup('Negara', 'countries', d.facets.country.map((f) => [f.value, `${flag(f.value)} ${CNAME[f.value] || f.value} <span class="muted-3">(${f.count})</span>`]))}
-        ${chkGroup('Ukuran buyer', 'sizes', [['S', 'Small'], ['M', 'Medium'], ['L', 'Large'], ['XL', 'Extra Large']])}
-        <div class="filter-group"><h5>Aktivitas impor</h5><select class="input" id="f-activity">
-          ${[['', 'Semua'], ['very_active', 'Sangat aktif (>12/thn)'], ['active', 'Aktif (4–12/thn)'], ['occasional', 'Sesekali (1–3/thn)'], ['inactive', 'Tidak aktif 12 bln']].map(([v, l]) => `<option value="${v}" ${state.activity === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        ${chkGroup('Punya kontak', 'has', [['email', '✉️ Email'], ['phone', '📞 Telepon'], ['linkedin', '💼 LinkedIn'], ['website', '🌐 Website']])}
+        ${chkGroup('Punya kontak', 'has', [['email', '✉️ Email'], ['phone', '📞 Telepon'], ['website', '🌐 Website']])}
         <div class="filter-group"><h5>Skor minimum: <span id="ms-val">${state.min_score}</span></h5>
           <input type="range" id="f-score" min="0" max="100" step="5" value="${state.min_score}" style="width:100%"></div>
         <button class="btn btn-sm btn-ghost" id="f-reset" style="width:100%">Reset filter</button>
@@ -2115,10 +2110,11 @@ route(/^\/cari$/, async (app, m, params) => {
     $('#f-hs').onchange = (e) => { state.hs = e.target.value.trim(); requery(); };
     $('#f-q').onchange = (e) => { state.q = e.target.value.trim(); requery(); };
     $('#f-sort').onchange = (e) => { state.sort = e.target.value; requery(); };
-    $('#f-activity').onchange = (e) => { state.activity = e.target.value; requery(); };
+    $('#f-contact').onchange = (e) => { state.has = e.target.checked ? [...new Set([...state.has, 'any'])] : state.has.filter((x) => x !== 'any'); requery(); };
+    if ($('#show-all')) $('#show-all').onclick = () => { state.has = state.has.filter((x) => x !== 'any'); requery(); };
     $('#f-score').onchange = (e) => { state.min_score = +e.target.value; requery(); };
     $('#f-score').oninput = (e) => { $('#ms-val').textContent = e.target.value; };
-    $('#f-reset').onclick = () => { Object.assign(state, { countries: [], sizes: [], activity: '', has: [], min_score: 0, q: '', page: 1 }); draw(); };
+    $('#f-reset').onclick = () => { Object.assign(state, { countries: [], sizes: [], activity: '', has: ['any'], min_score: 0, q: '', page: 1 }); draw(); };
     $('#pg-prev').onclick = () => { state.page--; draw(); };
     $('#pg-next').onclick = () => { state.page++; draw(); };
     $('#btn-export').onclick = async () => {
@@ -2185,7 +2181,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const tab = params.get('tab') || 'overview';
   const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
-  const sourceLabels = { ai_agent: 'AI Research Agent', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceLabels = { usda_oid: 'USDA Organic', trade_directory: 'Direktori Importir', ai_agent: 'Riset Website', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
@@ -2200,8 +2196,8 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
           ${verifPill}</div>
         <p class="muted" style="margin:4px 0 10px">${flag(b.country)} ${esc(b.address || b.city || '')} · ${esc(b.country_name || b.country || '')}${b.industry ? ' · ' + esc(b.industry) : ''}${b.size_bucket ? ' · Ukuran ' + esc(b.size_bucket) : ''}</p>
         <div style="display:flex;gap:24px;flex-wrap:wrap">
-          <div><div class="caption muted-3">Data confidence</div><b class="num">${b.data_confidence || b.score || 60}%</b></div>
-          <div><div class="caption muted-3">Sumber terverifikasi</div><b class="num">${sources.length}</b></div>
+          <div><div class="caption muted-3">Skor kelengkapan</div><b class="num">${b.quality_score || 0}/100</b></div>
+          <div><div class="caption muted-3">Sumber data</div><b class="num">${sources.length}</b></div>
           <div><div class="caption muted-3">HS terkait</div><b class="num">${(b.hs_codes || []).length}</b></div>
           <div><div class="caption muted-3">Kontak</div><b class="num">${contactCount}</b></div>
           <div><div class="caption muted-3">Ditemukan</div><b class="num">${b.first_seen ? fmtDate(b.first_seen) : '-'}</b></div>
@@ -2214,8 +2210,8 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
           ${b.website ? `<a class="btn btn-neutral btn-sm" href="${esc(b.website)}" target="_blank" rel="noopener">${I.globe} Website</a>` : ''}</div>
         ${b.in_lists.length ? `<p class="caption muted" style="margin-top:10px">Tersimpan di: ${b.in_lists.map((l) => `<a href="#/list/${l.id}">${esc(l.name)}</a> ${statusPill(l.status)}`).join(' · ')}</p>` : ''}
       </div>
-      <div class="gauge-wrap" style="flex-direction:column;align-items:center">${gauge(b.score)}
-        <span class="caption muted-3">Confidence: ${b.data_confidence || b.score || 60}%</span></div>
+      <div class="gauge-wrap" style="flex-direction:column;align-items:center">${gauge(b.quality_score || 0)}
+        <span class="caption muted-3">Kelengkapan data</span></div>
     </div></div>
     <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
     <div id="tab-body"><div class="skeleton" style="height:220px"></div></div>`;
@@ -2225,31 +2221,66 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const body = $('#tab-body');
 
   if (tab === 'overview') {
-    const desc = b.description ? `<div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:8px">Profil singkat (AI)</h3><p class="body-sm">${esc(b.description)}</p></div>` : '';
-    const scoreRows = [
-      ['Data confidence', b.data_confidence || 60, 'Skor kualitas data dari kombinasi sumber, LLM enrichment, dan pengayaan website.'],
-      ['Product fit', b.fit_score || 0, 'Cocok tidaknya HS fokus kamu dengan HS terkait buyer.'],
-      ['Cross-source', Math.min(100, sources.length * 40), sources.length >= 2 ? `Buyer ini ditemukan di ${sources.length} sumber independen.` : 'Baru ditemukan di 1 sumber. Perlu verifikasi manual.'],
+    const desc = b.description ? `<div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:8px">Tentang perusahaan</h3><p class="body-sm">${esc(b.description)}</p></div>` : '';
+    const q = b.quality_score || 0;
+    const hasEmail = b.contacts.some((c) => c.contact_type === 'email');
+    const hasPhone = b.contacts.some((c) => c.contact_type === 'phone');
+    const checks = [
+      [!!b.website, 'Website resmi perusahaan'],
+      [hasEmail, 'Email bisnis'],
+      [hasPhone, 'Nomor telepon'],
+      [!!(b.buyer_type || b.industry), 'Jenis usaha diketahui' + (b.buyer_type ? ` (${esc(b.buyer_type)})` : b.industry ? ` (${esc(b.industry)})` : '')],
+      [sources.length >= 2, sources.length >= 2 ? `Ditemukan di ${sources.length} sumber berbeda` : 'Dikonfirmasi lebih dari 1 sumber'],
     ];
-    const scorePanel = scoreRows.map(([label, val, hint]) => `
-      <div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span class="body-sm" style="font-weight:500">${label}</span><b class="num body-sm">${val}</b></div>
-        <div class="admin-bar"><div style="width:${val}%;background:var(--orange)"></div></div>
-        <div class="caption muted-3" style="margin-top:4px">${hint}</div>
-      </div>`).join('');
+    const scorePanel = `
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <b class="num" style="font-size:32px">${q}</b>
+        <div><div class="body-sm" style="font-weight:600">${q >= 70 ? 'Siap dihubungi' : q >= 45 ? 'Cukup lengkap' : 'Perlu dilengkapi'}</div>
+        <div class="caption muted-3">Skor kelengkapan data (0–100)</div></div></div>
+      <div class="admin-bar" style="margin-bottom:14px"><div style="width:${q}%;background:var(--orange)"></div></div>
+      ${checks.map(([ok, label]) => `<div class="body-sm" style="padding:5px 0;display:flex;gap:8px;align-items:center"><span style="color:${ok ? 'var(--secondary-600)' : 'var(--text-tertiary)'}">${ok ? '✓' : '○'}</span>${label}</div>`).join('')}
+      ${b.fit_score ? `<div class="caption muted-3" style="margin-top:10px">Kecocokan dengan produk Anda: <b>${b.fit_score}</b>/100</div>` : ''}`;
+    const typeLabel = { email: 'Email', phone: 'Telepon', website: 'Website', linkedin: 'LinkedIn' };
+    const statusLabel = { role: 'Email perusahaan', domain: 'Email domain perusahaan', personal: 'Email personal', freemail: 'Email publik' };
+    const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+    const googleQ = encodeURIComponent(`"${b.name}" ${b.country_name || ''} contact email`);
+    const liQ = encodeURIComponent(`${b.name} ${b.country_name || ''}`);
+    const contactRows = b.contacts.map((c) => `
+          <div style="padding:10px 0;border-bottom:1px dotted var(--border-subtle)">
+            <div class="caption muted-3">${typeLabel[c.contact_type] || c.contact_type}${c.status ? ' · ' + (statusLabel[c.status] || '') : ''}</div>
+            ${c.masked ? `<span class="masked-chip">${esc(c.value)} 🔒</span>`
+              : c.contact_type === 'website' ? `<a href="${esc(c.value)}" target="_blank" rel="noopener">${esc(hostOf(c.value) || c.value)}</a>`
+              : c.contact_type === 'email' ? `<a href="mailto:${esc(c.value)}"><b>${esc(c.value)}</b></a>`
+              : c.contact_type === 'phone' ? `<a href="tel:${esc(String(c.value).replace(/[^\d+]/g, ''))}"><b>${esc(c.value)}</b></a>` : `<b>${esc(c.value)}</b>`}
+            ${c.source_url ? `<div class="caption muted-3" style="margin-top:2px">Sumber: <a href="${esc(c.source_url)}" target="_blank" rel="noopener">${esc(c.source_url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60))}</a></div>` : ''}
+          </div>`).join('');
+    const needContact = !hasEmail && !hasPhone;
     body.innerHTML = `<div class="grid grid-2">
       ${desc}
-      <div class="card"><h3 style="margin-bottom:14px">Skor kepercayaan</h3>${scorePanel}</div>
       <div class="card"><h3 style="margin-bottom:14px">Kontak</h3>
-        ${!b.contacts.length ? '<p class="muted body-sm">Belum ada kontak ter-enrich. Enrichment nightly (03:00 WIB) akan mencoba fetch website + extract email/phone.</p>' : b.contacts.map((c) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dotted var(--border-subtle)">
-            <div><span class="caption muted-3" style="text-transform:capitalize">${c.contact_type}</span><br>
-            ${c.masked ? `<span class="masked-chip">${esc(c.value)} 🔒</span>` : c.contact_type === 'website' || c.contact_type === 'linkedin' ? `<a href="${esc(c.value)}" target="_blank" rel="noopener">${esc(c.value)}</a>` : `<b>${esc(c.value)}</b>`}</div>
-            <span class="caption muted-3">conf. ${c.confidence}%</span></div>`).join('')}
-        ${!b.contacts_visible && b.contacts.length ? `<div class="banner banner-info" style="margin-top:12px">🔒 Kontak lengkap tersedia mulai paket <b>Growth</b>. <a href="#/billing">Upgrade</a></div>` : ''}</div>
-      <div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:14px">HS terkait</h3>
-        ${(b.hs_codes || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.hs_codes.map((h) => `<span class="tag"><b>${(h.hs_code || h).replace(/^(\d{4})/, '$1.')}</b>${h.description_id ? ' · ' + esc(h.description_id) : ''}</span>`).join('')}</div>` : '<p class="muted body-sm">Belum ada HS yang di-associate. Buyer discovery via nama, HS bisa ditambahkan manual saat outreach.</p>'}
-        <p class="caption muted-3" style="margin-top:12px">Data live dari ${sources.map((s) => sourceLabels[s] || s).join(', ') || 'unknown'}. Terakhir diperbarui: ${b.last_updated ? fmtDate(b.last_updated) : '-'}.</p></div></div>`;
+        ${contactRows}
+        ${needContact ? `<div style="padding:${b.contacts.length ? '14px 0 0' : '0'}">
+            <p class="body-sm" style="margin-bottom:10px">${b.contact_checked_at ? 'Email dan telepon belum ditemukan di website perusahaan.' : 'Email dan telepon belum tersedia untuk buyer ini.'}</p>
+            <button class="btn btn-primary btn-sm" id="btn-find-contact">🔎 Cari kontak sekarang</button>
+            <div class="caption muted-3" style="margin-top:10px">Atau cari manual:
+              <a href="https://www.google.com/search?q=${googleQ}" target="_blank" rel="noopener">Google</a> ·
+              <a href="https://www.linkedin.com/search/results/companies/?keywords=${liQ}" target="_blank" rel="noopener">LinkedIn</a></div>
+          </div>` : ''}
+        ${!b.contacts_visible && (hasEmail || hasPhone) ? `<div class="banner banner-info" style="margin-top:12px">🔒 Email & telepon lengkap tersedia mulai paket <b>Growth</b>. <a href="#/billing">Upgrade</a></div>` : ''}
+        ${hasEmail && b.contacts_visible ? `<div class="caption muted-3" style="margin-top:12px">Tips: kirim penawaran yang personal dan relevan untuk perusahaan ini, bukan email massal.</div>` : ''}</div>
+      <div class="card"><h3 style="margin-bottom:14px">Kelengkapan data</h3>${scorePanel}</div>
+      <div class="card" style="grid-column:1/-1"><h3 style="margin-bottom:14px">Produk yang dibeli</h3>
+        ${(b.hs_codes || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.hs_codes.map((h) => `<span class="tag"><b>${(h.hs_code || h).replace(/^(\d{4})/, '$1.')}</b>${h.description_id ? ' · ' + esc(h.description_id) : ''}</span>`).join('')}</div>` : '<p class="muted body-sm">Belum ada data produk untuk buyer ini.</p>'}
+        <p class="caption muted-3" style="margin-top:12px">Sumber data: ${sources.map((s) => sourceLabels[s] || s).join(', ') || '-'} · Diperbarui ${b.last_updated ? fmtDate(b.last_updated) : '-'}</p></div></div>`;
+    const fc = $('#btn-find-contact');
+    if (fc) fc.onclick = async () => {
+      fc.disabled = true; fc.textContent = 'Mencari di website perusahaan… (±30 detik)';
+      try {
+        const r = await api(`/api/buyers/${id}/find-contact`, { method: 'POST' });
+        if (r.found) { toast('Kontak ditemukan ✓'); render(); }
+        else { toast(r.message || 'Kontak belum ditemukan di website perusahaan.', true); fc.textContent = 'Belum ditemukan'; }
+      } catch (e) { toast(e.data?.error || 'Pencarian gagal, coba lagi nanti.', true); fc.disabled = false; fc.textContent = '🔎 Cari kontak sekarang'; }
+    };
   } else if (tab === 'shipments') {
     const d = await api(`/api/buyers/${id}/shipments?page=${params.get('p') || 1}`);
     const totalPages = Math.max(1, Math.ceil(d.total / d.per));
@@ -2310,9 +2341,11 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
       sec_edgar_us: (id) => `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${id}`,
       wikidata: (id) => `https://www.wikidata.org/wiki/${id}`,
       ai_agent: () => (/^https?:\/\//i.test(b.evidence_url || '') ? b.evidence_url : null),
+      usda_oid: () => (/^https?:\/\//i.test(b.evidence_url || '') ? b.evidence_url : 'https://organic.ams.usda.gov/integrity/'),
+      trade_directory: () => (/^https?:\/\//i.test(b.evidence_url || '') ? b.evidence_url : null),
     };
     body.innerHTML = `<div class="card"><h3 style="margin-bottom:12px">Sumber data</h3>
-      <p class="body-sm muted" style="margin-bottom:14px">Buyer ini didiscover dan diverifikasi lewat sumber-sumber berikut. Kalau muncul di 2+ sumber, cross-source dedup mengaggregasi data ke satu row canonical.</p>
+      <p class="body-sm muted" style="margin-bottom:14px">Data buyer ini dikumpulkan dari sumber publik berikut. Jika perusahaan yang sama muncul di beberapa sumber, datanya digabung menjadi satu profil.</p>
       <div style="display:flex;flex-direction:column;gap:12px">
         ${sources.length ? sources.map((s) => {
           const link = srcLinks[s]?.(b.source_id || b.id, b.name);
@@ -2323,14 +2356,17 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
                 s === 'sirene_fr' ? 'INSEE SIRENE (French national registry)' :
                 s === 'sec_edgar_us' ? 'US SEC EDGAR filings' :
                 s === 'wikidata' ? 'Wikidata linked open data' :
-                s === 'ai_agent' ? `Diverifikasi AI dari website perusahaan${b.buyer_type ? ' · ' + esc(b.buyer_type) : ''}` : 'Web / directory scrape'}</div>
+                s === 'ai_agent' ? `Diverifikasi dari website perusahaan${b.buyer_type ? ' · ' + esc(b.buyer_type) : ''}` :
+                s === 'usda_oid' ? 'Daftar resmi pelaku usaha organik bersertifikat USDA' :
+                s === 'trade_directory' ? 'Direktori importir dari lembaga promosi dagang' :
+                s === 'google_business' ? 'Peta bisnis publik (OpenStreetMap)' : 'Data publik'}</div>
             </div>
             ${link ? `<a class="btn btn-sm btn-neutral" href="${esc(link)}" target="_blank" rel="noopener">Buka sumber →</a>` : ''}
           </div>`;
         }).join('') : '<p class="muted body-sm">Sumber tidak diketahui.</p>'}
       </div>
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-default)">
-        <div class="caption muted-3">Data confidence: <b>${b.data_confidence || 60}%</b> · Enrichment: ${b.enriched ? '✓ selesai' : '⏳ dalam antrian'}</div>
+        <div class="caption muted-3">Skor kelengkapan: <b>${b.quality_score || 0}/100</b> · Diperbarui ${b.last_updated ? fmtDate(b.last_updated) : '-'}</div>
       </div></div>`;
   } else if (tab === 'notes') {
     const [notes, msgs] = await Promise.all([api('/api/notes?buyer_id=' + id), api('/api/outreach/messages?buyer_id=' + id)]);

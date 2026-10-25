@@ -29,6 +29,7 @@ BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 SOURCES = {
     "usda_oid_home": "https://organic.ams.usda.gov/integrity/",
+    "usda_oid_datahistory": "https://organic.ams.usda.gov/integrity/Reports/DataHistory.aspx",
     "traces_organic_dir": "https://webgate.ec.europa.eu/tracesnt/directory/publication/organic-operator/index",
     "nca_directory": "https://www.ncausa.org/Industry-Resources/Business-Directory",
     "nca_members": "https://ncausa.org/Membership/Member-List",
@@ -130,6 +131,54 @@ async def browser_checks() -> dict:
             oid["error"] = f"{type(e).__name__}: {str(e)[:300]}"
             oid["trace"] = traceback.format_exc()[-1500:]
         out["usda_oid"] = oid
+
+        # ---------------- USDA OID data-history snapshot files ----------------
+        dh: dict = {}
+        try:
+            page = await ctx.new_page()
+            cand_urls = [SOURCES["usda_oid_datahistory"]]
+            for l in oid.get("links", []):
+                if re.search(r"history|download|snapshot|report", l, re.I) and "=>" in l:
+                    href = l.split("=>", 1)[1].strip()
+                    if href and not href.startswith("javascript"):
+                        cand_urls.append(href if href.startswith("http") else "https://organic.ams.usda.gov" + (href if href.startswith("/") else "/integrity/" + href))
+            dh["tried"] = cand_urls[:6]
+            for u in cand_urls[:6]:
+                try:
+                    await page.goto(u, wait_until="networkidle", timeout=60000)
+                    await page.wait_for_timeout(2500)
+                except Exception as e:
+                    dh.setdefault("errors", []).append(f"{u}: {str(e)[:120]}")
+                    continue
+                links = await page.eval_on_selector_all("a,button", "els => els.map(e => (e.innerText||'').trim().slice(0,80)+' => '+(e.getAttribute('href')||''))")
+                files = [l for l in links if re.search(r"\.(xlsx?|csv|zip)|download|export", l, re.I)]
+                dh[u] = {"title": await page.title(), "file_links": files[:40], "text_sample": (await page.inner_text("body"))[:2500]}
+                if files:
+                    # Try downloading the first file-like link and read its header row only.
+                    target = page.locator("a,button").filter(has_text=re.compile(r"xls|csv|download|export", re.I)).first
+                    try:
+                        async with page.expect_download(timeout=120000) as dl_info:
+                            await target.click()
+                        dl = await dl_info.value
+                        path = await dl.path()
+                        info = {"suggested_name": dl.suggested_filename, "bytes": os.path.getsize(path)}
+                        if dl.suggested_filename.lower().endswith((".xlsx", ".xls")):
+                            import openpyxl
+                            wb = openpyxl.load_workbook(path, read_only=True)
+                            ws = wb.worksheets[0]
+                            rows = ws.iter_rows(values_only=True)
+                            info["header"] = [str(c) for c in next(rows)][:80]
+                            info["rows_est"] = ws.max_row
+                        elif dl.suggested_filename.lower().endswith(".csv"):
+                            with open(path, encoding="utf-8", errors="replace") as f:
+                                info["header"] = f.readline().strip()[:3000]
+                        dh[u]["download"] = info
+                    except Exception as e:
+                        dh[u]["download_error"] = f"{type(e).__name__}: {str(e)[:200]}"
+                    break
+        except Exception as e:
+            dh["error"] = f"{type(e).__name__}: {str(e)[:300]}"
+        out["usda_oid_datahistory"] = dh
 
         # ---------------- EU TRACES organic operator directory ----------------
         tr: dict = {}

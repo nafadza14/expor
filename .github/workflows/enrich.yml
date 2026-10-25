@@ -1,10 +1,10 @@
-name: Enrich buyers (nightly)
+name: Enrich buyers (contacts)
 
-# Runs enrichment (website crawl + Sumopod AI classify) on buyers where
-# enriched_at IS NULL. Scheduled after the scrape workflow so the newest
-# rows land in the queue and get processed on the same night.
-#
-# 20:00 UTC = 03:00 WIB (one hour after scrape).
+# Contact enrichment v2 (python_scrapers/enrich): finds each buyer's own
+# website (domain guessing + keyless search), harvests email/phone from
+# contact / Impressum / legal pages, validates email domains via DNS MX,
+# and records where every contact was found. Works through the queue in
+# order (never-checked rows first), so every run makes forward progress.
 
 on:
   schedule:
@@ -14,13 +14,13 @@ on:
     inputs:
       max:
         description: 'Max buyers to enrich this run'
-        default: '250'
+        default: '600'
       mode:
         description: 'fresh | contacts | all'
         default: 'contacts'
       concurrency:
         description: 'Parallel enrichment workers'
-        default: '6'
+        default: '8'
 
 # Only one enrich run at a time. Additional invocations queue behind
 # it. Prevents the runaway that happened when self-chain + workflow_run
@@ -35,24 +35,27 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
-      - run: npm ci
-      - name: Run enricher
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - name: Install deps
+        run: pip install -r python_scrapers/requirements.txt
+      - name: Self-test
+        run: python -m python_scrapers.tests.test_enrich
+      - name: Run enricher v2 (website discovery + Impressum/contact harvest + MX check)
         env:
           DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
-          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
-          SUMOPOD_MODEL: ${{ vars.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview' }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         run: |
           if [ -z "$DATABASE_URL_POSTGRESS" ]; then
             echo "::error::DATABASE_URL_POSTGRESS secret not set"
             exit 1
           fi
-          MAX="${{ github.event.inputs.max || '250' }}"
-          MODE="${{ github.event.inputs.mode || 'contacts' }}"
-          CONC="${{ github.event.inputs.concurrency || '6' }}"
-          node scripts/enrich.js --max "$MAX" --mode "$MODE" --concurrency "$CONC"
+          MAX="${{ github.event.inputs.max || '600' }}"
+          CONC="${{ github.event.inputs.concurrency || '8' }}"
+          python -m python_scrapers.enrich.run --minutes 32 --max "$MAX" --concurrency "$CONC"
       # Self-dispatch next enrich run so the enrichment loop is also
       # continuous, independent of GitHub cron reliability.
       - name: Chain next enrich
@@ -68,5 +71,5 @@ jobs:
           fi
           sleep 60
           gh workflow run enrich.yml --repo ${{ github.repository }} \
-            -f max=250 -f mode=contacts -f concurrency=6
+            -f max=600 -f mode=contacts -f concurrency=8
           exit 0
