@@ -14,7 +14,7 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt
 const fmtDate = (s) => { if (!s) return '-'; const d = new Date(s.slice(0, 10)); return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`; };
 const FLAG = { US: '🇺🇸', JP: '🇯🇵', NL: '🇳🇱', AE: '🇦🇪', AU: '🇦🇺', ID: '🇮🇩', VN: '🇻🇳', BR: '🇧🇷', CO: '🇨🇴', IN: '🇮🇳', TH: '🇹🇭', CN: '🇨🇳', MY: '🇲🇾', EC: '🇪🇨', ET: '🇪🇹' };
 const CNAME = { US: 'Amerika Serikat', JP: 'Jepang', NL: 'Belanda', AE: 'Uni Emirat Arab', AU: 'Australia', ID: 'Indonesia', VN: 'Vietnam', BR: 'Brasil', CO: 'Kolombia', IN: 'India', TH: 'Thailand', CN: 'Tiongkok', MY: 'Malaysia', EC: 'Ekuador', ET: 'Ethiopia' };
-const flag = (c) => FLAG[c] || '🌐';
+const flag = (c) => FLAG[c] || (/^[A-Z]{2}$/.test(String(c || '')) ? String.fromCodePoint(...[...String(c)].map((ch) => 0x1F1E6 + ch.charCodeAt(0) - 65)) : '🌐');
 const scorePill = (score, label) => {
   if (score == null) return '<span class="pill pill-neutral">N/A</span>';
   const cls = label === 'Hot' ? 'pill-danger' : label === 'Warm' ? 'pill-warning' : label === 'Cold' ? 'pill-info' : 'pill-neutral';
@@ -522,26 +522,20 @@ route(/^\/$/, async (app) => {
           <div class="pill-nav" id="pillNav">
             <div class="pill-logo">${FLOWER}<span>EksporIn</span></div>
             <div class="pill-nav-links">
-              <a href="#/" class="active"><span class="dot"></span> Home</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'})">Fitur</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'})">Tentang</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'})" class="chev">Halaman ${CHEVRON_DOWN}</a>
+              ${[['how', 'Cara kerja'], ['contoh', 'Contoh hasil'], ['pricing', 'Harga'], ['faq', 'FAQ']].map(([id, l]) => `<a href="javascript:void(0)" onclick="document.getElementById('${id}')?.scrollIntoView({behavior:'smooth'})">${l}</a>`).join('')}
             </div>
             <div class="pill-nav-right">
               <a href="#/login" class="pill-signin">Masuk</a>
               <a href="#/register" class="pill-cta">
-                <span class="cta-full">Daftar gratis</span><span class="cta-short">Daftar</span>
+                <span class="cta-full">Coba gratis</span><span class="cta-short">Coba</span>
                 <span class="arrow-circle">${CHEVRON_RIGHT}</span>
               </a>
               <button class="pill-menu" onclick="document.getElementById('pillMenuPanel').classList.toggle('open')" aria-label="Menu">${MENU_ICON}</button>
             </div>
             <div class="pill-menu-panel" id="pillMenuPanel">
-              <a href="#/" class="active"><span class="dot"></span> Home</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Fitur</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Tentang</a>
-              <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">Halaman</a>
+              ${[['how', 'Cara kerja'], ['contoh', 'Contoh hasil'], ['pricing', 'Harga'], ['faq', 'FAQ']].map(([id, l]) => `<a href="javascript:void(0)" onclick="document.getElementById('${id}')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">${l}</a>`).join('')}
               <a href="#/login">Masuk</a>
-              <a href="#/register">Daftar gratis</a>
+              <a href="#/register">Coba gratis 3 hari</a>
               ${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : ''}
             </div>
           </div>
@@ -549,223 +543,80 @@ route(/^\/$/, async (app) => {
 
         <!-- Hero content -->
         <div class="hero-content">
-          <div class="hero-badge"><span class="dot"></span> EksporIn Platform</div>
-          <h1 class="hero-headline">
-            Shaping <span class="serif-italic">Exporters</span><br>of tomorrow
+          <div class="hero-badge"><span class="dot"></span> Untuk eksportir & UKM Indonesia</div>
+          <h1 class="hero-headline lp-h1">
+            Temukan buyer luar negeri,<br><span class="serif-italic">lengkap dengan kontaknya</span>
           </h1>
-          <p class="hero-sub">Platform intelijen buyer global untuk eksportir Indonesia. Data bea cukai, skor prioritas, dan kontak decision maker dalam satu dashboard.</p>
+          <p class="hero-sub lp-sub">Ketik produk Anda. EksporIn mencarikan importir, distributor, dan pabrik di 38 negara tujuan, menunjukkan email dan telepon yang bisa dihubungi, lalu membantu Anda menulis email penawaran dalam bahasa mereka.</p>
 
           <!-- Interactive commodity search demo (public try-before-signup) -->
           <div class="hero-try">
-            <div class="hero-try-label">
-              <b>Apa komoditas Anda?</b>
-            </div>
             <form class="hero-search" id="hero-try-form" onsubmit="return false" autocomplete="off">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input id="hero-try-input" type="text" placeholder="Tuliskan komoditas Anda misal: kopi robusta, Vanili Kering, Nilam…" autocomplete="off">
-              <button type="submit" id="hero-try-btn">Cari Buyer</button>
+              <input id="hero-try-input" type="text" placeholder="Produk Anda, misal: biji kakao, kopi robusta, vanili…" autocomplete="off" aria-label="Produk yang ingin diekspor">
+              <button type="submit" id="hero-try-btn">Cari buyer</button>
             </form>
+            <div class="lp-try-chips">
+              <span>Coba:</span>
+              ${['Kopi robusta', 'Biji kakao', 'Vanili', 'Udang beku', 'Minyak nilam', 'Rotan'].map((c) => `<a href="#/quick-search?q=${encodeURIComponent(c)}">${c}</a>`).join('')}
+            </div>
           </div>
-
-          <p class="hero-demo-hint">Sudah punya akun? <a href="#/login">Masuk di sini</a></p>
+          <ul class="lp-trust">
+            <li>✓ Trial 3 hari gratis</li><li>✓ Tanpa kartu kredit</li><li>✓ Tidak perlu tahu HS code</li><li>✓ Mulai Rp14.000/30 hari</li>
+          </ul>
         </div>
 
-        <!-- Dashboard preview tray -->
+        <!-- Product preview: what a search result looks like -->
         <div class="dash-preview-wrap">
-          <div class="dash-preview-tray">
-            <div class="dash-preview-grid">
-              <!-- Card 1: Buyer aktif -->
-              <div class="preview-card">
-                <div class="pc-header"><span class="label">Buyer Aktif</span><span class="muted">Bulan Ini</span></div>
-                <div class="pc-big">6.896</div>
-                <div class="pc-row">
-                  <span class="pc-pill-danger">${TREND_DOWN} -3.382 (33%)</span>
-                </div>
-                <div class="pc-small">Dibanding bulan lalu</div>
-                <div class="pc-target-label">Target bulan tercapai</div>
-                ${arcGauge(92, { color: '#ef4d23', showLabels: true, min: '389K', max: '425K' })}
-                <div class="toggle-pill">
-                  <button class="active">Impresi</button><button>Klik</button>
-                </div>
+          <div class="dash-preview-tray lp-tray">
+            <div class="lp-mock">
+              <div class="lp-mock-bar">
+                <div class="lp-mock-q"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> biji kakao <span class="lp-hs">HS 1801</span></div>
+                <div class="lp-mock-filter"><span class="on">Ada kontak</span><span>Jerman</span><span>Belanda</span><span>Importir</span></div>
               </div>
-
-              <!-- Card 2: Form -->
-              <div class="preview-card preview-form">
-                <div class="pc-form-group">
-                  <label>Tampilkan data untuk</label>
-                  <button class="pc-select">Bulan ini ${CHEVRON_DOWN}</button>
-                </div>
-                <div class="pc-form-group">
-                  <label>Bandingkan periode</label>
-                  <button class="pc-select">Month-to-date (MTD) ${CHEVRON_DOWN}</button>
-                </div>
-                <div class="pc-form-group">
-                  <label>Target buyer (bulan ini)</label>
-                  <div class="pc-input"><span class="pc-hash">#</span><span>10</span></div>
-                </div>
-                <div class="pc-form-group">
-                  <label>Target buyer (tahun ini)</label>
-                  <div class="pc-input"><span class="pc-hash">#</span><span>100</span></div>
-                </div>
-                <div class="pc-form-footer">
-                  <button class="pc-save">Simpan</button>
-                  <a class="pc-cancel">Batal</a>
-                  <button class="pc-x" aria-label="Tutup">${X_ICON}</button>
-                </div>
+              <div class="lp-mock-rows">
+                ${[
+                  { f: 'DE', loc: 'Hamburg, Jerman', type: 'Importir biji kakao', e: 1, p: 1, w: 1, s: 91 },
+                  { f: 'NL', loc: 'Amsterdam, Belanda', type: 'Distributor bahan cokelat', e: 1, p: 1, w: 1, s: 84 },
+                  { f: 'BE', loc: 'Antwerpen, Belgia', type: 'Pabrik cokelat', e: 1, p: 0, w: 1, s: 72 },
+                ].map((r, i) => `
+                  <div class="lp-row">
+                    <div class="lp-row-main">
+                      <div class="lp-row-name">${flag(r.f)} <span class="lp-blurname">${['Contoh Importir A', 'Contoh Distributor B', 'Contoh Pabrik C'][i]}</span></div>
+                      <div class="lp-row-meta">${r.type} · ${r.loc}</div>
+                    </div>
+                    <div class="lp-row-ch">
+                      <span class="${r.e ? 'on' : ''}">✉ Email</span><span class="${r.p ? 'on' : ''}">☎ Telepon</span><span class="${r.w ? 'on' : ''}">🌐 Web</span>
+                    </div>
+                    <div class="lp-row-score"><b>${r.s}</b><small>skor</small></div>
+                    <div class="lp-row-btn">Buka kontak</div>
+                  </div>`).join('')}
               </div>
-
-              <!-- Card 3: Match Score -->
-              <div class="preview-card">
-                <div class="pc-header"><span class="label">Match Score</span><span class="muted">hari ini</span></div>
-                <div class="pc-big">0</div>
-                <div class="pc-row">
-                  <span class="pc-pill-neutral">${TREND_UP} 0</span>
-                </div>
-                <div class="pc-small">Dibanding kemarin</div>
-                ${arcGauge(68, { color: '#9ca3af' })}
-                <div class="toggle-pill">
-                  <button class="active">Hot Leads</button><button>Pipeline</button>
-                </div>
-              </div>
+              <div class="lp-mock-cap">Contoh tampilan hasil pencarian. Ketik produk Anda di atas untuk melihat buyer sungguhan.</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Features -->
-    <section class="landing-section" id="features">
+    <!-- Problem → solution -->
+    <section class="landing-section" id="masalah">
       <div class="landing-section-inner">
-        <div class="overline" style="text-align:center;margin-bottom:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--orange)">Fitur Utama</div>
-        <h2 style="text-align:center;font-size:28px;margin-bottom:8px">Semua yang Anda butuhkan untuk ekspor</h2>
-        <p class="muted" style="text-align:center;max-width:520px;margin:0 auto 40px">Dari pencarian buyer sampai kirim pesan pertama, dalam satu platform.</p>
-        <div class="feature-grid">
+        <div class="section-eyebrow">Kenapa EksporIn</div>
+        <h2 class="section-title">Mencari buyer ekspor tidak harus makan waktu berbulan-bulan</h2>
+        <p class="section-lead">Kebanyakan eksportir pemula terjebak di tiga cara ini. Semuanya bisa jalan, tapi mahal di waktu atau biaya.</p>
+        <div class="lp-pain-grid">
           ${[
-            {
-              title: 'AI Buyer Discovery',
-              desc: 'Deskripsikan komoditas dalam bahasa alami. AI memetakan HS code, mencari importir aktif, dan memberi skor prioritas.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <rect x="24" y="24" width="152" height="52" rx="14" fill="#fff" stroke="#f4c9a8" stroke-width="1.2"/>
-                <circle cx="46" cy="50" r="8" fill="#ffdfca"/>
-                <path d="M42 50 L46 54 L50 46" stroke="#ef4d23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                <rect x="60" y="42" width="90" height="6" rx="3" fill="#e8dfd6"/>
-                <rect x="60" y="54" width="60" height="5" rx="2.5" fill="#f0e6dc"/>
-                <path d="M100 78 L100 96" stroke="#ef4d23" stroke-width="1.6" stroke-dasharray="3 3"/>
-                <path d="M100 90 L96 86 M100 90 L104 86" stroke="#ef4d23" stroke-width="1.6" stroke-linecap="round"/>
-                <g transform="translate(160 90)">
-                  <path d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" fill="#ef4d23"/>
-                </g>
-              </svg>`,
-              icon: 'sparkle',
-            },
-            {
-              title: 'Direktori HS Code',
-              desc: 'Telusuri buyer per kategori produk dengan data volume, nilai, dan negara asal. Drill-down dari bab sampai sub-heading 6-digit.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <rect x="24" y="22" width="152" height="14" rx="4" fill="#ffe9d8"/>
-                <text x="34" y="32" fill="#ef4d23" font-size="8" font-weight="700" font-family="system-ui">HS 0901</text>
-                <rect x="130" y="26" width="30" height="6" rx="3" fill="#ef4d23"/>
-                <rect x="24" y="42" width="70" height="30" rx="6" fill="#fff" stroke="#f4c9a8" stroke-width="1"/>
-                <rect x="30" y="48" width="20" height="4" rx="2" fill="#ffe0c9"/>
-                <text x="30" y="62" fill="#282828" font-size="7" font-weight="700" font-family="system-ui">4,240 buyer</text>
-                <rect x="106" y="42" width="70" height="30" rx="6" fill="#fff" stroke="#f4c9a8" stroke-width="1"/>
-                <rect x="112" y="48" width="20" height="4" rx="2" fill="#ffe0c9"/>
-                <text x="112" y="62" fill="#282828" font-size="7" font-weight="700" font-family="system-ui">218k ton</text>
-                <rect x="24" y="80" width="152" height="18" rx="6" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
-                <circle cx="36" cy="89" r="4" fill="#ef4d23"/>
-                <rect x="46" y="86" width="80" height="4" rx="2" fill="#e8dfd6"/>
-                <rect x="46" y="92" width="50" height="3" rx="1.5" fill="#f0e6dc"/>
-              </svg>`,
-              icon: 'grid',
-            },
-            {
-              title: 'Shipment Explorer',
-              desc: 'Telusuri data bill of lading lintas buyer untuk analisis mendalam. Filter per HS code, negara, eksportir, dan periode.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <path d="M20 96 Q100 88 180 96" stroke="#f4c9a8" stroke-width="1" fill="none" stroke-dasharray="2 3"/>
-                <rect x="60" y="52" width="80" height="30" rx="3" fill="#ef4d23"/>
-                <rect x="66" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
-                <rect x="86" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
-                <rect x="106" y="42" width="16" height="14" rx="1.5" fill="#c53d18"/>
-                <rect x="126" y="42" width="14" height="14" rx="1.5" fill="#c53d18"/>
-                <path d="M40 82 L60 82 L64 74 L136 74 L140 82 L160 82 L156 92 L44 92 Z" fill="#fff" stroke="#282828" stroke-width="1.4"/>
-                <rect x="90" y="30" width="4" height="14" fill="#282828"/>
-                <path d="M94 30 L94 40 L108 36 Z" fill="#ef4d23"/>
-                <text x="18" y="28" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">🇮🇩 → 🇺🇸</text>
-              </svg>`,
-              icon: 'ship',
-            },
-            {
-              title: 'Match Score 0–100',
-              desc: 'Setiap buyer mendapat skor berdasarkan aktivitas impor, pertumbuhan, kecocokan produk, dan ketersediaan kontak.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <path d="M40 100 A60 60 0 0 1 160 100" stroke="#f4d0b0" stroke-width="8" fill="none" stroke-linecap="round"/>
-                <path d="M40 100 A60 60 0 0 1 148 62" stroke="#ef4d23" stroke-width="8" fill="none" stroke-linecap="round"/>
-                <text x="100" y="94" text-anchor="middle" fill="#282828" font-size="22" font-weight="700" font-family="system-ui">87</text>
-                <rect x="76" y="18" width="48" height="14" rx="7" fill="#ef4d23"/>
-                <text x="100" y="28" text-anchor="middle" fill="#fff" font-size="8" font-weight="700" font-family="system-ui">HOT LEAD</text>
-              </svg>`,
-              icon: 'target',
-            },
-            {
-              title: 'Kontak Decision Maker',
-              desc: 'Nama, email terverifikasi, dan profil LinkedIn dari Procurement Manager, Sourcing Director, dan posisi kunci lainnya.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <rect x="24" y="30" width="152" height="26" rx="8" fill="#fff" stroke="#f4c9a8" stroke-width="1.2"/>
-                <circle cx="40" cy="43" r="7" fill="#ffdfca"/>
-                <text x="40" y="46" text-anchor="middle" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">JT</text>
-                <rect x="54" y="37" width="80" height="4" rx="2" fill="#282828"/>
-                <rect x="54" y="45" width="60" height="3" rx="1.5" fill="#a99a8c"/>
-                <g transform="translate(148 43)">
-                  <circle r="6" fill="#4d8c35"/>
-                  <path d="M-2.5 0 L-0.5 2 L3 -2" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </g>
-                <rect x="24" y="64" width="152" height="26" rx="8" fill="#fffaf6" stroke="#f4c9a8" stroke-width="1"/>
-                <circle cx="40" cy="77" r="7" fill="#ffdfca"/>
-                <text x="40" y="80" text-anchor="middle" fill="#ef4d23" font-size="7" font-weight="700" font-family="system-ui">MK</text>
-                <rect x="54" y="71" width="70" height="4" rx="2" fill="#282828"/>
-                <rect x="54" y="79" width="50" height="3" rx="1.5" fill="#a99a8c"/>
-                <g transform="translate(148 77)">
-                  <circle r="6" fill="#4d8c35"/>
-                  <path d="M-2.5 0 L-0.5 2 L3 -2" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </g>
-              </svg>`,
-              icon: 'user',
-            },
-            {
-              title: 'Template Outreach',
-              desc: 'Template multi-bahasa siap kirim dengan variabel otomatis. Lacak open rate dan reply rate dari dashboard.',
-              panel: `<svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
-                <rect x="30" y="30" width="140" height="60" rx="8" fill="#fff" stroke="#f4c9a8" stroke-width="1.4"/>
-                <path d="M30 38 L100 68 L170 38" stroke="#ef4d23" stroke-width="1.6" fill="none"/>
-                <rect x="46" y="46" width="60" height="3" rx="1.5" fill="#e8dfd6"/>
-                <rect x="46" y="52" width="80" height="3" rx="1.5" fill="#e8dfd6"/>
-                <rect x="46" y="58" width="50" height="3" rx="1.5" fill="#e8dfd6"/>
-                <g transform="translate(154 96)">
-                  <circle r="10" fill="#ef4d23"/>
-                  <path d="M-4 0 L-1 3 L4 -3" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </g>
-                <text x="24" y="106" fill="#4d8c35" font-size="8" font-weight="700" font-family="system-ui">EN · ES · ZH · JA</text>
-              </svg>`,
-              icon: 'mail',
-            },
-          ].map((f) => `
-            <article class="feature-card">
-              <div class="feature-panel">${f.panel}</div>
-              <div class="feature-copy">
-                <h3>${f.title}</h3>
-                <p>${f.desc}</p>
-                <span class="feature-corner">${{
-                  sparkle: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1 L9.4 6.6 L15 8 L9.4 9.4 L8 15 L6.6 9.4 L1 8 L6.6 6.6 Z"/></svg>',
-                  grid: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.4"/><rect x="9" y="1" width="6" height="6" rx="1.4"/><rect x="1" y="9" width="6" height="6" rx="1.4"/><rect x="9" y="9" width="6" height="6" rx="1.4"/></svg>',
-                  ship: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 11 L14 11 L13 14 L3 14 Z"/><rect x="5" y="6" width="6" height="4" rx="0.5"/><rect x="7" y="2" width="2" height="4"/></svg>',
-                  target: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>',
-                  user: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14 Q2 9 8 9 Q14 9 14 14 Z"/></svg>',
-                  mail: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4 L8 9 L14.5 4"/></svg>',
-                }[f.icon]}</span>
-              </div>
-            </article>
-          `).join('')}
+            { ic: '🔎', t: 'Googling dan LinkedIn', d: 'Hasilnya campur aduk: toko ritel, blog, kompetitor. Butuh berminggu-minggu untuk dapat segelintir importir yang benar-benar membeli produk Anda.' },
+            { ic: '💳', t: 'Platform data impor global', d: 'Datanya lengkap, tapi paket termurah sekitar US$199 per bulan (±Rp3,5 juta), berbahasa Inggris, dan kontak buyer sering dijual terpisah.' },
+            { ic: '✈️', t: 'Pameran dagang', d: 'Bagus untuk bertemu langsung, tapi booth, tiket, dan hotel bisa menghabiskan puluhan juta rupiah untuk sekali acara.' },
+          ].map((p) => `
+            <div class="lp-pain"><div class="lp-pain-ic">${p.ic}</div><h3>${p.t}</h3><p>${p.d}</p></div>`).join('')}
+        </div>
+        <div class="lp-solution">
+          <div class="lp-solution-tag">Dengan EksporIn</div>
+          <p><b>Daftar buyer yang relevan beserta email dan teleponnya dalam satu kali pencarian</b>, dalam Bahasa Indonesia, mulai Rp14.000 untuk 30 hari, bayar pakai QRIS.</p>
+          <a href="#/register" class="btn btn-primary">Coba gratis 3 hari</a>
         </div>
       </div>
     </section>
@@ -773,58 +624,124 @@ route(/^\/$/, async (app) => {
     <!-- How it works -->
     <section class="landing-section landing-section-alt" id="how">
       <div class="landing-section-inner">
-        <div class="section-eyebrow">Cara Kerja</div>
-        <h2 class="section-title">4 langkah menuju buyer pertama Anda</h2>
-        <p class="section-lead">End-to-end otomatis. Dari deskripsi komoditas ke pesan pertama yang siap kirim ke buyer luar negeri.</p>
-        <div class="how-grid">
+        <div class="section-eyebrow">Cara kerja</div>
+        <h2 class="section-title">Dari nama produk sampai email pertama, dalam 3 langkah</h2>
+        <p class="section-lead">Tidak perlu paham HS code, bahasa asing, atau data bea cukai. Sistem yang menerjemahkannya untuk Anda.</p>
+        <div class="lp-steps">
           ${[
-            { n: '01', title: 'Deskripsikan komoditas', desc: 'Ketik dalam Bahasa Indonesia atau Inggris. AI + WCO nomenclature (6.941 kode) memetakan ke HS 6-digit yang tepat.', chips: ['AI', '📚 WCO 6.941 kode', '🇮🇩 → 🌐'] },
-            { n: '02', title: 'Temukan buyer aktif', desc: 'Importir, distributor, dan pabrik pengolah dari daftar resmi dan website perusahaan, lengkap dengan email & telepon yang terverifikasi.', chips: ['🏢 Importir & distributor', '✉️ Kontak terverifikasi', '🎯 Skor kelengkapan'] },
-            { n: '03', title: 'Evaluasi dengan data resmi', desc: 'Match Score, riwayat shipment tahunan, duty rate USITC untuk pasar USA, dan angle outreach yang di-personalize per buyer.', chips: ['🇺🇸 USITC duty', '🌐 UN Comtrade', '🎯 Match Score'] },
-            { n: '04', title: 'Kirim outreach multi-bahasa', desc: 'Template siap kirim di 5 bahasa (EN/ES/AR/ZH/JA), email + WhatsApp. Lacak status dibuka & dibalas dari dashboard.', chips: ['✉️ 10 template', '🌍 5 bahasa', '📊 Tracking'] },
+            { n: '1', t: 'Ketik produk Anda', d: 'Tulis seperti biasa: "kopi robusta", "gula aren", "rotan". EksporIn otomatis mengenali kode HS yang dipakai bea cukai di seluruh dunia.', demo: '<div class="lp-demo-in">gula aren</div><div class="lp-demo-arrow">↓</div><div class="lp-demo-out"><b>HS 1702.90</b> Gula lainnya</div>' },
+            { n: '2', t: 'Pilih buyer yang cocok', d: 'Lihat importir, distributor, dan pabrik pengolah yang membeli produk itu. Saring per negara, jenis usaha, atau hanya yang sudah ada kontaknya.', demo: '<div class="lp-demo-list"><span>🇩🇪 Importir · Hamburg</span><span>🇳🇱 Distributor · Rotterdam</span><span>🇯🇵 Pabrik · Osaka</span></div>' },
+            { n: '3', t: 'Hubungi langsung', d: 'Buka email dan telepon buyer, lalu kirim penawaran dengan template siap pakai dalam 5 bahasa. Status terkirim dan dibalas tercatat di dashboard.', demo: '<div class="lp-demo-mail"><span class="lp-demo-to">✉ purchasing@…</span><span>Subject: Indonesian palm sugar supplier</span><span class="lp-demo-langs">EN · ES · AR · ZH · JA</span></div>' },
           ].map((s) => `
-            <div class="how-card">
-              <div class="how-num">${s.n}</div>
-              <h3>${s.title}</h3>
-              <p>${s.desc}</p>
-              <div class="how-chips">${s.chips.map((c) => `<span>${c}</span>`).join('')}</div>
+            <div class="lp-step">
+              <div class="lp-step-n">${s.n}</div>
+              <h3>${s.t}</h3>
+              <p>${s.d}</p>
+              <div class="lp-step-demo">${s.demo}</div>
             </div>`).join('')}
         </div>
       </div>
     </section>
 
-    <!-- Social proof strip -->
-    <section class="landing-section" style="padding-top:0">
-      <div class="landing-section-inner">
-        <div class="stats-strip">
-          <div><div class="stat-num">6.941</div><p>Kode HS WCO</p></div>
-          <div><div class="stat-num">200+</div><p>Buyer aktif</p></div>
-          <div><div class="stat-num">73</div><p>Negara tujuan</p></div>
-          <div><div class="stat-num">$1,6M</div><p>Ekspor per HS (Comtrade)</p></div>
+    <!-- What you get per buyer -->
+    <section class="landing-section" id="contoh">
+      <div class="landing-section-inner lp-anatomy">
+        <div class="lp-anatomy-copy">
+          <div class="section-eyebrow" style="text-align:left">Yang Anda dapat</div>
+          <h2 class="section-title" style="text-align:left">Setiap buyer punya profil yang bisa langsung ditindaklanjuti</h2>
+          <ul class="lp-checks">
+            <li><b>Nama perusahaan, kota, dan negara</b><span>Bukan sekadar nama negara. Anda tahu persis siapa dan di mana.</span></li>
+            <li><b>Jenis usaha</b><span>Importir, distributor, roaster, pabrik pengolah, atau jaringan ritel, supaya penawaran Anda tepat sasaran.</span></li>
+            <li><b>Produk yang mereka beli</b><span>Dicocokkan ke kode HS, jadi Anda tahu buyer ini memang relevan dengan produk Anda.</span></li>
+            <li><b>Email dan telepon, beserta sumbernya</b><span>Setiap kontak menampilkan link halaman tempat kontak itu ditemukan, sehingga bisa Anda cek sendiri.</span></li>
+            <li><b>Skor kelengkapan 0–100</b><span>Buyer dengan data paling lengkap muncul paling atas, jadi Anda mulai dari yang paling siap dihubungi.</span></li>
+          </ul>
+          <p class="lp-note">Kami tidak mengarang kontak. Kalau email belum ada, tombol <b>Cari kontak</b> memeriksa website resmi perusahaan saat itu juga, dan Anda hanya dikenai biaya kalau kontaknya ketemu.</p>
+        </div>
+        <div class="lp-profile">
+          <div class="lp-profile-head">
+            <div class="lp-profile-av">KH</div>
+            <div><b>Contoh: Importir biji kakao</b><div class="lp-profile-sub">🇩🇪 Hamburg, Jerman · Importir</div></div>
+            <div class="lp-profile-score">91<small>/100</small></div>
+          </div>
+          <div class="lp-profile-sec">
+            <div class="lp-profile-lbl">Produk dibeli</div>
+            <div class="lp-tags"><span>HS 1801 · Biji kakao</span><span>HS 1804 · Lemak kakao</span></div>
+          </div>
+          <div class="lp-profile-sec">
+            <div class="lp-profile-lbl">Kontak</div>
+            <div class="lp-contact"><span>🌐</span><div><b>contoh-importir.de</b><small>Website resmi</small></div></div>
+            <div class="lp-contact"><span>✉</span><div><b>einkauf@contoh-importir.de</b><small>Email perusahaan · sumber: contoh-importir.de/kontakt</small></div></div>
+            <div class="lp-contact"><span>☎</span><div><b>+49 40 •••• ••••</b><small>Sumber: halaman Impressum</small></div></div>
+          </div>
+          <div class="lp-profile-actions"><span class="lp-btn-o">Simpan ke daftar</span><span class="lp-btn-f">Kirim penawaran</span></div>
+          <div class="lp-profile-cap">Ilustrasi profil buyer</div>
         </div>
       </div>
     </section>
 
-    <!-- Testimoni -->
-    <section class="landing-section landing-section-alt" id="testimoni">
+    <!-- Features -->
+    <section class="landing-section landing-section-alt" id="features">
       <div class="landing-section-inner">
-        <div class="section-eyebrow">Testimoni</div>
-        <h2 class="section-title">Dipakai eksportir Indonesia untuk masuk pasar global</h2>
-        <p class="section-lead">Dari UKM vanili di Jawa Timur sampai furniture Jepara, EksporIn membantu tim yang tadinya kerja manual jadi punya pipeline buyer yang terukur.</p>
-        <div class="testi-grid">
+        <div class="section-eyebrow">Fitur</div>
+        <h2 class="section-title">Semua yang dibutuhkan untuk prospek ekspor</h2>
+        <p class="section-lead">Dari riset pasar sampai menindaklanjuti balasan buyer, tanpa pindah-pindah aplikasi.</p>
+        <div class="lp-feat-grid">
           ${[
-            { name: 'Andi Prasetyo', role: 'Founder, PT Kopi Nusantara', avatar: 'AP', text: 'Kami dulu 40 jam per minggu cari data buyer di LinkedIn & pameran. Sekarang cukup 1 jam dengan HS 0901.11 sudah ada 20 lead + kontak Procurement Head.' },
-            { name: 'Sari Mulyani', role: 'Export Manager, Vanili Bali', avatar: 'SM', text: 'Data UN Comtrade real bikin kami tahu $11.5M vanilla exports ke USA per tahun. Angle outreach jadi jauh lebih meyakinkan.' },
-            { name: 'Rudi Hartanto', role: 'Direktur, Jepara Furniture Ekspor', avatar: 'RH', text: 'Fitur USITC HTS bikin harga FOB kami competitive. Duty rate langsung ketahuan sebelum kirim quote. Deal ratio naik 3x.' },
-          ].map((t) => `
-            <article class="testi-card">
-              <div class="testi-quote-mark">"</div>
-              <p class="testi-text">${t.text}</p>
-              <div class="testi-author">
-                <div class="testi-avatar">${t.avatar}</div>
-                <div><b>${t.name}</b><div>${t.role}</div></div>
-              </div>
-            </article>`).join('')}
+            { ic: '✨', t: 'AI Find Buyer', d: 'Ceritakan produk dan target pasar Anda, AI menyusun daftar buyer yang paling cocok beserta alasannya.' },
+            { ic: '📦', t: 'Direktori HS & data pasar', d: 'Lihat negara mana yang paling banyak mengimpor produk Anda, dari statistik resmi UN Comtrade.' },
+            { ic: '🇺🇸', t: 'Tarif bea masuk Amerika', d: 'Cek tarif impor AS (USITC) sebelum mengirim penawaran harga, supaya harga FOB Anda tetap bersaing.' },
+            { ic: '🔍', t: 'Cari kontak otomatis', d: 'Untuk buyer yang belum ada emailnya, sistem membaca website resminya dan menyimpan kontak yang ditemukan.' },
+            { ic: '✉️', t: 'Template penawaran 5 bahasa', d: 'Inggris, Spanyol, Arab, Mandarin, dan Jepang, dengan nama buyer dan produk terisi otomatis.' },
+            { ic: '📋', t: 'Daftar & notifikasi', d: 'Simpan buyer ke daftar, tandai status (dihubungi, negosiasi, deal), dan dapat notifikasi saat ada buyer baru.' },
+          ].map((f) => `<div class="lp-feat"><div class="lp-feat-ic">${f.ic}</div><h3>${f.t}</h3><p>${f.d}</p></div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison -->
+    <section class="landing-section" id="banding">
+      <div class="landing-section-inner">
+        <div class="section-eyebrow">Perbandingan</div>
+        <h2 class="section-title">Dibuat untuk eksportir Indonesia, bukan untuk korporasi global</h2>
+        <p class="section-lead">Kami fokus pada satu hal: membantu Anda menemukan dan menghubungi buyer, dengan harga yang masuk akal untuk UKM.</p>
+        <div class="lp-cmp-wrap">
+          <table class="lp-cmp">
+            <thead><tr><th></th><th>Cari manual</th><th>Platform data impor global</th><th class="lp-cmp-us">EksporIn</th></tr></thead>
+            <tbody>
+              ${[
+                ['Biaya', 'Gratis, tapi makan waktu', 'Mulai ±Rp3,5 juta/bulan', '<b>Mulai Rp14.000/30 hari</b>'],
+                ['Bahasa', 'Tergantung sumber', 'Inggris', '<b>Indonesia</b>'],
+                ['Kontak buyer', 'Dicari satu per satu', 'Sering dijual terpisah', '<b>Email & telepon, dengan sumbernya</b>'],
+                ['Perlu paham HS code', 'Ya', 'Ya', '<b>Tidak, cukup nama produk</b>'],
+                ['Bantuan menulis penawaran', '–', '–', '<b>Template 5 bahasa</b>'],
+                ['Cara bayar', '–', 'Kartu kredit, dolar, sering kontrak tahunan', '<b>QRIS, tanpa kontrak</b>'],
+                ['Riwayat shipment per buyer', '–', 'Sangat lengkap', 'Belum, kami fokus ke kontak'],
+              ].map((r) => `<tr><th>${r[0]}</th><td data-l="Cari manual">${r[1]}</td><td data-l="Platform global">${r[2]}</td><td class="lp-cmp-us" data-l="EksporIn">${r[3]}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <p class="lp-foot">Harga pembanding: paket termurah ImportGenius US$199/bulan (importgenius.com, Oktober 2026), kurs ±Rp18.000 per dolar. Jika Anda butuh analisis rantai pasok dan riwayat bill of lading yang sangat detail, platform global tersebut lebih tepat.</p>
+      </div>
+    </section>
+
+    <!-- Who it's for + data sources -->
+    <section class="landing-section landing-section-alt" id="untuk">
+      <div class="landing-section-inner">
+        <div class="section-eyebrow">Untuk siapa</div>
+        <h2 class="section-title" style="margin-bottom:28px">Cocok untuk Anda yang…</h2>
+        <div class="lp-who">
+          ${[
+            { t: 'Baru mau mulai ekspor', d: 'Sudah punya produk dan kapasitas, tapi belum punya satu pun buyer luar negeri.' },
+            { t: 'Sudah ekspor, cari pasar baru', d: 'Ingin menambah buyer di negara lain supaya tidak bergantung pada satu-dua pembeli.' },
+            { t: 'Trader, agen, dan koperasi', d: 'Mencarikan pembeli untuk produk petani atau pengrajin binaan Anda.' },
+          ].map((w) => `<div class="lp-who-card"><h3>${w.t}</h3><p>${w.d}</p></div>`).join('')}
+        </div>
+        <div class="lp-sources">
+          <div class="lp-sources-title">Data kami berasal dari sumber publik yang bisa dicek</div>
+          <div class="lp-sources-list">
+            ${['Daftar importir lembaga promosi dagang', 'Direktori asosiasi industri', 'Daftar peserta pameran dagang', 'Website resmi perusahaan', 'GLEIF (registri badan hukum global)', 'UN Comtrade (statistik perdagangan)', 'USITC (tarif impor AS)', 'WCO (kode HS)'].map((x) => `<span>${x}</span>`).join('')}
+          </div>
         </div>
       </div>
     </section>
@@ -833,16 +750,16 @@ route(/^\/$/, async (app) => {
     <section class="landing-section" id="pricing">
       <div class="landing-section-inner">
         <div class="section-eyebrow">Harga</div>
-        <h2 class="section-title">Mulai dari Rp14.000, bayar sesuai pemakaian</h2>
-        <p class="section-lead">Akun baru langsung dapat <b>trial 3 hari</b> setara paket Hemat. Paket berlaku 30 hari, bayar sekali via QRIS (GoPay / OVO / DANA / ShopeePay / m-Banking), tanpa perpanjangan otomatis. Kuota habis? Lanjut pakai saldo.</p>
+        <h2 class="section-title">Mulai dari Rp14.000, tanpa kontrak</h2>
+        <p class="section-lead">Akun baru langsung dapat <b>trial 3 hari</b> setara paket Hemat. Paket berlaku 30 hari, dibayar sekali lewat QRIS (GoPay, OVO, DANA, ShopeePay, m-Banking), dan tidak diperpanjang otomatis.</p>
         <div class="price-grid price-grid-3">
           ${[
-            { code: 'hemat', name: 'Hemat', price: 'Rp14.000', tag: '/30 hari', desc: 'Untuk mulai mencari buyer pertama.', feats: ['100 pencarian buyer', '30 profil buyer lengkap', '15 buka kontak (email/telepon)', '10 cari kontak otomatis', '20 kirim outreach', 'Simpan 50 buyer · 3 alert', 'Ekspor CSV pakai saldo'] },
-            { code: 'growth', name: 'Growth', price: 'Rp99.000', tag: '/30 hari', desc: 'Untuk eksportir yang aktif prospek.', highlight: true, feats: ['1.000 pencarian buyer', '300 profil buyer lengkap', '150 buka kontak', '100 cari kontak otomatis', '300 kirim outreach', 'Ekspor CSV 300 baris', 'Simpan, alert & template tanpa batas'] },
-            { code: 'business', name: 'Business', price: 'Rp299.000', tag: '/30 hari', desc: 'Untuk tim ekspor dengan banyak pasar.', feats: ['Pencarian & profil tanpa batas', '600 buka kontak', '400 cari kontak otomatis', '2.000 kirim outreach', 'Ekspor CSV 3.000 baris', 'Intel kompetitor', 'Semua fitur Growth'] },
+            { code: 'hemat', name: 'Hemat', price: 'Rp14.000', tag: '/30 hari', desc: 'Untuk mencari buyer pertama.', feats: ['100 pencarian buyer', '30 profil buyer lengkap', '15 buka kontak (email/telepon)', '10 cari kontak otomatis', '20 kirim penawaran', 'Simpan 50 buyer · 3 notifikasi'] },
+            { code: 'growth', name: 'Growth', price: 'Rp99.000', tag: '/30 hari', desc: 'Untuk eksportir yang aktif prospek.', highlight: true, feats: ['1.000 pencarian buyer', '300 profil buyer lengkap', '150 buka kontak', '100 cari kontak otomatis', '300 kirim penawaran', 'Ekspor CSV 300 baris', 'Simpan & notifikasi tanpa batas'] },
+            { code: 'business', name: 'Business', price: 'Rp299.000', tag: '/30 hari', desc: 'Untuk tim ekspor dengan banyak pasar.', feats: ['Pencarian & profil tanpa batas', '600 buka kontak', '400 cari kontak otomatis', '2.000 kirim penawaran', 'Ekspor CSV 3.000 baris', 'Intel kompetitor', 'Semua fitur Growth'] },
           ].map((p) => `
             <div class="price-card${p.highlight ? ' price-card-featured' : ''}">
-              ${p.highlight ? '<div class="price-badge">Paling Populer</div>' : ''}
+              ${p.highlight ? '<div class="price-badge">Paling populer</div>' : ''}
               <div class="price-name">${p.name}</div>
               <div class="price-desc">${p.desc}</div>
               <div class="price-amt"><b>${p.price}</b><span>${p.tag}</span></div>
@@ -850,16 +767,26 @@ route(/^\/$/, async (app) => {
               <a href="#/register" class="btn ${p.highlight ? 'btn-primary' : 'btn-neutral'}" style="width:100%;border-radius:10px;padding:12px">Coba gratis 3 hari</a>
             </div>`).join('')}
         </div>
-        <div class="price-saldo">
-          <div class="price-saldo-head">
-            <div><div class="price-name">Saldo pay-as-you-go</div>
-            <div class="price-desc">Dipakai otomatis saat kuota paket habis atau paket sudah berakhir. Saldo tidak hangus.</div></div>
-            <div class="price-saldo-topup">Isi saldo mulai <b>Rp10.000</b><span>kelipatan Rp10.000</span></div>
-          </div>
-          <div class="price-saldo-rates">
-            ${[['Pencarian buyer', 'Rp100'], ['Buka profil buyer', 'Rp300'], ['Buka kontak buyer', 'Rp1.000'], ['Cari kontak otomatis', 'Rp1.000', 'hanya jika ditemukan'], ['Kirim outreach', 'Rp200'], ['Ekspor CSV', 'Rp100', 'per baris']]
-              .map(([l, v, n]) => `<div class="price-rate"><span>${l}${n ? ` <i>(${n})</i>` : ''}</span><b>${v}</b></div>`).join('')}
-          </div>
+        <p class="lp-saldo">Kuota habis sebelum 30 hari? Lanjutkan dengan <b>saldo</b>, isi mulai Rp10.000. Anda hanya membayar yang dipakai, misalnya Rp1.000 untuk membuka satu kontak buyer.</p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="landing-section landing-section-alt" id="faq">
+      <div class="landing-section-inner lp-faq-wrap">
+        <div class="section-eyebrow">FAQ</div>
+        <h2 class="section-title">Pertanyaan yang sering diajukan</h2>
+        <div class="lp-faq">
+          ${[
+            ['Saya belum tahu HS code produk saya. Apakah bisa?', 'Bisa. Ketik nama produk dalam Bahasa Indonesia, misalnya "gula aren" atau "udang beku". EksporIn mengenali kode HS-nya otomatis dan menampilkan pilihan lain jika ada yang lebih tepat.'],
+            ['Dari mana data buyer dan kontaknya?', 'Dari sumber publik: daftar importir yang diterbitkan lembaga promosi dagang, direktori asosiasi, daftar peserta pameran, registri badan hukum, dan website resmi perusahaan. Setiap email dan telepon disertai link halaman tempat kontak itu ditemukan.'],
+            ['Apakah kontaknya dijamin dibalas?', 'Tidak ada yang bisa menjamin balasan. Yang kami jamin: kontak tidak dikarang. Kami menandai jenis email (email perusahaan atau email umum) dan memeriksa domainnya, supaya Anda tahu mana yang paling layak dihubungi lebih dulu.'],
+            ['Negara mana saja yang tersedia?', '38 negara tujuan ekspor utama, termasuk Amerika Serikat, Jerman, Belanda, Jepang, Tiongkok, Korea Selatan, Uni Emirat Arab, Arab Saudi, Inggris, Prancis, Australia, dan India. Data bertambah setiap hari.'],
+            ['Apa yang saya dapat selama trial 3 hari?', 'Kuota setara paket Hemat: 100 pencarian, 30 profil buyer, 5 buka kontak, 5 cari kontak otomatis, dan 10 kirim penawaran. Trial aktif otomatis saat Anda daftar, tanpa kartu kredit.'],
+            ['Bagaimana cara bayarnya? Apakah diperpanjang otomatis?', 'Bayar dengan QRIS dari e-wallet atau m-Banking apa saja. Paket langsung aktif setelah pembayaran berhasil dan berlaku 30 hari. Tidak ada perpanjangan otomatis; Anda memperpanjang sendiri kalau mau.'],
+            ['Apa itu saldo?', 'Saldo dipakai kalau kuota paket habis atau paket sudah berakhir, jadi Anda tidak harus langsung naik paket. Isi mulai Rp10.000, dan saldo tidak hangus.'],
+            ['Apa bedanya dengan InaExport dari Kemendag?', 'InaExport adalah etalase supaya buyer bisa menemukan Anda. EksporIn bekerja dari arah sebaliknya: Anda yang aktif mencari dan menghubungi buyer. Keduanya bisa dipakai bersamaan.'],
+          ].map(([q, a], i) => `<details class="lp-qa"${i === 0 ? ' open' : ''}><summary>${q}</summary><p>${a}</p></details>`).join('')}
         </div>
       </div>
     </section>
@@ -869,13 +796,13 @@ route(/^\/$/, async (app) => {
       <div class="landing-section-inner">
         <div class="landing-cta-inner">
           <div>
-            <h2>Siap menemukan buyer pertama Anda?</h2>
-            <p>Bergabung dengan eksportir Indonesia yang sudah pakai data resmi UN Comtrade + USITC + AI untuk menemukan buyer luar negeri dalam hitungan menit.</p>
+            <h2>Lihat siapa yang membeli produk Anda di luar negeri</h2>
+            <p>Ketik nama produk dan lihat buyer-nya sekarang, tanpa daftar. Kalau cocok, lanjutkan dengan trial 3 hari gratis.</p>
           </div>
-          <div class="landing-cta-actions">
-            <a href="#/register" class="btn btn-primary btn-lg">Coba gratis 3 hari, tanpa kartu kredit →</a>
-            <a href="#/login" class="btn btn-ghost btn-lg" style="color:#fff">Masuk</a>
-          </div>
+          <form class="lp-cta-form" id="cta-try-form" autocomplete="off">
+            <input id="cta-try-input" type="text" placeholder="Nama produk, misal: vanili" aria-label="Nama produk">
+            <button type="submit" class="btn btn-primary">Cari buyer →</button>
+          </form>
         </div>
       </div>
     </section>
@@ -886,19 +813,15 @@ route(/^\/$/, async (app) => {
         <div class="footer-grid">
           <div class="footer-col footer-brand">
             <div class="footer-logo">${LOGO_SVG}<span>EksporIn</span></div>
-            <p>Platform intelijen buyer global untuk eksportir Indonesia. Data resmi bea cukai + AI + real-time market data.</p>
-            <div class="footer-social">
-              <a href="#" aria-label="LinkedIn"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.3 6.5 1.78 1.78 0 0 1 6.5 8.25zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0 0 13 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 0 1 2.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg></a>
-              <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
-              <a href="#" aria-label="WhatsApp"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.5 14.4c-.3-.1-1.8-.9-2.1-1s-.5-.2-.7.2-.8 1-1 1.2-.4.2-.7.1c-2.1-1.1-3.5-1.9-4.9-4.3-.4-.6.4-.6 1.1-1.9.1-.2.1-.4 0-.6s-.7-1.6-.9-2.2-.5-.6-.7-.6h-.7c-.2 0-.6.1-.9.4C5 6 4.5 7 4.5 8.4c0 1.4 1 2.7 1.2 2.9s2 3.1 4.9 4.3c1.8.8 2.5.8 3.4.7.6-.1 1.8-.7 2-1.5.3-.7.3-1.4.2-1.5-.1-.2-.4-.3-.7-.4zM12 2a10 10 0 0 0-8.6 15.2L2 22l5-1.3A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 20 12a8 8 0 0 1-8 8z"/></svg></a>
-            </div>
+            <p>Cari buyer luar negeri beserta kontaknya, untuk eksportir dan UKM Indonesia.</p>
           </div>
           <div class="footer-col">
             <h4>Produk</h4>
-            <a href="#features">Fitur</a>
-            <a href="#how">Cara kerja</a>
-            <a href="#pricing">Harga</a>
-            <a href="#/register">Daftar gratis</a>
+            <a href="javascript:void(0)" onclick="document.getElementById('how')?.scrollIntoView({behavior:'smooth'})">Cara kerja</a>
+            <a href="javascript:void(0)" onclick="document.getElementById('features')?.scrollIntoView({behavior:'smooth'})">Fitur</a>
+            <a href="javascript:void(0)" onclick="document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'})">Harga</a>
+            <a href="javascript:void(0)" onclick="document.getElementById('faq')?.scrollIntoView({behavior:'smooth'})">FAQ</a>
+            <a href="#/register">Coba gratis 3 hari</a>
           </div>
           <div class="footer-col">
             <h4>Sumber Data</h4>
@@ -909,8 +832,7 @@ route(/^\/$/, async (app) => {
           <div class="footer-col">
             <h4>Kontak</h4>
             <a href="mailto:hello@eksporin.id">hello@eksporin.id</a>
-            <a href="#">WhatsApp: +62 811 0000 0000</a>
-            <a href="#">Jakarta, Indonesia</a>
+            <a href="mailto:billing@eksporin.id">billing@eksporin.id</a>
           </div>
           <div class="footer-col">
             <h4>Legal</h4>
@@ -920,7 +842,7 @@ route(/^\/$/, async (app) => {
           </div>
         </div>
         <div class="footer-bottom">
-          <p>© 2024 EksporIn. Semua data ekspor bersumber dari lembaga resmi (UN Comtrade+, USITC, WCO).</p>
+          <p>© ${new Date().getFullYear()} EksporIn. Statistik perdagangan dari UN Comtrade+, tarif dari USITC, kode HS dari WCO. Data buyer dari sumber publik yang dicantumkan di setiap profil.</p>
         </div>
       </div>
     </footer>
@@ -932,15 +854,21 @@ route(/^\/$/, async (app) => {
   // Rotate 3 hints inside the search bar placeholder every 3 seconds.
   if (heroInput) {
     const HINTS = [
-      'Tuliskan komoditas Anda misal: kopi robusta, Vanili Kering, Nilam…',
-      'Sistem kami akan otomatis mencarikan HS Code komoditas anda',
-      'Kami akan menemukan buyer untuk komoditas anda',
+      'Produk Anda, misal: biji kakao, kopi robusta, vanili…',
+      'Tidak perlu HS code, cukup nama produknya',
+      'Contoh: udang beku, minyak nilam, gula aren…',
     ];
     let idx = 0;
     const applyHint = () => { if (!heroInput.value) heroInput.setAttribute('placeholder', HINTS[idx]); };
     applyHint();
     setInterval(() => { idx = (idx + 1) % HINTS.length; applyHint(); }, 3000);
   }
+  const ctaForm = document.getElementById('cta-try-form');
+  if (ctaForm) ctaForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = (document.getElementById('cta-try-input').value || '').trim();
+    location.hash = v ? '#/quick-search?q=' + encodeURIComponent(v) : '#/register';
+  });
   if (heroForm && heroInput) {
     heroForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -960,14 +888,14 @@ route(/^\/quick-search$/, async (app, m, params) => {
       <a href="#/" class="qs-brand">${LOGO_SVG} <span>EksporIn</span></a>
       <div class="qs-nav-right">
         <a href="#/login" class="btn btn-ghost" style="height:36px;padding:6px 14px;font-size:13px">Masuk</a>
-        <a href="#/register" class="btn btn-primary" style="height:36px;padding:6px 16px;font-size:13px;border-radius:var(--radius-full)">Daftar gratis</a>
+        <a href="#/register" class="btn btn-primary" style="height:36px;padding:6px 16px;font-size:13px;border-radius:var(--radius-full)">Coba gratis 3 hari</a>
       </div>
     </div>
 
     <div class="qs-header">
       <a href="#/" class="qs-back">← Kembali ke beranda</a>
       <h1>Hasil pencarian buyer untuk "<span class="qs-query">${esc(q || '…')}</span>"</h1>
-      <p class="qs-sub">Preview buyer luar negeri yang aktif impor komoditas Anda. Kontak decision maker + data lengkap tersedia setelah daftar (gratis).</p>
+      <p class="qs-sub">Cuplikan importir dan distributor luar negeri untuk komoditas Anda. Nama lengkap, email, dan telepon terbuka setelah daftar (trial 3 hari gratis).</p>
       <form class="qs-search" id="qs-form" autocomplete="off">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="qs-input" type="text" value="${esc(q)}" placeholder="Ganti komoditas untuk cari buyer lain…">
@@ -983,7 +911,7 @@ route(/^\/quick-search$/, async (app, m, params) => {
       <div class="qs-cta-inner">
         <div>
           <h2>Butuh data buyer lebih banyak?</h2>
-          <p>Daftar gratis untuk buka semua ${'{count}'} buyer, kontak decision maker, riwayat shipment, dan data ekspor UN Comtrade untuk komoditas Anda.</p>
+          <p>Coba gratis 3 hari untuk melihat semua ${'{count}'} buyer, membuka email dan telepon mereka, dan menulis email penawaran pertama Anda.</p>
         </div>
         <a href="#/register${q ? '?utm=quick-search&q=' + encodeURIComponent(q) : ''}" class="btn btn-primary btn-lg" style="border-radius:var(--radius-full);padding:14px 32px;font-size:16px;white-space:nowrap">Daftar sekarang →</a>
       </div>
@@ -1020,6 +948,53 @@ route(/^\/quick-search$/, async (app, m, params) => {
     }
     const total = body.total_buyers_available;
     const hs = body.hs;
+    if (body.pool) {
+      const st = body.stats || {};
+      const typeId = { importer: 'Importir', distributor: 'Distributor', wholesaler: 'Grosir', manufacturer: 'Pabrik', processor: 'Pengolah', roaster: 'Roaster', trader: 'Trader', retail_chain: 'Jaringan ritel', brand: 'Brand', agent: 'Agen' };
+      const chan = (on, label) => `<span class="qs-chan ${on ? 'on' : ''}">${on ? '✓' : '–'} ${label}</span>`;
+      body_el.innerHTML = `
+      <div class="qs-hs-summary">
+        <div>
+          <span class="caption muted-3">Komoditas dikenali sebagai</span>
+          <h3><span class="hs-code-chip">HS ${hs.code.replace(/^(\d{4})/, '$1.')}</span> ${esc(hs.description)}</h3>
+        </div>
+        ${body.hs_alternatives?.length ? `
+          <div class="qs-hs-alts">
+            <span class="caption muted-3">Bukan ini? Coba:</span>
+            ${body.hs_alternatives.map((a) => `<button class="qs-hs-alt-chip" data-q="${esc(a.description.split(';')[0])}">${a.code.replace(/^(\d{4})/, '$1.')} · ${esc(a.description.slice(0, 42))}${a.description.length > 42 ? '…' : ''}</button>`).join('')}
+          </div>` : ''}
+      </div>
+      <div class="qs-stats">
+        <div><b>${fmtN(st.total)}</b><span>buyer ditemukan</span></div>
+        <div><b>${fmtN(st.with_contact)}</b><span>sudah ada email/telepon</span></div>
+        <div><b>${fmtN(st.countries)}</b><span>negara</span></div>
+        ${(st.top_countries || []).length ? `<div class="qs-stats-countries">${st.top_countries.map((c) => `<span>${flag(c.country)} ${esc(c.country_name)} <i>${c.count}</i></span>`).join('')}</div>` : ''}
+      </div>
+      <div class="qs-buyers">
+        ${body.buyers.map((b) => `
+          <article class="qs-buyer-card ${b.blurred ? 'is-blurred' : ''}">
+            <div class="qs-buyer-head">
+              <div class="qs-buyer-avatar">${b.name ? esc(b.name.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase()) : '🔒'}</div>
+              <div style="flex:1;min-width:0">
+                <div class="qs-buyer-name">${b.name ? esc(b.name) : 'Nama terbuka setelah daftar'}</div>
+                <div class="qs-buyer-meta">${flag(b.country)} ${esc(b.country_name)}${b.city ? ' · ' + esc(b.city) : ''}${b.buyer_type ? ' · ' + esc(typeId[b.buyer_type] || b.buyer_type) : ''}</div>
+              </div>
+            </div>
+            <div class="qs-chans">${chan(b.has_email, 'Email')}${chan(b.has_phone, 'Telepon')}${chan(b.has_website, 'Website')}</div>
+            <div class="qs-buyer-contact">
+              <span class="caption muted-3">Kontak</span>
+              <div class="qs-buyer-contact-masked">🔒 ${b.has_email ? '••••••@•••••' : ''}${b.has_email && b.has_phone ? ' · ' : ''}${b.has_phone ? '+•• ••• ••• ••' : ''}${!b.has_email && !b.has_phone ? 'bisa dicari otomatis dari website perusahaan' : ''}</div>
+            </div>
+          </article>`).join('')}
+      </div>
+      <div class="qs-unlock">🔒 <b>${fmtN(Math.max(0, total - 2))} buyer lain</b> dan semua kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.</div>`;
+      const cta0 = document.querySelector('.qs-cta p');
+      if (cta0) cta0.textContent = cta0.textContent.replace('{count}', fmtN(total));
+      document.querySelectorAll('.qs-hs-alt-chip').forEach((el) => el.addEventListener('click', () => {
+        location.hash = '#/quick-search?q=' + encodeURIComponent(el.dataset.q);
+      }));
+      return;
+    }
     body_el.innerHTML = `
       <div class="qs-hs-summary">
         <div>
@@ -1050,13 +1025,13 @@ route(/^\/quick-search$/, async (app, m, params) => {
               <div><span class="caption muted-3">Ukuran</span><b>${esc(b.size || '-')}</b></div>
             </div>
             <div class="qs-buyer-contact">
-              <span class="caption muted-3">Kontak decision maker</span>
+              <span class="caption muted-3">Kontak</span>
               <div class="qs-buyer-contact-masked">🔒 ••••••@•••••.com · +•• ••• ••• ••</div>
             </div>
           </article>`).join('')}
       </div>
       <div class="qs-unlock">
-        🔒 <b>${Math.max(0, total - 2)}+ buyer lain</b> beserta kontak email & LinkedIn tersedia setelah daftar (gratis, tanpa kartu kredit).
+        🔒 <b>${Math.max(0, total - 2)}+ buyer lain</b> beserta kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.
       </div>`;
 
     // Update the CTA count text

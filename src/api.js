@@ -191,18 +191,62 @@ function expandQueryToEnglish(query) {
 // Score HS codes by text overlap with the query — returns a ranked list of
 // candidate 6-digit codes. Purely offline; runs against the loaded map.
 // Understands Indonesian via HS_ID_TO_EN expansion before scoring.
+// The scraper's commodity list (config/commodities.json) names the
+// products exporters actually type ("biji kakao", "kopi", "nilam").
+// Usual export code for common Indonesian products whose name is not in
+// the WCO text (nilam = patchouli oil, gula aren = palm sugar).
+const HS6_PREFERRED = {
+  '330129': ['nilam', 'minyak nilam', 'patchouli', 'minyak atsiri', 'sereh wangi', 'cengkeh oil'],
+  '170290': ['gula aren', 'gula kelapa', 'gula semut', 'palm sugar', 'coconut sugar'],
+  '030617': ['udang', 'udang beku', 'udang vaname', 'shrimp', 'prawn'],
+  '090111': ['kopi', 'kopi robusta', 'kopi arabika', 'green coffee', 'biji kopi'],
+};
+let _commodityAliases = null;
+function commodityHs4For(query) {
+  if (!_commodityAliases) {
+    _commodityAliases = [];
+    try {
+      const cfg = require('../config/commodities.json');
+      for (const c of cfg.commodities || []) {
+        const names = [c.label_id, c.label_en, ...(c.keywords || [])].filter(Boolean)
+          .flatMap((n) => String(n).toLowerCase().split(/[\/,()&]/)).map((n) => n.replace(/\b(dll|etc)\b/g, '').trim()).filter((n) => n.length >= 3);
+        _commodityAliases.push({ hs4: c.hs4, names });
+      }
+    } catch { /* optional */ }
+  }
+  const raw = ' ' + String(query || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  const out = new Set();
+  let best = 0;
+  for (const a of _commodityAliases) {
+    for (const n of a.names) {
+      if (raw.includes(' ' + n + ' ') && n.length >= best) {
+        if (n.length > best) out.clear();
+        best = n.length; out.add(a.hs4);
+      }
+    }
+  }
+  return out;
+}
+
 function searchHsNomenclature(query, limit = 10) {
   const map = loadHsNomenclature();
   if (!map || !map.size || !query) return [];
   const expanded = expandQueryToEnglish(query);
   const q = expanded.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
   if (!q.length) return [];
+  const words = [...new Set(q)];
+  const boost = commodityHs4For(query);
   const scored = [];
   for (const entry of map.values()) {
     if (entry.level !== 6) continue; // only 6-digit codes count as "final" HS
     const desc = entry.description.toLowerCase();
+    // Ignore words that only appear in an exclusion ("not containing cocoa").
+    const positive = desc.replace(/\b(not containing|excluding|other than|without)\b[^;]*/g, ' ');
+    const head = positive.split(';')[0];
     let score = 0;
-    for (const w of q) { if (desc.includes(w)) score += w.length; }
+    for (const w of words) { if (head.includes(w)) score += 3 * w.length; else if (positive.includes(w)) score += w.length; }
+    if (boost.size && boost.has(entry.code.slice(0, 4))) score += 60;
+    if (HS6_PREFERRED[entry.code] && HS6_PREFERRED[entry.code].some((k) => (' ' + String(query).toLowerCase() + ' ').includes(' ' + k + ' '))) score += 40;
     if (score > 0) scored.push({ ...entry, score });
   }
   scored.sort((a, b) => b.score - a.score);
@@ -384,7 +428,14 @@ async function resolveUser(db, req) {
 
 // ---------- plans: defined in src/billing.js (QRIS passes + prepaid balance) ----------
 const PLANS = billing.PLANS;
-const COUNTRY_NAMES = { US: 'Amerika Serikat', JP: 'Jepang', NL: 'Belanda', AE: 'Uni Emirat Arab', AU: 'Australia', ID: 'Indonesia', VN: 'Vietnam', BR: 'Brasil', CO: 'Kolombia', IN: 'India', TH: 'Thailand', CN: 'Tiongkok', MY: 'Malaysia', EC: 'Ekuador', ET: 'Ethiopia' };
+const COUNTRY_NAMES = {
+  US: 'Amerika Serikat', JP: 'Jepang', NL: 'Belanda', AE: 'Uni Emirat Arab', AU: 'Australia', ID: 'Indonesia', VN: 'Vietnam',
+  BR: 'Brasil', CO: 'Kolombia', IN: 'India', TH: 'Thailand', CN: 'Tiongkok', MY: 'Malaysia', EC: 'Ekuador', ET: 'Ethiopia',
+  DE: 'Jerman', GB: 'Inggris', FR: 'Prancis', KR: 'Korea Selatan', SA: 'Arab Saudi', IT: 'Italia', BE: 'Belgia', ES: 'Spanyol',
+  CA: 'Kanada', SG: 'Singapura', TW: 'Taiwan', TR: 'Turki', EG: 'Mesir', CH: 'Swiss', PL: 'Polandia', SE: 'Swedia',
+  NZ: 'Selandia Baru', PH: 'Filipina', AT: 'Austria', DK: 'Denmark', IE: 'Irlandia', NO: 'Norwegia', PT: 'Portugal',
+  MX: 'Meksiko', ZA: 'Afrika Selatan', PK: 'Pakistan', BD: 'Bangladesh',
+};
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
 // ---------- helpers ----------
@@ -690,6 +741,44 @@ async function handleApi(db, req, res, url, body) {
     const hsHits = searchHsNomenclature(qStr, 5);
     if (!hsHits.length) return json(res, 200, { ok: false, query: qStr, hs: null, buyers: [], message: 'HS code tidak ditemukan.' });
     const hs4 = hsHits[0].code.slice(0, 4);
+    const hsBlock = {
+      code: hsHits[0].code, description: hsHits[0].description,
+    };
+    const alts = hsHits.slice(1, 4).map((h) => ({ code: h.code, description: h.description }));
+    // Real buyer pool (Postgres). Only names/locations/type and which
+    // contact channels exist are shown; contact values never leave the API.
+    if (require('./pg').hasPostgres()) {
+      try {
+        const pgp = require('./pg');
+        const visible = `hs_codes @> ARRAY[$1]::text[] AND COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) = false`;
+        const stats = await pgp.one(`SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS with_contact,
+              COUNT(DISTINCT country)::int AS countries
+            FROM scraped_buyers sb WHERE ${visible}`, [hs4]);
+        if (stats && stats.total > 0) {
+          const top = await pgp.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers sb WHERE ${visible}
+                                        GROUP BY country ORDER BY c DESC LIMIT 6`, [hs4]);
+          const rows = await pgp.query(`SELECT id, name, country, city, industry,
+                 COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type,
+                 (email IS NOT NULL) AS has_email, (phone IS NOT NULL) AS has_phone, (website IS NOT NULL) AS has_website,
+                 COALESCE((to_jsonb(sb)->>'quality_score')::int, data_confidence) AS q
+            FROM scraped_buyers sb WHERE ${visible}
+            ORDER BY (email IS NOT NULL OR phone IS NOT NULL) DESC, q DESC NULLS LAST, id LIMIT 5`, [hs4]);
+          return json(res, 200, {
+            ok: true, query: qStr, hs: hsBlock, hs_alternatives: alts, pool: true,
+            stats: { ...stats, top_countries: top.map((t) => ({ country: t.country, country_name: COUNTRY_NAMES[t.country] || t.country, count: t.c })) },
+            buyers: rows.map((b, i) => ({
+              id: Number(b.id), name: i < 2 ? b.name : null, country: b.country,
+              country_name: COUNTRY_NAMES[b.country] || b.country, city: b.city,
+              industry: b.industry, buyer_type: b.buyer_type,
+              has_email: b.has_email, has_phone: b.has_phone, has_website: b.has_website,
+              score: b.q, blurred: i >= 2,
+            })),
+            total_buyers_available: stats.total,
+          });
+        }
+      } catch (e) { console.warn('[preview] pool unavailable', e.message); }
+    }
     // Pull up to 5 buyers with a matching HS prefix from the seeded directory.
     const buyerRows = db.prepare(`
       SELECT b.id, b.name, b.country, b.city, b.industry, b.size_bucket,
