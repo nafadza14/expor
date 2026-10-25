@@ -133,21 +133,113 @@ def parse_ddg_html(html: str) -> list[SearchResult]:
     return out
 
 
+def parse_mojeek_html(html: str) -> list[SearchResult]:
+    soup = BeautifulSoup(html, "lxml")
+    out: list[SearchResult] = []
+    for li in soup.select("ul.results-standard li, ol.results li, .results li"):
+        a = li.select_one("a.title, h2 a, a.ob") or li.find("a", href=re.compile(r"^https?://"))
+        if not a or not a.get("href", "").startswith("http"):
+            continue
+        sn = li.select_one("p.s, .s")
+        out.append(SearchResult(_clean(a.get_text(" ")), a["href"], _clean(sn.get_text(" ")) if sn else ""))
+    return out
+
+
+def parse_bing_html(html: str) -> list[SearchResult]:
+    soup = BeautifulSoup(html, "lxml")
+    out: list[SearchResult] = []
+    for li in soup.select("li.b_algo"):
+        a = li.select_one("h2 a")
+        if not a or not a.get("href"):
+            continue
+        href = a["href"]
+        # Bing sometimes wraps results in /ck/a?...&u=a1<base64url>
+        if "bing.com/ck/a" in href:
+            m = re.search(r"[?&]u=a1([^&]+)", href)
+            if m:
+                import base64
+                try:
+                    b = m.group(1) + "=" * (-len(m.group(1)) % 4)
+                    href = base64.urlsafe_b64decode(b).decode("utf-8", "ignore")
+                except Exception:
+                    continue
+        if not href.startswith("http"):
+            continue
+        sn = li.select_one(".b_caption p, p")
+        out.append(SearchResult(_clean(a.get_text(" ")), href, _clean(sn.get_text(" ")) if sn else ""))
+    return out
+
+
 class Searcher:
+    """Keyless web search with several HTML backends.
+
+    Backends are tried in order of recent health; one that returns an
+    error / captcha / zero results three times in a row is benched for a
+    while, so a blocked engine does not slow every query. Optional
+    BRAVE_API_KEY is used first if present (never required)."""
+
+    BACKENDS = ("mojeek", "bing", "ddg", "brave_html")
+
     def __init__(self) -> None:
         self.brave_key = os.environ.get("BRAVE_API_KEY", "").strip()
-        self._brave_html_blocked_until = 0.0
         self._lock = asyncio.Lock()
         self._last = 0.0
         self.calls = 0
+        self.fails: dict[str, int] = {b: 0 for b in self.BACKENDS}
+        self.bench_until: dict[str, float] = {b: 0.0 for b in self.BACKENDS}
+        self.stats: dict[str, dict[str, int]] = {b: {"ok": 0, "empty": 0, "error": 0} for b in self.BACKENDS}
 
     async def _pace(self) -> None:
-        # Global pacing for search engines: max ~1 query / 1.5s.
         async with self._lock:
-            wait = 1.5 - (time.time() - self._last)
+            wait = 1.2 - (time.time() - self._last)
             if wait > 0:
                 await asyncio.sleep(wait)
             self._last = time.time()
+
+    # --- individual backends (client, query, n) -> list[SearchResult]
+    async def _mojeek(self, c: httpx.AsyncClient, q: str, n: int) -> list[SearchResult]:
+        r = await c.get("https://www.mojeek.com/search", params={"q": q},
+                        headers={"User-Agent": BROWSER_UA, "Accept": "text/html"})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        return parse_mojeek_html(r.text)[:n]
+
+    async def _bing(self, c: httpx.AsyncClient, q: str, n: int) -> list[SearchResult]:
+        r = await c.get("https://www.bing.com/search", params={"q": q, "count": str(n), "setlang": "en"},
+                        headers={"User-Agent": BROWSER_UA, "Accept": "text/html", "Accept-Language": "en-US,en;q=0.8"})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        return parse_bing_html(r.text)[:n]
+
+    async def _ddg(self, c: httpx.AsyncClient, q: str, n: int) -> list[SearchResult]:
+        r = await c.post("https://html.duckduckgo.com/html/", data={"q": q},
+                         headers={"User-Agent": BROWSER_UA, "Accept": "text/html"})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        return parse_ddg_html(r.text)[:n]
+
+    async def _brave_html(self, c: httpx.AsyncClient, q: str, n: int) -> list[SearchResult]:
+        r = await c.get("https://search.brave.com/search", params={"q": q, "source": "web"},
+                        headers={"User-Agent": BROWSER_UA, "Accept": "text/html"})
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}")
+        return parse_brave_html(r.text)[:n]
+
+    async def _brave_api(self, c: httpx.AsyncClient, q: str, n: int) -> list[SearchResult]:
+        r = await c.get("https://api.search.brave.com/res/v1/web/search", params={"q": q, "count": n},
+                        headers={"X-Subscription-Token": self.brave_key, "Accept": "application/json"})
+        if r.status_code != 200:
+            return []
+        items = ((r.json() or {}).get("web") or {}).get("results") or []
+        return [SearchResult(_clean(i.get("title", "")), i.get("url", ""),
+                             _clean(re.sub(r"<[^>]+>", "", i.get("description", ""))))
+                for i in items if i.get("url")][:n]
+
+    def _order(self) -> list[str]:
+        now = time.time()
+        live = [b for b in self.BACKENDS if self.bench_until[b] <= now]
+        live.sort(key=lambda b: (self.fails[b], -self.stats[b]["ok"]))
+        return live or list(self.BACKENDS)
 
     async def search(self, query: str, n: int = 8) -> list[SearchResult]:
         await self._pace()
@@ -155,45 +247,26 @@ class Searcher:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as c:
             if self.brave_key:
                 try:
-                    r = await c.get(
-                        "https://api.search.brave.com/res/v1/web/search",
-                        params={"q": query, "count": n},
-                        headers={"X-Subscription-Token": self.brave_key, "Accept": "application/json"},
-                    )
-                    if r.status_code == 200:
-                        items = ((r.json() or {}).get("web") or {}).get("results") or []
-                        res = [SearchResult(_clean(i.get("title", "")), i.get("url", ""),
-                                            _clean(re.sub(r"<[^>]+>", "", i.get("description", ""))))
-                               for i in items if i.get("url")]
-                        if res:
-                            return res[:n]
+                    res = await self._brave_api(c, query, n)
+                    if res:
+                        return res
                 except Exception:
                     pass
-            if time.time() > self._brave_html_blocked_until:
+            for name in self._order():
+                fn = getattr(self, "_" + name)
                 try:
-                    r = await c.get(
-                        "https://search.brave.com/search",
-                        params={"q": query, "source": "web"},
-                        headers={"User-Agent": BROWSER_UA, "Accept": "text/html"},
-                    )
-                    if r.status_code == 200:
-                        res = parse_brave_html(r.text)
-                        if res:
-                            return res[:n]
-                    elif r.status_code in (403, 429):
-                        self._brave_html_blocked_until = time.time() + 300
+                    res = [h for h in await fn(c, query, n) if h.url.startswith("http")]
                 except Exception:
-                    pass
-            try:
-                r = await c.post(
-                    "https://html.duckduckgo.com/html/",
-                    data={"q": query},
-                    headers={"User-Agent": BROWSER_UA, "Accept": "text/html"},
-                )
-                if r.status_code == 200:
-                    return parse_ddg_html(r.text)[:n]
-            except Exception:
-                pass
+                    res = None
+                if res:
+                    self.stats[name]["ok"] += 1
+                    self.fails[name] = 0
+                    return res
+                self.stats[name]["error" if res is None else "empty"] += 1
+                self.fails[name] += 1
+                if self.fails[name] >= 3:
+                    self.bench_until[name] = time.time() + 600
+                    self.fails[name] = 0
         return []
 
 
