@@ -16,7 +16,7 @@ async function cached(key, ttlMs, fn) {
 }
 const n = (v) => (v === null || v === undefined ? 0 : Number(v));
 const safe = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback === undefined ? { error: e.message } : fallback; } };
-const VISIBLE = "COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) = false";
+const VISIBLE = "sb.is_hidden = false";
 
 async function tableExists(name) {
   const r = await pg.one('SELECT to_regclass($1) AS t', ['public.' + name]);
@@ -26,7 +26,7 @@ async function tableExists(name) {
 // ------------------------------------------------------------------ overview
 async function overview() {
   return cached('overview', 60_000, async () => {
-    const buyers = await safe(() => pg.one(`SELECT COUNT(*)::int AS total,
+    const buyersP = safe(() => pg.one(`SELECT COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE ${VISIBLE})::int AS visible,
         COUNT(*) FILTER (WHERE ${VISIBLE} AND (email IS NOT NULL OR phone IS NOT NULL))::int AS with_contact,
         COUNT(*) FILTER (WHERE ${VISIBLE} AND email IS NOT NULL)::int AS with_email,
@@ -36,19 +36,19 @@ async function overview() {
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS new_24h,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')::int AS new_7d,
         COUNT(*) FILTER (WHERE enriched_at > NOW() - INTERVAL '24 hours')::int AS enriched_24h,
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at') IS NULL AND ${VISIBLE})::int AS enrich_queue
+        COUNT(*) FILTER (WHERE (sb.contact_checked_at) IS NULL AND ${VISIBLE})::int AS enrich_queue
       FROM scraped_buyers sb`), {});
-    const users = await safe(() => pg.one(`SELECT COUNT(*)::int AS total,
+    const usersP = safe(() => pg.one(`SELECT COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours')::int AS new_24h,
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')::int AS new_7d,
         COUNT(*) FILTER (WHERE plan_expires_at > NOW() AND plan = 'trial')::int AS trial_active,
         COUNT(*) FILTER (WHERE plan_expires_at > NOW() AND plan IN ('hemat','growth','business'))::int AS paying_active,
         COUNT(*) FILTER (WHERE plan_expires_at <= NOW())::int AS expired,
-        COUNT(*) FILTER (WHERE (to_jsonb(a)->>'last_seen_at')::timestamptz > NOW() - INTERVAL '24 hours')::int AS active_24h,
-        COUNT(*) FILTER (WHERE (to_jsonb(a)->>'last_seen_at')::timestamptz > NOW() - INTERVAL '7 days')::int AS active_7d,
+        COUNT(*) FILTER (WHERE a.last_seen_at > NOW() - INTERVAL '24 hours')::int AS active_24h,
+        COUNT(*) FILTER (WHERE a.last_seen_at > NOW() - INTERVAL '7 days')::int AS active_7d,
         COALESCE(SUM(balance_idr), 0)::bigint AS balances
       FROM billing_accounts a`), {});
-    const revenue = await safe(() => pg.one(`SELECT
+    const revenueP = safe(() => pg.one(`SELECT
         COALESCE(SUM(amount_idr) FILTER (WHERE status='paid'), 0)::bigint AS total,
         COALESCE(SUM(amount_idr) FILTER (WHERE status='paid' AND paid_at > NOW() - INTERVAL '24 hours'), 0)::bigint AS d1,
         COALESCE(SUM(amount_idr) FILTER (WHERE status='paid' AND paid_at > NOW() - INTERVAL '30 days'), 0)::bigint AS d30,
@@ -56,7 +56,7 @@ async function overview() {
         COUNT(*) FILTER (WHERE status='paid')::int AS paid_orders,
         COUNT(*) FILTER (WHERE status='pending' AND created_at > NOW() - INTERVAL '24 hours')::int AS pending_24h
       FROM billing_orders`), {});
-    const sources = await safe(async () => (await tableExists('buyer_sources'))
+    const sourcesP = safe(async () => (await tableExists('buyer_sources'))
       ? pg.one(`SELECT COUNT(*) FILTER (WHERE status='active')::int AS active, COUNT(*)::int AS total,
                        COUNT(*) FILTER (WHERE discovered_at > NOW() - INTERVAL '24 hours')::int AS new_24h,
                        COALESCE(SUM(buyers_new),0)::int AS buyers_new,
@@ -64,18 +64,24 @@ async function overview() {
                        (SELECT COUNT(*)::int FROM source_queries WHERE ran_at > NOW() - INTERVAL '24 hours') AS queries_24h
                   FROM buyer_sources`) : null, null);
     const days = 30;
-    const series = await safe(async () => {
+    const seriesP = safe(async () => {
       const rows = await pg.query(`
-        WITH d AS (SELECT generate_series(CURRENT_DATE - ($1::int - 1), CURRENT_DATE, INTERVAL '1 day')::date AS day)
-        SELECT d.day,
-          (SELECT COUNT(*) FROM scraped_buyers WHERE created_at::date = d.day)::int AS buyers,
-          (SELECT COUNT(*) FROM scraped_buyers WHERE enriched_at::date = d.day)::int AS enriched,
-          (SELECT COUNT(*) FROM billing_accounts WHERE created_at::date = d.day)::int AS signups,
-          (SELECT COALESCE(SUM(amount_idr),0) FROM billing_orders WHERE status='paid' AND paid_at::date = d.day)::bigint AS revenue
-        FROM d ORDER BY d.day`, [days]);
+        WITH d AS (SELECT generate_series(CURRENT_DATE - ($1::int - 1), CURRENT_DATE, INTERVAL '1 day')::date AS day),
+        b AS (SELECT created_at::date AS day, COUNT(*)::int AS n FROM scraped_buyers
+               WHERE created_at >= CURRENT_DATE - ($1::int - 1) GROUP BY 1),
+        e AS (SELECT enriched_at::date AS day, COUNT(*)::int AS n FROM scraped_buyers
+               WHERE enriched_at >= CURRENT_DATE - ($1::int - 1) GROUP BY 1),
+        s AS (SELECT created_at::date AS day, COUNT(*)::int AS n FROM billing_accounts
+               WHERE created_at >= CURRENT_DATE - ($1::int - 1) GROUP BY 1),
+        r AS (SELECT paid_at::date AS day, SUM(amount_idr)::bigint AS n FROM billing_orders
+               WHERE status = 'paid' AND paid_at >= CURRENT_DATE - ($1::int - 1) GROUP BY 1)
+        SELECT d.day, COALESCE(b.n, 0) AS buyers, COALESCE(e.n, 0) AS enriched, COALESCE(s.n, 0) AS signups, COALESCE(r.n, 0) AS revenue
+        FROM d LEFT JOIN b USING (day) LEFT JOIN e USING (day) LEFT JOIN s USING (day) LEFT JOIN r USING (day)
+        ORDER BY d.day`, [days]);
       return rows.map((r) => ({ day: String(r.day instanceof Date ? r.day.toISOString().slice(0, 10) : r.day).slice(0, 10),
         buyers: n(r.buyers), enriched: n(r.enriched), signups: n(r.signups), revenue: n(r.revenue) }));
     }, []);
+    const [buyers, users, revenue, sources, series] = await Promise.all([buyersP, usersP, revenueP, sourcesP, seriesP]);
     return { at: new Date().toISOString(), buyers, users, revenue, sources, series };
   });
 }
@@ -83,7 +89,7 @@ async function overview() {
 // ------------------------------------------------------------------ buyers
 async function buyers() {
   return cached('buyers', 120_000, async () => {
-    const bySource = await safe(() => pg.query(`SELECT source, COUNT(*)::int AS total,
+    const bySourceP = safe(() => pg.query(`SELECT source, COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE ${VISIBLE})::int AS visible,
         COUNT(*) FILTER (WHERE ${VISIBLE} AND (email IS NOT NULL OR phone IS NOT NULL))::int AS contact,
         COUNT(*) FILTER (WHERE email IS NOT NULL)::int AS email,
@@ -92,28 +98,29 @@ async function buyers() {
         COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days')::int AS new_7d,
         MAX(updated_at) AS last_update
       FROM scraped_buyers sb GROUP BY source ORDER BY total DESC`), []);
-    const byCountry = await safe(() => pg.query(`SELECT country, COUNT(*)::int AS total,
+    const byCountryP = safe(() => pg.query(`SELECT country, COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS contact
       FROM scraped_buyers sb WHERE ${VISIBLE} GROUP BY country ORDER BY total DESC LIMIT 60`), []);
-    const byHs = await safe(() => pg.query(`SELECT h AS hs4, COUNT(*)::int AS total,
+    const byHsP = safe(() => pg.query(`SELECT h AS hs4, COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS contact
       FROM scraped_buyers sb, UNNEST(hs_codes) h WHERE ${VISIBLE} GROUP BY h ORDER BY total DESC`), []);
-    const hidden = await safe(() => pg.query(`SELECT COALESCE(to_jsonb(sb)->>'hidden_reason', '(none)') AS reason, COUNT(*)::int AS n
+    const hiddenP = safe(() => pg.query(`SELECT COALESCE(sb.hidden_reason, '(none)') AS reason, COUNT(*)::int AS n
       FROM scraped_buyers sb WHERE NOT (${VISIBLE}) GROUP BY 1 ORDER BY 2 DESC`), []);
-    const quality = await safe(() => pg.query(`SELECT LEAST(9, COALESCE((to_jsonb(sb)->>'quality_score')::int, 0) / 10) AS bucket, COUNT(*)::int AS n
+    const qualityP = safe(() => pg.query(`SELECT LEAST(9, COALESCE(sb.quality_score, 0) / 10) AS bucket, COUNT(*)::int AS n
       FROM scraped_buyers sb WHERE ${VISIBLE} GROUP BY 1 ORDER BY 1`), []);
-    const funnel = await safe(() => pg.one(`SELECT
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at') IS NULL)::int AS never_checked,
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at') IS NOT NULL)::int AS checked,
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at') IS NOT NULL AND website IS NOT NULL)::int AS checked_site,
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at') IS NOT NULL AND email IS NOT NULL)::int AS checked_email,
-        COUNT(*) FILTER (WHERE (to_jsonb(sb)->>'contact_checked_at')::timestamptz > NOW() - INTERVAL '24 hours')::int AS checked_24h,
+    const funnelP = safe(() => pg.one(`SELECT
+        COUNT(*) FILTER (WHERE (sb.contact_checked_at) IS NULL)::int AS never_checked,
+        COUNT(*) FILTER (WHERE (sb.contact_checked_at) IS NOT NULL)::int AS checked,
+        COUNT(*) FILTER (WHERE (sb.contact_checked_at) IS NOT NULL AND website IS NOT NULL)::int AS checked_site,
+        COUNT(*) FILTER (WHERE (sb.contact_checked_at) IS NOT NULL AND email IS NOT NULL)::int AS checked_email,
+        COUNT(*) FILTER (WHERE sb.contact_checked_at > NOW() - INTERVAL '24 hours')::int AS checked_24h,
         COUNT(*) FILTER (WHERE enriched_at > NOW() - INTERVAL '24 hours')::int AS found_24h
       FROM scraped_buyers sb`), {});
-    const emailStatus = await safe(() => pg.query(`SELECT COALESCE(to_jsonb(sb)->>'email_status', 'unknown') AS status, COUNT(*)::int AS n
+    const emailStatusP = safe(() => pg.query(`SELECT COALESCE(sb.email_status, 'unknown') AS status, COUNT(*)::int AS n
       FROM scraped_buyers sb WHERE email IS NOT NULL GROUP BY 1 ORDER BY 2 DESC`), []);
-    const buyerType = await safe(() => pg.query(`SELECT COALESCE(to_jsonb(sb)->>'buyer_type', '(unknown)') AS type, COUNT(*)::int AS n
+    const buyerTypeP = safe(() => pg.query(`SELECT COALESCE(sb.buyer_type, '(unknown)') AS type, COUNT(*)::int AS n
       FROM scraped_buyers sb WHERE ${VISIBLE} GROUP BY 1 ORDER BY 2 DESC LIMIT 15`), []);
+    const [bySource, byCountry, byHs, hidden, quality, funnel, emailStatus, buyerType] = await Promise.all([bySourceP, byCountryP, byHsP, hiddenP, qualityP, funnelP, emailStatusP, buyerTypeP]);
     return { bySource, byCountry, byHs, hidden, quality, funnel, emailStatus, buyerType };
   });
 }
@@ -129,14 +136,14 @@ async function buyerList(q) {
   if (q.get('hidden') === '1') conds.push(`NOT (${VISIBLE})`);
   if (q.get('hidden') === '0') conds.push(VISIBLE);
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const sort = { recent: 'created_at DESC', updated: 'updated_at DESC', quality: "COALESCE((to_jsonb(sb)->>'quality_score')::int,0) DESC" }[q.get('sort')] || 'created_at DESC';
+  const sort = { recent: 'created_at DESC', updated: 'updated_at DESC', quality: "COALESCE(sb.quality_score,0) DESC" }[q.get('sort')] || 'created_at DESC';
   const page = Math.max(1, Number(q.get('page')) || 1);
   const per = 50;
   const total = await pg.one(`SELECT COUNT(*)::int AS c FROM scraped_buyers sb ${where}`, params);
   const rows = await pg.query(`SELECT id, source, name, country, city, website, email, phone, hs_codes, industry,
-      to_jsonb(sb)->>'buyer_type' AS buyer_type, to_jsonb(sb)->>'email_status' AS email_status,
-      (to_jsonb(sb)->>'quality_score')::int AS quality, COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) AS hidden,
-      to_jsonb(sb)->>'hidden_reason' AS hidden_reason, to_jsonb(sb)->>'evidence_url' AS evidence_url,
+      sb.buyer_type AS buyer_type, sb.email_status AS email_status,
+      sb.quality_score AS quality, sb.is_hidden AS hidden,
+      sb.hidden_reason AS hidden_reason, sb.evidence_url AS evidence_url,
       sources_seen, created_at, updated_at, enriched_at
     FROM scraped_buyers sb ${where} ORDER BY ${sort} LIMIT ${per} OFFSET ${(page - 1) * per}`, params);
   return { total: total.c, page, per, rows };
@@ -193,14 +200,14 @@ async function pipelines() {
 async function users(q) {
   const params = [];
   let where = '';
-  if (q.get('q')) { params.push('%' + q.get('q').toLowerCase() + '%'); where = `WHERE a.email ILIKE $1 OR COALESCE(to_jsonb(a)->>'name','') ILIKE $1 OR COALESCE(to_jsonb(a)->>'org_name','') ILIKE $1`; }
+  if (q.get('q')) { params.push('%' + q.get('q').toLowerCase() + '%'); where = `WHERE a.email ILIKE $1 OR COALESCE(a.name,'') ILIKE $1 OR COALESCE(a.org_name,'') ILIKE $1`; }
   const filter = q.get('plan');
   if (filter) {
     const cond = filter === 'expired' ? 'a.plan_expires_at <= NOW()' : `a.plan = '${filter.replace(/[^a-z]/g, '')}' AND a.plan_expires_at > NOW()`;
     where = where ? `${where} AND (${cond})` : `WHERE ${cond}`;
   }
-  const rows = await pg.query(`SELECT a.email, to_jsonb(a)->>'name' AS name, to_jsonb(a)->>'org_name' AS org_name,
-      a.plan, a.plan_expires_at, a.balance_idr, a.created_at, (to_jsonb(a)->>'last_seen_at')::timestamptz AS last_seen_at,
+  const rows = await pg.query(`SELECT a.email, a.name AS name, a.org_name AS org_name,
+      a.plan, a.plan_expires_at, a.balance_idr, a.created_at, a.last_seen_at AS last_seen_at,
       CASE WHEN a.plan_expires_at > NOW() THEN a.plan ELSE 'expired' END AS effective_plan,
       (SELECT COALESCE(SUM(amount_idr),0) FROM billing_orders o WHERE o.email = a.email AND o.status='paid')::bigint AS paid_total,
       (SELECT COUNT(*) FROM billing_unlocks u WHERE u.email = a.email AND u.kind='contact')::int AS contacts_opened,

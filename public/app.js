@@ -142,7 +142,7 @@ async function rawFetch(path, opts) {
   }
   // Abort after 12s so a stuck serverless function can never freeze the UI.
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), opts.timeout || 12000);
+  const t = setTimeout(() => ac.abort(), opts.timeout || (String(path).startsWith('/api/admin/v2/') ? 55000 : 12000));
   try {
     return await fetch(path, { credentials: 'same-origin', ...opts, headers, signal: ac.signal, body: opts.body ? JSON.stringify(opts.body) : undefined });
   } finally { clearTimeout(t); }
@@ -496,6 +496,31 @@ async function refreshMe() {
 }
 
 // ================= landing =================
+// Line icons for the landing page (24px grid, stroke follows currentColor).
+const LPI = (() => {
+  const sv = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+  const P = (...d) => d.map((x) => `<path d="${x}"/>`).join('');
+  return {
+    check: sv(P('M20 6 9 17l-5-5')),
+    search: sv('<circle cx="11" cy="11" r="7"/>' + P('m20 20-3.5-3.5')),
+    card: sv('<rect x="2" y="5" width="20" height="14" rx="2"/>' + P('M2 10h20', 'M6 15h4')),
+    booth: sv(P('M4 10v10h16V10', 'M2.5 10 4 4h16l1.5 6', 'M2.5 10a2.4 2.4 0 0 0 4.8 0 2.4 2.4 0 0 0 4.7 0 2.4 2.4 0 0 0 4.7 0 2.4 2.4 0 0 0 4.8 0', 'M10 20v-5h4v5')),
+    sparkles: sv(P('M12 3l1.8 4.9L18.7 9.7l-4.9 1.8L12 16.4l-1.8-4.9L5.3 9.7l4.9-1.8z', 'M19 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z', 'M5 3.5v3', 'M3.5 5h3')),
+    chart: sv(P('M3 3v18h18', 'M8 16v-4', 'M13 16V8', 'M18 16v-7')),
+    percent: sv(P('M19 5 5 19') + '<circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>'),
+    scan: sv(P('M3 7V5a2 2 0 0 1 2-2h2', 'M17 3h2a2 2 0 0 1 2 2v2', 'M21 17v2a2 2 0 0 1-2 2h-2', 'M7 21H5a2 2 0 0 1-2-2v-2', 'm16 16-2.2-2.2') + '<circle cx="11.5" cy="11.5" r="3.2"/>'),
+    lang: sv(P('m5 8 6 6', 'm4 14 6-6 2-3', 'M2 5h12', 'M7 2h1', 'm22 22-5-10-5 10', 'M14 18h6')),
+    bell: sv(P('M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0')),
+    mail: sv('<rect x="2" y="4" width="20" height="16" rx="2"/>' + P('m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7')),
+    phone: sv(P('M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z')),
+    globe: sv('<circle cx="12" cy="12" r="10"/>' + P('M2 12h20', 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z')),
+    sprout: sv(P('M7 20h10', 'M10 20c5.5-2.5.8-6.4 3-10', 'M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z', 'M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z')),
+    map: sv(P('M14.1 5.55a2 2 0 0 0 1.79 0l3.66-1.83A1 1 0 0 1 21 4.62v12.76a1 1 0 0 1-.55.9l-4.56 2.27a2 2 0 0 1-1.79 0L9.9 18.45a2 2 0 0 0-1.79 0l-3.66 1.83A1 1 0 0 1 3 19.38V6.62a1 1 0 0 1 .55-.9l4.56-2.27a2 2 0 0 1 1.79 0z', 'M15 5.76v15', 'M9 3.24v15')),
+    users: sv(P('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75') + '<circle cx="9" cy="7" r="4"/>'),
+    lock: sv('<rect x="4" y="11" width="16" height="10" rx="2"/>' + P('M8 11V7a4 4 0 0 1 8 0v4')),
+  };
+})();
+
 route(/^\/$/, async (app) => {
   // Always render the landing page on `/`. Do NOT auto-redirect logged-in users
   // — a stale session without onboarding would bounce them to the onboarding wizard
@@ -563,7 +588,7 @@ route(/^\/$/, async (app) => {
             </div>
           </div>
           <ul class="lp-trust">
-            <li>✓ Trial 3 hari gratis</li><li>✓ Tanpa kartu kredit</li><li>✓ Tidak perlu tahu HS code</li><li>✓ Mulai Rp14.000/30 hari</li>
+            ${['Trial 3 hari gratis', 'Tanpa kartu kredit', 'Tidak perlu tahu HS code', 'Mulai Rp14.000/30 hari'].map((x) => `<li>${LPI.check}${x}</li>`).join('')}
           </ul>
         </div>
 
@@ -587,7 +612,7 @@ route(/^\/$/, async (app) => {
                       <div class="lp-row-meta">${r.type} · ${r.loc}</div>
                     </div>
                     <div class="lp-row-ch">
-                      <span class="${r.e ? 'on' : ''}">✉ Email</span><span class="${r.p ? 'on' : ''}">☎ Telepon</span><span class="${r.w ? 'on' : ''}">🌐 Web</span>
+                      <span class="${r.e ? 'on' : ''}">${LPI.mail}Email</span><span class="${r.p ? 'on' : ''}">${LPI.phone}Telepon</span><span class="${r.w ? 'on' : ''}">${LPI.globe}Web</span>
                     </div>
                     <div class="lp-row-score"><b>${r.s}</b><small>skor</small></div>
                     <div class="lp-row-btn">Buka kontak</div>
@@ -608,9 +633,9 @@ route(/^\/$/, async (app) => {
         <p class="section-lead">Kebanyakan eksportir pemula terjebak di tiga cara ini. Semuanya bisa jalan, tapi mahal di waktu atau biaya.</p>
         <div class="lp-pain-grid">
           ${[
-            { ic: '🔎', t: 'Googling dan LinkedIn', d: 'Hasilnya campur aduk: toko ritel, blog, kompetitor. Butuh berminggu-minggu untuk dapat segelintir importir yang benar-benar membeli produk Anda.' },
-            { ic: '💳', t: 'Platform data impor global', d: 'Datanya lengkap, tapi paket termurah sekitar US$199 per bulan (±Rp3,5 juta), berbahasa Inggris, dan kontak buyer sering dijual terpisah.' },
-            { ic: '✈️', t: 'Pameran dagang', d: 'Bagus untuk bertemu langsung, tapi booth, tiket, dan hotel bisa menghabiskan puluhan juta rupiah untuk sekali acara.' },
+            { ic: LPI.search, t: 'Googling dan LinkedIn', d: 'Hasilnya campur aduk: toko ritel, blog, kompetitor. Butuh berminggu-minggu untuk dapat segelintir importir yang benar-benar membeli produk Anda.' },
+            { ic: LPI.card, t: 'Platform data impor global', d: 'Datanya lengkap, tapi paket termurah sekitar US$199 per bulan (±Rp3,5 juta), berbahasa Inggris, dan kontak buyer sering dijual terpisah.' },
+            { ic: LPI.booth, t: 'Pameran dagang', d: 'Bagus untuk bertemu langsung, tapi booth, tiket, dan hotel bisa menghabiskan puluhan juta rupiah untuk sekali acara.' },
           ].map((p) => `
             <div class="lp-pain"><div class="lp-pain-ic">${p.ic}</div><h3>${p.t}</h3><p>${p.d}</p></div>`).join('')}
         </div>
@@ -632,7 +657,7 @@ route(/^\/$/, async (app) => {
           ${[
             { n: '1', t: 'Ketik produk Anda', d: 'Tulis seperti biasa: "kopi robusta", "gula aren", "rotan". EksporIn otomatis mengenali kode HS yang dipakai bea cukai di seluruh dunia.', demo: '<div class="lp-demo-in">gula aren</div><div class="lp-demo-arrow">↓</div><div class="lp-demo-out"><b>HS 1702.90</b> Gula lainnya</div>' },
             { n: '2', t: 'Pilih buyer yang cocok', d: 'Lihat importir, distributor, dan pabrik pengolah yang membeli produk itu. Saring per negara, jenis usaha, atau hanya yang sudah ada kontaknya.', demo: '<div class="lp-demo-list"><span>🇩🇪 Importir · Hamburg</span><span>🇳🇱 Distributor · Rotterdam</span><span>🇯🇵 Pabrik · Osaka</span></div>' },
-            { n: '3', t: 'Hubungi langsung', d: 'Buka email dan telepon buyer, lalu kirim penawaran dengan template siap pakai dalam 5 bahasa. Status terkirim dan dibalas tercatat di dashboard.', demo: '<div class="lp-demo-mail"><span class="lp-demo-to">✉ purchasing@…</span><span>Subject: Indonesian palm sugar supplier</span><span class="lp-demo-langs">EN · ES · AR · ZH · JA</span></div>' },
+            { n: '3', t: 'Hubungi langsung', d: 'Buka email dan telepon buyer, lalu kirim penawaran dengan template siap pakai dalam 5 bahasa. Status terkirim dan dibalas tercatat di dashboard.', demo: '<div class="lp-demo-mail"><span class="lp-demo-to">' + LPI.mail + 'purchasing@…</span><span>Subject: Indonesian palm sugar supplier</span><span class="lp-demo-langs">EN · ES · AR · ZH · JA</span></div>' },
           ].map((s) => `
             <div class="lp-step">
               <div class="lp-step-n">${s.n}</div>
@@ -671,9 +696,9 @@ route(/^\/$/, async (app) => {
           </div>
           <div class="lp-profile-sec">
             <div class="lp-profile-lbl">Kontak</div>
-            <div class="lp-contact"><span>🌐</span><div><b>contoh-importir.de</b><small>Website resmi</small></div></div>
-            <div class="lp-contact"><span>✉</span><div><b>einkauf@contoh-importir.de</b><small>Email perusahaan · sumber: contoh-importir.de/kontakt</small></div></div>
-            <div class="lp-contact"><span>☎</span><div><b>+49 40 •••• ••••</b><small>Sumber: halaman Impressum</small></div></div>
+            <div class="lp-contact"><span>${LPI.globe}</span><div><b>contoh-importir.de</b><small>Website resmi</small></div></div>
+            <div class="lp-contact"><span>${LPI.mail}</span><div><b>einkauf@contoh-importir.de</b><small>Email perusahaan · sumber: contoh-importir.de/kontakt</small></div></div>
+            <div class="lp-contact"><span>${LPI.phone}</span><div><b>+49 40 •••• ••••</b><small>Sumber: halaman Impressum</small></div></div>
           </div>
           <div class="lp-profile-actions"><span class="lp-btn-o">Simpan ke daftar</span><span class="lp-btn-f">Kirim penawaran</span></div>
           <div class="lp-profile-cap">Ilustrasi profil buyer</div>
@@ -689,12 +714,12 @@ route(/^\/$/, async (app) => {
         <p class="section-lead">Dari riset pasar sampai menindaklanjuti balasan buyer, tanpa pindah-pindah aplikasi.</p>
         <div class="lp-feat-grid">
           ${[
-            { ic: '✨', t: 'AI Find Buyer', d: 'Ceritakan produk dan target pasar Anda, AI menyusun daftar buyer yang paling cocok beserta alasannya.' },
-            { ic: '📦', t: 'Direktori HS & data pasar', d: 'Lihat negara mana yang paling banyak mengimpor produk Anda, dari statistik resmi UN Comtrade.' },
-            { ic: '🇺🇸', t: 'Tarif bea masuk Amerika', d: 'Cek tarif impor AS (USITC) sebelum mengirim penawaran harga, supaya harga FOB Anda tetap bersaing.' },
-            { ic: '🔍', t: 'Cari kontak otomatis', d: 'Untuk buyer yang belum ada emailnya, sistem membaca website resminya dan menyimpan kontak yang ditemukan.' },
-            { ic: '✉️', t: 'Template penawaran 5 bahasa', d: 'Inggris, Spanyol, Arab, Mandarin, dan Jepang, dengan nama buyer dan produk terisi otomatis.' },
-            { ic: '📋', t: 'Daftar & notifikasi', d: 'Simpan buyer ke daftar, tandai status (dihubungi, negosiasi, deal), dan dapat notifikasi saat ada buyer baru.' },
+            { ic: LPI.sparkles, t: 'AI Find Buyer', d: 'Ceritakan produk dan target pasar Anda, AI menyusun daftar buyer yang paling cocok beserta alasannya.' },
+            { ic: LPI.chart, t: 'Direktori HS & data pasar', d: 'Lihat negara mana yang paling banyak mengimpor produk Anda, dari statistik resmi UN Comtrade.' },
+            { ic: LPI.percent, t: 'Tarif bea masuk Amerika', d: 'Cek tarif impor AS (USITC) sebelum mengirim penawaran harga, supaya harga FOB Anda tetap bersaing.' },
+            { ic: LPI.scan, t: 'Cari kontak otomatis', d: 'Untuk buyer yang belum ada emailnya, sistem membaca website resminya dan menyimpan kontak yang ditemukan.' },
+            { ic: LPI.lang, t: 'Template penawaran 5 bahasa', d: 'Inggris, Spanyol, Arab, Mandarin, dan Jepang, dengan nama buyer dan produk terisi otomatis.' },
+            { ic: LPI.bell, t: 'Daftar & notifikasi', d: 'Simpan buyer ke daftar, tandai status (dihubungi, negosiasi, deal), dan dapat notifikasi saat ada buyer baru.' },
           ].map((f) => `<div class="lp-feat"><div class="lp-feat-ic">${f.ic}</div><h3>${f.t}</h3><p>${f.d}</p></div>`).join('')}
         </div>
       </div>
@@ -733,10 +758,10 @@ route(/^\/$/, async (app) => {
         <h2 class="section-title" style="margin-bottom:28px">Cocok untuk Anda yang…</h2>
         <div class="lp-who">
           ${[
-            { t: 'Baru mau mulai ekspor', d: 'Sudah punya produk dan kapasitas, tapi belum punya satu pun buyer luar negeri.' },
-            { t: 'Sudah ekspor, cari pasar baru', d: 'Ingin menambah buyer di negara lain supaya tidak bergantung pada satu-dua pembeli.' },
-            { t: 'Trader, agen, dan koperasi', d: 'Mencarikan pembeli untuk produk petani atau pengrajin binaan Anda.' },
-          ].map((w) => `<div class="lp-who-card"><h3>${w.t}</h3><p>${w.d}</p></div>`).join('')}
+            { ic: LPI.sprout, t: 'Baru mau mulai ekspor', d: 'Sudah punya produk dan kapasitas, tapi belum punya satu pun buyer luar negeri.' },
+            { ic: LPI.map, t: 'Sudah ekspor, cari pasar baru', d: 'Ingin menambah buyer di negara lain supaya tidak bergantung pada satu-dua pembeli.' },
+            { ic: LPI.users, t: 'Trader, agen, dan koperasi', d: 'Mencarikan pembeli untuk produk petani atau pengrajin binaan Anda.' },
+          ].map((w) => `<div class="lp-who-card"><div class="lp-who-ic">${w.ic}</div><h3>${w.t}</h3><p>${w.d}</p></div>`).join('')}
         </div>
         <div class="lp-sources">
           <div class="lp-sources-title">Data kami berasal dari sumber publik yang bisa dicek</div>
@@ -975,7 +1000,7 @@ route(/^\/quick-search$/, async (app, m, params) => {
         ${body.buyers.map((b) => `
           <article class="qs-buyer-card ${b.blurred ? 'is-blurred' : ''}">
             <div class="qs-buyer-head">
-              <div class="qs-buyer-avatar">${b.name ? esc(b.name.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase()) : '🔒'}</div>
+              <div class="qs-buyer-avatar">${b.name ? esc(b.name.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase()) : LPI.lock}</div>
               <div style="flex:1;min-width:0">
                 <div class="qs-buyer-name">${b.name ? esc(b.name) : 'Nama terbuka setelah daftar'}</div>
                 <div class="qs-buyer-meta">${flag(b.country)} ${esc(b.country_name)}${b.city ? ' · ' + esc(b.city) : ''}${b.buyer_type ? ' · ' + esc(typeId[b.buyer_type] || b.buyer_type) : ''}</div>
@@ -984,11 +1009,11 @@ route(/^\/quick-search$/, async (app, m, params) => {
             <div class="qs-chans">${chan(b.has_email, 'Email')}${chan(b.has_phone, 'Telepon')}${chan(b.has_website, 'Website')}</div>
             <div class="qs-buyer-contact">
               <span class="caption muted-3">Kontak</span>
-              <div class="qs-buyer-contact-masked">🔒 ${b.has_email ? '••••••@•••••' : ''}${b.has_email && b.has_phone ? ' · ' : ''}${b.has_phone ? '+•• ••• ••• ••' : ''}${!b.has_email && !b.has_phone ? 'bisa dicari otomatis dari website perusahaan' : ''}</div>
+              <div class="qs-buyer-contact-masked">${LPI.lock} ${b.has_email ? '••••••@•••••' : ''}${b.has_email && b.has_phone ? ' · ' : ''}${b.has_phone ? '+•• ••• ••• ••' : ''}${!b.has_email && !b.has_phone ? 'bisa dicari otomatis dari website perusahaan' : ''}</div>
             </div>
           </article>`).join('')}
       </div>
-      <div class="qs-unlock">🔒 <b>${fmtN(Math.max(0, total - 2))} buyer lain</b> dan semua kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.</div>`;
+      <div class="qs-unlock">${LPI.lock} <b>${fmtN(Math.max(0, total - 2))} buyer lain</b> dan semua kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.</div>`;
       const cta0 = document.querySelector('.qs-cta p');
       if (cta0) cta0.textContent = cta0.textContent.replace('{count}', fmtN(total));
       document.querySelectorAll('.qs-hs-alt-chip').forEach((el) => el.addEventListener('click', () => {
@@ -1027,12 +1052,12 @@ route(/^\/quick-search$/, async (app, m, params) => {
             </div>
             <div class="qs-buyer-contact">
               <span class="caption muted-3">Kontak</span>
-              <div class="qs-buyer-contact-masked">🔒 ••••••@•••••.com · +•• ••• ••• ••</div>
+              <div class="qs-buyer-contact-masked">${LPI.lock} ••••••@•••••.com · +•• ••• ••• ••</div>
             </div>
           </article>`).join('')}
       </div>
       <div class="qs-unlock">
-        🔒 <b>${Math.max(0, total - 2)}+ buyer lain</b> beserta kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.
+        ${LPI.lock} <b>${Math.max(0, total - 2)}+ buyer lain</b> beserta kontaknya bisa Anda lihat dengan trial gratis 3 hari, tanpa kartu kredit.
       </div>`;
 
     // Update the CTA count text
@@ -3239,7 +3264,7 @@ route(/^\/admin$/, async (app, m, params) => {
   }
   if (!ME.is_admin) {
     app.innerHTML = `<div class="admin-login-page"><div class="admin-login-card" style="text-align:center">
-      <div class="admin-login-logo" style="margin:0 auto 16px">${I.lock || '🔒'}</div>
+      <div class="admin-login-logo" style="margin:0 auto 16px">${I.lock || LPI.lock}</div>
       <h2 class="admin-login-h">Akses ditolak</h2>
       <p class="admin-login-sub">Akun kamu bukan super admin.</p>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:16px">
