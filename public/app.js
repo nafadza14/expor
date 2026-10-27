@@ -103,6 +103,9 @@ function arcGauge(value, { color = '#ef4d23', showLabels = false, min = '', max 
 
 // state
 let ME = null;
+// Set instead of clearing ME after login/payment, so a route that is still
+// rendering never sees ME turn null; requireMe() refetches when stale.
+let ME_STALE = false;
 
 // ================= API =================
 // Re-sync the Supabase session into a local backend cookie. Used both at boot
@@ -455,14 +458,18 @@ function syncBilling() {
 }
 
 async function requireMe() {
-  if (!ME) {
+  if (!ME || ME_STALE) {
+    ME_STALE = false;
+    // Fetch into a local first: ME is never null while another route renders.
     // Prefer direct Supabase read (fast, bypasses Vercel serverless cold start).
-    ME = await loadMeFromSupabase();
-    if (!ME) {
+    let fresh = await loadMeFromSupabase();
+    if (!fresh) {
       // Fallback for demo account (lives only in local backend).
-      try { ME = await api('/api/me'); }
+      try { fresh = await api('/api/me'); }
       catch { location.hash = '#/login'; throw { handled: true }; }
     }
+    if (!fresh) { location.hash = '#/login'; throw { handled: true }; }
+    ME = fresh;
   }
   // Preserve optimistic onboarded=true when a save is still pending, OR when
   // the user completed onboarding in a previous session (sticky flag).
@@ -480,6 +487,7 @@ async function refreshMe() {
     // Prefer Supabase-direct read (skips slow Vercel serverless).
     let fresh = await loadMeFromSupabase();
     if (!fresh) fresh = await api('/api/me');
+    if (!fresh || !fresh.email) return;
     // Never revert an onboarded-in-this-tab user back to onboarded=false just
     // because the backend save hasn't caught up.
     if (((prev && prev.onboarded) || isStickyOnboarded()) && !fresh.onboarded) fresh.onboarded = true;
@@ -525,8 +533,15 @@ route(/^\/$/, async (app) => {
   // Always render the landing page on `/`. Do NOT auto-redirect logged-in users
   // — a stale session without onboarding would bounce them to the onboarding wizard
   // and hide the homepage. Users click Masuk or the dashboard link in the nav explicitly.
-  let loggedIn = false;
-  try { ME = await api('/api/me'); loggedIn = !!ME; } catch { /* not logged in — expected */ }
+  const loggedIn = !!(ME && ME.email);
+  // Do not block the first paint on a serverless round trip: render now, then
+  // show the dashboard link if a session turns out to exist.
+  api('/api/me').then((me) => {
+    if (!me || !me.email) return;
+    ME = ME || me;
+    const el = document.getElementById('lp-dash-link');
+    if (el) el.innerHTML = '<a href="#/dashboard">Buka Dashboard</a>';
+  }).catch(() => { /* not logged in, expected */ });
   const FLOWER = `<svg class="flower-logo" viewBox="44 44 168 168" aria-hidden="true"><path fill="#ef4d23" d="M111.51 127.51A43.77 43.77 0 0 1 54.95 70.95A43.77 43.77 0 0 1 111.51 127.51ZM111.51 144.49A43.77 43.77 0 0 1 54.95 201.05A43.77 43.77 0 0 1 111.51 144.49ZM128.49 144.49A43.77 43.77 0 0 1 185.05 201.05A43.77 43.77 0 0 1 128.49 144.49ZM146.87 109.13A43.77 43.77 0 0 1 203.44 52.56A43.77 43.77 0 0 1 146.87 109.13Z"/></svg>`;
   const CHEVRON_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   const CHEVRON_RIGHT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
@@ -562,7 +577,7 @@ route(/^\/$/, async (app) => {
               ${[['how', 'Cara kerja'], ['contoh', 'Contoh hasil'], ['pricing', 'Harga'], ['faq', 'FAQ']].map(([id, l]) => `<a href="javascript:void(0)" onclick="document.getElementById('${id}')?.scrollIntoView({behavior:'smooth'});document.getElementById('pillMenuPanel').classList.remove('open')">${l}</a>`).join('')}
               <a href="#/login">Masuk</a>
               <a href="#/register">Coba gratis 3 hari</a>
-              ${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : ''}
+              <span id="lp-dash-link">${loggedIn ? '<a href="#/dashboard">Buka Dashboard</a>' : ''}</span>
             </div>
           </div>
         </div>
@@ -1115,7 +1130,7 @@ route(/^\/login$/, (app) => {
       // Local-only accounts skip the Supabase round-trip.
       if (isDemo || LOCAL_ONLY_ACCOUNTS.has(email)) {
         const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
-        ME = null;
+        ME_STALE = true;
         if (r.admin_token) { try { localStorage.setItem('eksporin_admin_token', r.admin_token); } catch {} }
         // Fetch /api/me to check is_admin, then route accordingly.
         let isAdmin = false;
@@ -1146,12 +1161,12 @@ route(/^\/login$/, (app) => {
         // Fetch /api/me to determine onboarded state (uses Bearer token)
         let onboarded = false;
         try { const me = await api('/api/me'); onboarded = !!me.onboarded; } catch {}
-        ME = null; location.hash = onboarded ? '#/dashboard' : '#/onboarding';
+        ME_STALE = true; location.hash = onboarded ? '#/dashboard' : '#/onboarding';
         return;
       }
       // Fallback (Supabase SDK failed to load) — local backend
       const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
-      ME = null; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
+      ME_STALE = true; location.hash = r.onboarded ? '#/dashboard' : '#/onboarding';
     } catch (err) { toast(err.data?.error || err.message || 'Gagal masuk', true); }
   });
 });
@@ -1177,7 +1192,7 @@ route(/^\/register$/, (app) => {
       if (!window.sb) {
         // Fallback (Supabase SDK failed to load) — local backend only.
         await api('/api/auth/register', { method: 'POST', body: { email, password, name, org_name } });
-        ME = null; location.hash = '#/onboarding';
+        ME_STALE = true; location.hash = '#/onboarding';
         return;
       }
       // Supabase signUp — this is the primary path.
@@ -1212,7 +1227,7 @@ route(/^\/register$/, (app) => {
       try {
         await api('/api/auth/supabase-sync', { method: 'POST', body: { access_token: data.session.access_token } });
       } catch (syncErr) { console.warn('[eksporin] sync warn:', syncErr); }
-      ME = null;
+      ME_STALE = true;
       toast('Akun berhasil dibuat! Yuk lengkapi profil.', false);
       location.hash = '#/onboarding';
     } catch (err) {
@@ -1381,10 +1396,12 @@ const FALLBACK_HS_LEAVES = [
 ];
 route(/^\/onboarding$/, async (app) => {
   // Read user from Supabase directly — no dependency on local backend cold start.
-  if (!ME) {
-    ME = await loadMeFromSupabase();
+  if (!ME || ME_STALE) {
+    const fresh = await loadMeFromSupabase();
+    if (fresh) { ME = fresh; ME_STALE = false; }
   }
-  if (!ME) {
+  if (!ME || ME_STALE) {
+    ME_STALE = false;
     // Demo account fallback (local backend only).
     try { ME = await api('/api/me', { timeout: 20000 }); } catch { location.hash = '#/login'; return; }
   }
@@ -1633,6 +1650,7 @@ route(/^\/dashboard$/, async (app) => {
   ME.plan_name = ME.plan_name || 'Trial';
   ME.unread_alerts = ME.unread_alerts || 0;
   ME.quotas = ME.quotas || { search: { used: 0, limit: null }, profile: { used: 0, limit: null }, send: { used: 0, limit: null }, export: { used: 0, limit: null } };
+  const meSnap = ME;
   // Render the shell with placeholders immediately so the user sees the app
   // structure even if /api/dashboard is slow on a Vercel cold instance.
   try {
@@ -1650,6 +1668,7 @@ route(/^\/dashboard$/, async (app) => {
     // Fallback: minimal dashboard so user sees SOMETHING even if backend is down.
     d = null;
   }
+  if (!ME) ME = meSnap; // never let a concurrent reset crash this render
   // Fire-and-forget refreshMe — don't block dashboard render on it.
   refreshMe().catch(() => {});
   // Normalize dashboard payload with safe defaults for every field.
@@ -3108,7 +3127,7 @@ route(/^\/billing$/, async (app, m, params) => {
         if (v.paid) {
           try { localStorage.removeItem('eksporin_pending_payment'); } catch {}
           toast(v.kind === 'topup' ? `Saldo bertambah ${fmtIDR(v.amount)} ✓` : `Paket ${v.account.plan_name} aktif sampai ${fmtDate(v.account.expires_at)} ✓`);
-          ME = null; location.hash = '#/billing'; render(); return true;
+          ME_STALE = true; location.hash = '#/billing'; render(); return true;
         }
         if (v.status === 'expired' || v.status === 'failed') { toast('Tagihan ' + (v.status === 'expired' ? 'kedaluwarsa' : 'gagal') + '.', true); return false; }
       } catch (e) { if (e.status === 404) return false; }
@@ -3243,7 +3262,7 @@ route(/^\/admin\/login$/, (app) => {
         return;
       }
       try { localStorage.setItem('eksporin_admin_token', r.admin_token); } catch {}
-      ME = null;
+      ME_STALE = true;
       location.hash = '#/admin';
     } catch (err) {
       toast(err.data?.error || 'Email atau password salah.', true);
@@ -3255,7 +3274,8 @@ route(/^\/admin\/login$/, (app) => {
 route(/^\/admin$/, async (app, m, params) => {
   // Custom auth guard: unauthenticated → dedicated admin login (not user login).
   const hasAdminToken = (() => { try { return !!localStorage.getItem('eksporin_admin_token'); } catch { return false; } })();
-  if (!ME) {
+  if (!ME || ME_STALE || !ME.is_admin) {
+    ME_STALE = false;
     try { ME = await api('/api/me'); }
     catch {
       if (!hasAdminToken) { location.hash = '#/admin/login'; return; }
@@ -3656,7 +3676,9 @@ async function boot() {
     const target = path;
     window.history.replaceState(null, '', '/' + (window.location.search || '') + '#' + target);
   }
-  await syncSupabaseSession();
+  // Requests already carry the Supabase Bearer token and api() re-syncs on a
+  // 401, so the first paint does not wait for this serverless round trip.
+  syncSupabaseSession().catch(() => {});
   render();
 }
 boot();

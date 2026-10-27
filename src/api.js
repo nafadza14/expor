@@ -108,7 +108,7 @@ async function poolHsCounts() {
   if (_poolHs && Date.now() - _poolHs.at < 10 * 60 * 1000) return _poolHs;
   const pgc = require('./pg');
   if (!pgc.hasPostgres()) return null;
-  const visible = "COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) = false";
+  const visible = "sb.is_hidden = false";
   const rows = await pgc.query(`SELECT h, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS k
                                   FROM scraped_buyers sb, UNNEST(hs_codes) h WHERE ${visible} GROUP BY h`);
   const chs = await pgc.query(`SELECT LEFT(h, 2) AS ch, COUNT(DISTINCT sb.id)::int AS n,
@@ -330,7 +330,19 @@ const SB_CACHE_TTL_MS = 60 * 1000;
 
 // Verify a Supabase JWT and upsert the mirroring local user row.
 // Returns the local user row or null if the token is invalid.
-async function verifySupabaseToken(db, accessToken) {
+// A page fires several API calls at once; on a cold instance they would each
+// call Supabase twice. Share one in-flight verification per token.
+const SB_INFLIGHT = new Map();
+function verifySupabaseToken(db, accessToken) {
+  if (!accessToken) return Promise.resolve(null);
+  const hit = SB_TOKEN_CACHE.get(accessToken);
+  if (hit && hit.expires > Date.now()) return verifySupabaseTokenRaw(db, accessToken);
+  if (SB_INFLIGHT.has(accessToken)) return SB_INFLIGHT.get(accessToken);
+  const p = verifySupabaseTokenRaw(db, accessToken).finally(() => SB_INFLIGHT.delete(accessToken));
+  SB_INFLIGHT.set(accessToken, p);
+  return p;
+}
+async function verifySupabaseTokenRaw(db, accessToken) {
   if (!accessToken) return null;
   const cached = SB_TOKEN_CACHE.get(accessToken);
   if (cached && cached.expires > Date.now()) {
@@ -746,7 +758,7 @@ async function handleApi(db, req, res, url, body) {
     if (require('./pg').hasPostgres()) {
       try {
         const pgp = require('./pg');
-        const visible = `hs_codes @> ARRAY[$1]::text[] AND COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) = false`;
+        const visible = `hs_codes @> ARRAY[$1]::text[] AND sb.is_hidden = false`;
         const stats = await pgp.one(`SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS with_contact,
               COUNT(DISTINCT country)::int AS countries
@@ -755,9 +767,9 @@ async function handleApi(db, req, res, url, body) {
           const top = await pgp.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers sb WHERE ${visible}
                                         GROUP BY country ORDER BY c DESC LIMIT 6`, [hs4]);
           const rows = await pgp.query(`SELECT id, name, country, city, industry,
-                 COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type,
+                 COALESCE(sb.buyer_type, raw_json->>'buyer_type') AS buyer_type,
                  (email IS NOT NULL) AS has_email, (phone IS NOT NULL) AS has_phone, (website IS NOT NULL) AS has_website,
-                 COALESCE((to_jsonb(sb)->>'quality_score')::int, data_confidence) AS q
+                 COALESCE(sb.quality_score, data_confidence) AS q
             FROM scraped_buyers sb WHERE ${visible}
             ORDER BY (email IS NOT NULL OR phone IS NOT NULL) DESC, q DESC NULLS LAST, id LIMIT 5`, [hs4]);
           return json(res, 200, {
@@ -1619,19 +1631,20 @@ async function handleApi(db, req, res, url, body) {
       const run = async () => {
         b = build(v2);
         const where = b.conds.join(' AND ');
-        const totalRow = await pgClient.one(`SELECT COUNT(*)::int AS c FROM scraped_buyers WHERE ${where}`, b.params);
-        const rows = await pgClient.query(
-          `SELECT id, source, name, country, city, website, email IS NOT NULL AS has_email, phone IS NOT NULL AS has_phone,
-                  industry, size_bucket, description, hs_codes, data_confidence, enriched_at, updated_at, sources_seen${b.extra}
-             FROM scraped_buyers WHERE ${where}
-            ORDER BY ${b.orderBy}
-            LIMIT $${b.params.length + 1} OFFSET $${b.params.length + 2}`, [...b.params, per, (pageN - 1) * per]);
-        const [countryFacet, sourceFacet, contactFacet] = await Promise.all([
+        // All four queries run in parallel; the count and the contact facet share one scan.
+        const [rows, countryFacet, sourceFacet, stats] = await Promise.all([
+          pgClient.query(
+            `SELECT id, source, name, country, city, website, email IS NOT NULL AS has_email, phone IS NOT NULL AS has_phone,
+                    industry, size_bucket, description, hs_codes, data_confidence, enriched_at, updated_at, sources_seen${b.extra}
+               FROM scraped_buyers WHERE ${where}
+              ORDER BY ${b.orderBy}
+              LIMIT $${b.params.length + 1} OFFSET $${b.params.length + 2}`, [...b.params, per, (pageN - 1) * per]),
           pgClient.query(`SELECT country, COUNT(*)::int AS c FROM scraped_buyers WHERE ${where} AND country IS NOT NULL GROUP BY country ORDER BY c DESC LIMIT 20`, b.params),
           pgClient.query(`SELECT source, COUNT(*)::int AS c FROM scraped_buyers WHERE ${where} GROUP BY source ORDER BY c DESC`, b.params),
-          pgClient.one(`SELECT COUNT(*) FILTER (WHERE email IS NOT NULL)::int AS email, COUNT(*) FILTER (WHERE phone IS NOT NULL)::int AS phone,
+          pgClient.one(`SELECT COUNT(*)::int AS c, COUNT(*) FILTER (WHERE email IS NOT NULL)::int AS email, COUNT(*) FILTER (WHERE phone IS NOT NULL)::int AS phone,
                                COUNT(*) FILTER (WHERE website IS NOT NULL)::int AS website FROM scraped_buyers WHERE ${where}`, b.params),
         ]);
+        const totalRow = stats; const { c: _c, ...contactFacet } = stats || {};
         return { total: totalRow?.c || 0, rows, countryFacet, sourceFacet, contactFacet };
       };
       let r;
@@ -1729,15 +1742,14 @@ async function handleApi(db, req, res, url, body) {
         SELECT id, source, source_id, name, country, city, address, website, email, phone,
                industry, size_bucket, description, hs_codes,
                data_confidence, enriched_at, created_at, updated_at, sources_seen,
-               -- to_jsonb() keeps this working before migration 003 adds the columns.
-               COALESCE(to_jsonb(sb)->>'evidence_url', raw_json->>'evidence_url') AS evidence_url,
-               COALESCE(to_jsonb(sb)->>'buyer_type', raw_json->>'buyer_type') AS buyer_type,
-               to_jsonb(sb)->>'email_status' AS email_status,
-               to_jsonb(sb)->>'email_source_url' AS email_source_url,
-               to_jsonb(sb)->>'phone_source_url' AS phone_source_url,
-               to_jsonb(sb)->>'website_method' AS website_method,
-               to_jsonb(sb)->>'contact_checked_at' AS contact_checked_at,
-               COALESCE((to_jsonb(sb)->>'quality_score')::int, data_confidence) AS quality_score
+               COALESCE(sb.evidence_url, raw_json->>'evidence_url') AS evidence_url,
+               COALESCE(sb.buyer_type, raw_json->>'buyer_type') AS buyer_type,
+               sb.email_status AS email_status,
+               sb.email_source_url AS email_source_url,
+               sb.phone_source_url AS phone_source_url,
+               sb.website_method AS website_method,
+               sb.contact_checked_at AS contact_checked_at,
+               COALESCE(sb.quality_score, data_confidence) AS quality_score
           FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan (mungkin telah digabung atau dihapus).');
 
@@ -1804,8 +1816,8 @@ async function handleApi(db, req, res, url, body) {
     if (!buyerId) return err(res, 404, 'Buyer tidak ditemukan.');
     try {
       const pgc = require('./pg');
-      const b = await pgc.one(`SELECT id, email, phone, to_jsonb(sb)->>'email_source_url' AS email_source_url,
-                                      to_jsonb(sb)->>'phone_source_url' AS phone_source_url, to_jsonb(sb)->>'email_status' AS email_status
+      const b = await pgc.one(`SELECT id, email, phone, sb.email_source_url AS email_source_url,
+                                      sb.phone_source_url AS phone_source_url, sb.email_status AS email_status
                                  FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
       if (!b.email && !b.phone) return err(res, 409, 'Buyer ini belum punya email/telepon. Gunakan "Cari kontak sekarang" dulu.');
@@ -1830,7 +1842,7 @@ async function handleApi(db, req, res, url, body) {
     try {
       const pg = require('./pg');
       const b = await pg.one(`SELECT id, name, country, city, website, email, phone, industry, size_bucket, description,
-                                     to_jsonb(sb)->>'contact_checked_at' AS checked
+                                     sb.contact_checked_at AS checked
                                 FROM scraped_buyers sb WHERE id = $1`, [buyerId]);
       if (!b) return err(res, 404, 'Buyer tidak ditemukan.');
       const recent = b.checked && (Date.now() - new Date(b.checked).getTime()) < 24 * 3600 * 1000;

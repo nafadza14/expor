@@ -30,7 +30,7 @@ function getPool() {
   _pool = new Pool({
     ...cfg,
     ssl: { rejectUnauthorized: false },
-    max: 3,
+    max: 4,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
     application_name: 'eksporin',
