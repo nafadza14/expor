@@ -19,7 +19,8 @@ UA = "EksporIn bulk importer (+https://exporin-eight.vercel.app)"
 SIZE = 100
 # The API matches by prefix, so class level ("46.37") covers all subclasses.
 # Fish processing (10.20) is left out: Norway's processors are exporters.
-CODES = ["46.37", "10.83", "10.84", "10.82", "46.36", "46.38", "10.41", "46.33", "20.53", "22.19", "46.47", "46.31", "10.39"]
+CODES = ["46.37", "10.83", "10.84", "10.82", "46.36", "46.38", "10.41", "46.33", "20.53", "22.19", "46.47", "46.31", "10.39",
+         "46.42", "46.41", "46.48", "46.45", "46.44", "46.35", "46.39", "46.73", "46.75", "46.21", "46.46", "46.71", "46.49", "45.31"]
 
 
 def entities(client: httpx.Client, code: str) -> Iterator[dict]:

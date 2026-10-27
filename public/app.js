@@ -740,7 +740,7 @@ route(/^\/$/, async (app) => {
         <div class="lp-sources">
           <div class="lp-sources-title">Data kami berasal dari sumber publik yang bisa dicek</div>
           <div class="lp-sources-list">
-            ${['Registri perusahaan resmi Inggris, Prancis & Norwegia', 'Daftar importir organik bersertifikat (Agence BIO)', 'OpenStreetMap', 'Daftar importir lembaga promosi dagang', 'Direktori asosiasi industri', 'Website resmi perusahaan', 'GLEIF (registri badan hukum global)', 'UN Comtrade (statistik perdagangan)', 'USITC (tarif impor AS)', 'WCO (kode HS)'].map((x) => `<span>${x}</span>`).join('')}
+            ${['Registri perusahaan resmi Inggris, Prancis, Norwegia & Australia', 'Registri usaha Los Angeles, San Francisco & Seattle', 'Daftar importir organik bersertifikat (Agence BIO)', 'OpenStreetMap', 'Daftar importir lembaga promosi dagang', 'Direktori asosiasi industri', 'Website resmi perusahaan', 'GLEIF (registri badan hukum global)', 'UN Comtrade (statistik perdagangan)', 'USITC (tarif impor AS)', 'WCO (kode HS)'].map((x) => `<span>${x}</span>`).join('')}
           </div>
         </div>
       </div>
@@ -1376,7 +1376,7 @@ route(/^\/onboarding$/, async (app) => {
       () => `<h2>Produk yang Anda ekspor</h2>
         <p class="muted" style="margin-bottom:12px">Cari HS code sesuai komoditas Anda, atau pilih dari daftar populer. Maks 5 kode.</p>
         <div style="position:relative;margin-bottom:12px">
-          <input class="input" id="hs-search" placeholder="Cari komoditas… (mis. vanili, coffee, rotan, batik)" autocomplete="off" style="padding-left:38px">
+          <input class="input" id="hs-search" placeholder="Cari produk… (mis. kopi arabika, udang beku, mebel rotan, 0901)" autocomplete="off" style="padding-left:38px">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9a9a9a" stroke-width="1.5" style="position:absolute;left:12px;top:11px;pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </div>
         <div id="hs-selected" style="display:${state.hs.length ? 'flex' : 'none'};flex-wrap:wrap;gap:6px;margin-bottom:12px">
@@ -1386,10 +1386,10 @@ route(/^\/onboarding$/, async (app) => {
           ${leaves.map((l) => `
             <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
               <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.hs_title || l.description_en || '')}</div></div>
             </div>`).join('')}
         </div>
-        <p class="caption muted-3" style="margin-top:8px">💡 Daftar populer: 21 komoditas ekspor utama Indonesia. Ketik untuk cari dari 6.941 kode WCO lengkap.</p>`,
+        <p class="caption muted-3" style="margin-top:8px">💡 Daftar populer: komoditas ekspor utama Indonesia. Ketik nama produk dalam Bahasa Indonesia untuk mencari di 18.500+ kode HS (BTKI 2022).</p>`,
       // 3: countries
       () => `<h2>Negara target</h2><p class="muted" style="margin-bottom:16px">Pilih pasar yang ingin Anda masuki.</p>
         ${COUNTRY_OPTS.map((c) => `<div class="option-card ${state.countries.includes(c) ? 'selected' : ''}" data-country="${c}">
@@ -1434,7 +1434,7 @@ route(/^\/onboarding$/, async (app) => {
           resultsBox.innerHTML = leaves.map((l) => `
             <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
               <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.hs_title || l.description_en || '')}</div></div>
             </div>`).join('');
           resultsBox.querySelectorAll('.option-card[data-hs]').forEach((el) => el.onclick = () => {
             const c = el.dataset.hs;
@@ -1449,13 +1449,13 @@ route(/^\/onboarding$/, async (app) => {
             const r = await api('/api/hs/search?q=' + encodeURIComponent(q), { timeout: 5000 });
             const rows = Array.isArray(r.results) ? r.results : [];
             if (!rows.length) {
-              resultsBox.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Tidak ada HS code cocok. Coba kata kunci lain (bahasa Inggris juga OK).</div>';
+              resultsBox.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px">Tidak ada HS code cocok. Coba kata lain, misalnya nama bahan bakunya, atau ketik kode HS-nya.</div>';
               return;
             }
             resultsBox.innerHTML = rows.map((l) => `
               <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}">
                 <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-                <div><b>${esc(l.description)}</b></div>
+                <div><b>${esc(l.description)}</b><div class="caption muted">${esc(l.description_en || '')}${l.buyers ? ` · <span style="color:var(--orange)">${fmtN(l.buyers)} buyer</span>` : ''}</div></div>
               </div>`).join('');
             resultsBox.querySelectorAll('.option-card[data-hs]').forEach((el) => el.onclick = () => {
               const c = el.dataset.hs;
@@ -1927,110 +1927,99 @@ function renderDiscoverResult(r) {
 // ================= HS directory =================
 route(/^\/direktori$/, async (app, m, params) => {
   await requireMe();
-  const parent = params.get('parent') || '';
-  const nodes = await api('/api/hs' + (parent ? `?parent=${parent}` : ''));
-  let crumb = '';
-  if (parent) {
-    const chain = [];
-    let code = parent;
-    while (code) { chain.unshift(code); code = code.length > 2 ? code.slice(0, code.length - 2) : null; }
-    crumb = `<div class="breadcrumb"><a href="#/direktori">Semua bab</a>${chain.map((c) => `<span class="sep">/</span><a href="#/direktori?parent=${c}">${c.replace(/^(\d{4})/, '$1.')}</a>`).join('')}</div>`;
-  }
-  app.innerHTML = shell(`
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
-      <div>
-        <h1 style="margin-bottom:4px">Direktori HS Code</h1>
-        <p class="muted">Telusuri kategori produk. Data ekspor real diambil langsung dari <b>UN Comtrade+</b>.</p>
+  const parent = (params.get('parent') || '').replace(/\D/g, '');
+  const qInit = params.get('q') || '';
+  let d;
+  try { d = await api('/api/hs' + (parent ? `?parent=${parent}` : '')); }
+  catch (e) { app.innerHTML = shell(`<div class="empty"><h3>Kode HS tidak ditemukan</h3><p class="muted"><a href="#/direktori">Kembali ke semua bab</a></p></div>`); bindShell(); return; }
+  const fmtCode = (c) => c.length <= 4 ? c : c.length === 6 ? `${c.slice(0, 4)}.${c.slice(4)}` : `${c.slice(0, 4)}.${c.slice(4, 6)}.${c.slice(6)}`;
+  const levelName = { 2: 'Bab', 4: 'Pos', 6: 'Subpos', 8: 'Pos tarif' };
+  const buyersTxt = (n) => n == null ? '' : n ? `<span class="hs-buyers">${fmtN(n)} buyer</span>` : '<span class="hs-buyers none">belum ada buyer</span>';
+  const row = (n) => `
+    <a class="hs-row" href="${n.has_children ? `#/direktori?parent=${n.code}` : `#/cari?hs=${n.code.slice(0, 4)}`}" data-code="${n.code}">
+      <span class="hs-code-chip">${fmtCode(n.code)}</span>
+      <span class="hs-row-main"><b>${esc(n.level <= 4 ? n.title_id : n.description)}</b>
+        <span class="caption muted">${esc(n.level <= 4 ? n.title_en : n.description_en)}</span></span>
+      <span class="hs-row-side">${buyersTxt(n.buyers)}<span class="hs-row-go">${n.has_children ? 'Buka ›' : 'Lihat buyer ›'}</span></span>
+    </a>`;
+  const crumbs = d.crumbs || [];
+  const p = d.parent;
+  const detail = p ? `
+    <div class="card hs-detail">
+      <div class="hs-detail-top">
+        <div><span class="caption muted-3">${levelName[p.level]} ${fmtCode(p.code)}</span>
+          <h2 style="margin:4px 0 4px">${esc(p.level <= 4 ? p.title_id : p.description)}</h2>
+          <p class="muted body-sm">${esc(p.level <= 4 ? p.title_en : p.description_en)}</p></div>
+        ${p.level >= 4 ? `<a class="btn btn-primary" href="#/cari?hs=${p.code.slice(0, 4)}">Lihat ${p.buyers ? fmtN(p.buyers) + ' ' : ''}buyer${p.level > 4 ? ` pos ${p.code.slice(0, 4)}` : ''} →</a>` : (p.buyers ? `<span class="pill pill-orange">${fmtN(p.buyers)} buyer di bab ini</span>` : '')}
       </div>
-      <span class="pill pill-info" style="align-self:center">🌐 Live UN Comtrade</span>
+      ${p.level >= 4 ? `<div class="hs-detail-stats" id="hs-stats">
+        <div><span class="caption muted-3">Ekspor Indonesia (UN Comtrade)</span><b data-slot="value"><span class="skeleton" style="display:inline-block;width:70px;height:12px;border-radius:6px"></span></b></div>
+        <div><span class="caption muted-3">Volume</span><b data-slot="volume">…</b></div>
+        <div><span class="caption muted-3">Negara tujuan</span><b data-slot="countries">…</b></div>
+        <div><span class="caption muted-3">Top pasar</span><b data-slot="top">…</b></div>
+        <div><span class="caption muted-3">🇺🇸 Bea masuk AS (USITC)</span><b data-slot="usitc">…</b></div>
+      </div>` : ''}
+    </div>` : '';
+  app.innerHTML = shell(`
+    <div style="margin-bottom:14px">
+      <h1 style="margin-bottom:4px">Direktori HS Code</h1>
+      <p class="muted">Semua kode HS (BTKI 2022) dalam Bahasa Indonesia: 97 bab, 1.238 pos, 5.670 subpos dan 11.546 pos tarif nasional.</p>
     </div>
-    ${crumb}
-    <div class="hs-grid">${nodes.map((n) => `
-      <div class="hs-card" data-code="${n.code}" data-level="${n.level}">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-          <span class="hs-code-chip">${n.code.replace(/^(\d{4})/, '$1.')}</span>
-          <span class="caption muted-3" data-comtrade-badge>Level ${n.level === 2 ? 'Bab' : n.level === 4 ? 'Heading' : 'Sub'}</span></div>
-        <h3 style="margin-bottom:2px">${esc(n.description_id)}</h3>
-        <p class="caption muted" style="margin-bottom:12px">${esc(n.description_en)}</p>
-        <div class="hs-stats" data-comtrade-stats>
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <div><div class="caption muted-3">Nilai ekspor</div><b class="num" data-slot="value"><span class="skeleton" style="display:inline-block;width:60px;height:12px;border-radius:6px"></span></b></div>
-            <div><div class="caption muted-3">Volume</div><b class="num" data-slot="volume"><span class="skeleton" style="display:inline-block;width:52px;height:12px;border-radius:6px"></span></b></div>
-            <div><div class="caption muted-3">Negara tujuan</div><b class="num" data-slot="countries"><span class="skeleton" style="display:inline-block;width:24px;height:12px;border-radius:6px"></span></b></div>
-          </div>
-          <div style="margin-top:8px"><div class="caption muted-3">Top pasar</div><b data-slot="top">…</b></div>
-          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-subtle)" data-usitc>
-            <div class="caption muted-3">🇺🇸 Bea masuk USA (USITC HTS)</div>
-            <b class="num body-sm" data-slot="usitc"><span class="skeleton" style="display:inline-block;width:80px;height:12px;border-radius:6px"></span></b>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:14px">
-          ${n.level < 6 ? `<button class="btn btn-sm btn-neutral drill">Drill-down →</button>` : ''}
-          <button class="btn btn-sm btn-primary see">Lihat buyer</button></div>
-      </div>`).join('')}</div>`);
+    <div class="hs-search-wrap">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9a9a9a" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="input" id="hs-dir-q" value="${esc(qInit)}" placeholder="Cari nama produk atau kode: kopi arabika, udang beku, mebel rotan, 0901…" autocomplete="off">
+    </div>
+    <div id="hs-dir-results"></div>
+    <div id="hs-dir-browse">
+      ${crumbs.length ? `<div class="breadcrumb"><a href="#/direktori">Semua bab</a>${crumbs.map((c) => `<span class="sep">/</span><a href="#/direktori?parent=${c.code}">${fmtCode(c.code)}</a>`).join('')}</div>` : ''}
+      ${detail}
+      ${d.nodes.length ? `<div class="hs-list ${parent ? '' : 'hs-list-chapters'}">${d.nodes.map(row).join('')}</div>`
+        : '<div class="empty muted">Kode ini tidak punya rincian lagi.</div>'}
+    </div>`);
   bindShell();
-  $$('.hs-card').forEach((el) => {
-    el.querySelector('.drill')?.addEventListener('click', (e) => { e.stopPropagation(); location.hash = `#/direktori?parent=${el.dataset.code}`; });
-    el.querySelector('.see')?.addEventListener('click', (e) => { e.stopPropagation(); location.hash = `#/cari?hs=${el.dataset.code}`; });
-    el.addEventListener('click', () => { location.hash = el.dataset.level < 6 ? `#/direktori?parent=${el.dataset.code}` : `#/cari?hs=${el.dataset.code}`; });
-  });
 
-  // Progressively enrich each visible card with real UN Comtrade data.
-  // We throttle concurrent requests (max 3 in flight) to be gentle on the API.
-  const queue = [...document.querySelectorAll('.hs-card')];
-  let inFlight = 0;
-  const enrich = async (el) => {
-    const code = el.dataset.code;
-    const stats = el.querySelector('[data-comtrade-stats]');
-    const badge = el.querySelector('[data-comtrade-badge]');
-    const seeBtn = el.querySelector('.see');
-    const usitcSlot = stats?.querySelector('[data-slot="usitc"]');
-    // Fetch Comtrade and USITC in parallel — they're independent.
+  // Search
+  const input = $('#hs-dir-q'); const out = $('#hs-dir-results'); const browse = $('#hs-dir-browse');
+  let timer = null; let seq = 0;
+  const run = async (v) => {
+    const my = ++seq;
+    if (!v) { out.innerHTML = ''; browse.style.display = ''; return; }
+    out.innerHTML = '<div class="muted body-sm" style="padding:12px 2px"><span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span>Mencari…</div>';
+    try {
+      const r = await api('/api/hs/search?limit=40&q=' + encodeURIComponent(v), { timeout: 8000 });
+      if (my !== seq) return;
+      browse.style.display = 'none';
+      const rows = (r.results || []).map((x) => ({ ...x, has_children: x.level < 8, title_id: x.description, title_en: x.description_en }));
+      out.innerHTML = rows.length
+        ? `<div class="caption muted-3" style="margin:4px 2px 8px">${rows.length} hasil untuk "${esc(v)}"</div><div class="hs-list">${rows.map(row).join('')}</div>`
+        : `<div class="empty muted" style="padding:30px 10px">Tidak ada kode HS untuk "${esc(v)}". Coba nama bahan bakunya, misalnya "kelapa" atau "kayu".</div>`;
+    } catch { if (my === seq) out.innerHTML = '<div class="muted body-sm">Gagal mencari. Coba lagi.</div>'; }
+  };
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => run(input.value.trim()), 250); });
+  if (qInit) run(qInit);
+
+  // Market data for the open heading / subheading only.
+  const stats = $('#hs-stats');
+  if (stats && p) {
+    const code = p.code.slice(0, 6);
     const [comtrade, usitc] = await Promise.allSettled([
       api('/api/comtrade/indonesia-exports?hs=' + encodeURIComponent(code), { timeout: 20000 }),
       api('/api/usitc/hts?hs=' + encodeURIComponent(code), { timeout: 15000 }),
     ]);
-    // Comtrade rendering
-    try {
-      const r = comtrade.status === 'fulfilled' ? comtrade.value : null;
-      if (!r || !r.ok || !Array.isArray(r.by_country) || !r.by_country.length) {
-        stats.querySelector('[data-slot="value"]').textContent = '-';
-        stats.querySelector('[data-slot="volume"]').textContent = '-';
-        stats.querySelector('[data-slot="countries"]').textContent = '-';
-        stats.querySelector('[data-slot="top"]').innerHTML = '<span class="muted-3">Belum ada data</span>';
-      } else {
-        stats.querySelector('[data-slot="value"]').innerHTML = `<span style="color:var(--orange)">${fmtUSD(r.total_value_usd)}</span>`;
-        stats.querySelector('[data-slot="volume"]').textContent = fmtKg(r.total_net_wgt_kg);
-        stats.querySelector('[data-slot="countries"]').textContent = r.by_country.length;
-        const top5 = r.by_country.slice(0, 5).map((c) => `<span title="${esc(c.name)}: ${fmtUSD(c.value_usd)}" style="font-size:16px">${c.flag || '🏳️'}</span>`).join(' ');
-        stats.querySelector('[data-slot="top"]').innerHTML = top5;
-        if (badge) badge.innerHTML = `🌐 <span style="color:var(--success-text)">${r.year}</span>`;
-        if (seeBtn) seeBtn.textContent = `Lihat buyer (${r.by_country.length}+ negara)`;
-      }
-    } catch (e) { /* ignore */ }
-    // USITC rendering — official US import duty rate
-    try {
-      if (!usitcSlot) return;
-      const u = usitc.status === 'fulfilled' ? usitc.value : null;
-      if (!u || !u.ok || !u.summary) {
-        usitcSlot.innerHTML = '<span class="muted-3">Belum ada data tarif</span>';
-        return;
-      }
+    const slot = (k) => stats.querySelector(`[data-slot="${k}"]`);
+    const c = comtrade.status === 'fulfilled' ? comtrade.value : null;
+    if (c && c.ok && Array.isArray(c.by_country) && c.by_country.length) {
+      slot('value').innerHTML = `<span style="color:var(--orange)">${fmtUSD(c.total_value_usd)}</span> <span class="caption muted-3">${c.year || ''}</span>`;
+      slot('volume').textContent = fmtKg(c.total_net_wgt_kg);
+      slot('countries').textContent = c.by_country.length;
+      slot('top').innerHTML = c.by_country.slice(0, 5).map((x) => `<span title="${esc(x.name)}: ${fmtUSD(x.value_usd)}">${x.flag || '🏳️'}</span>`).join(' ');
+    } else { ['value', 'volume', 'countries', 'top'].forEach((k) => { slot(k).innerHTML = '<span class="muted-3">-</span>'; }); }
+    const u = usitc.status === 'fulfilled' ? usitc.value : null;
+    if (u && u.ok && u.summary) {
       const rate = u.summary.general_rate || 'Free';
-      const isFree = /^\s*free\s*$/i.test(rate);
-      const rateColor = isFree ? 'var(--success-text)' : 'var(--warning-text)';
-      const special = u.summary.special_rate ? ` <span class="caption muted-3" title="${esc(u.summary.special_rate)}">· ada special rate</span>` : '';
-      usitcSlot.innerHTML = `<span style="color:${rateColor}">${esc(rate)}</span> <span class="caption muted-3" title="${esc(u.summary.description || '')}">${esc(u.summary.htsno || '')}</span>${special}`;
-    } catch (e) { if (usitcSlot) usitcSlot.innerHTML = '<span class="muted-3">Tarif belum tersedia</span>'; }
-  };
-  const pump = async () => {
-    while (queue.length && inFlight < 3) {
-      inFlight++;
-      const el = queue.shift();
-      enrich(el).finally(() => { inFlight--; pump(); });
-    }
-  };
-  pump();
+      slot('usitc').innerHTML = `<span style="color:${/^\s*free\s*$/i.test(rate) ? 'var(--success-text)' : 'var(--warning-text)'}">${esc(rate)}</span> <span class="caption muted-3">${esc(u.summary.htsno || '')}</span>`;
+    } else slot('usitc').innerHTML = '<span class="muted-3">-</span>';
+  }
 });
 
 // ================= search (F1) =================
@@ -2183,7 +2172,7 @@ route(/^\/buyer\/(\d+)$/, async (app, m, params) => {
   const tab = params.get('tab') || 'overview';
   const tabs = [['overview', 'Ringkasan'], ['products', 'Produk (HS)'], ['insights', 'Insight'], ['sources', 'Sumber Data'], ['notes', 'Catatan & Aktivitas']];
   const sources = Array.isArray(b.sources_seen) ? b.sources_seen : (b.source ? [b.source] : []);
-  const sourceLabels = { usda_oid: 'USDA Organic', trade_directory: 'Direktori Importir', ai_agent: 'Riset Website', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', brreg_no: 'Brønnøysund (Norwegia)', agencebio_fr: 'Agence BIO (importir organik)', osm: 'OpenStreetMap (© kontributor OSM)', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
+  const sourceLabels = { usda_oid: 'USDA Organic', trade_directory: 'Direktori Importir', ai_agent: 'Riset Website', gleif: 'GLEIF LEI', companies_house_uk: 'Companies House UK', sirene_fr: 'SIRENE France', brreg_no: 'Brønnøysund (Norwegia)', agencebio_fr: 'Agence BIO (importir organik)', osm: 'OpenStreetMap (© kontributor OSM)', us_city_registry: 'Registri usaha kota (AS)', abn_au: 'Australian Business Register', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', kompass: 'Kompass', europages: 'Europages', wikidata: 'Wikidata' };
   const sourceChips = sources.map((s) => `<span class="pill pill-neutral" style="font-size:11px;margin-right:4px">${esc(sourceLabels[s] || s)}</span>`).join('');
   const verifPill = sources.length >= 2
     ? `<span class="pill pill-success">✓ Terverifikasi ${sources.length} sumber</span>`
@@ -2777,9 +2766,9 @@ route(/^\/settings$/, async (app) => {
             <h3>Produk yang Anda ekspor</h3>
             <span class="caption muted">${state.hs.length} / 5 dipilih</span>
           </div>
-          <p class="muted body-sm" style="margin-bottom:12px">Cari HS code sesuai komoditas Anda dari 6.941 kode WCO lengkap, atau pilih dari daftar populer.</p>
+          <p class="muted body-sm" style="margin-bottom:12px">Cari HS code dengan nama produk dalam Bahasa Indonesia (BTKI 2022, 18.500+ kode), atau pilih dari daftar populer.</p>
           <div style="position:relative;margin-bottom:12px">
-            <input class="input" id="s-hs-search" placeholder="Cari komoditas… (mis. vanili, coffee, rotan, batik)" autocomplete="off" style="padding-left:38px">
+            <input class="input" id="s-hs-search" placeholder="Cari produk… (mis. kopi arabika, udang beku, mebel rotan, 0901)" autocomplete="off" style="padding-left:38px">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9a9a9a" stroke-width="1.5" style="position:absolute;left:12px;top:11px;pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </div>
           <div id="s-hs-selected" style="display:${state.hs.length ? 'flex' : 'none'};flex-wrap:wrap;gap:6px;margin-bottom:12px">
@@ -2789,7 +2778,7 @@ route(/^\/settings$/, async (app) => {
             ${leaves.map((l) => `
               <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
                 <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-                <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+                <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.hs_title || l.description_en || '')}</div></div>
               </div>`).join('')}
           </div>
         </div>
@@ -2856,7 +2845,7 @@ route(/^\/settings$/, async (app) => {
           sResults.innerHTML = leaves.map((l) => `
             <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
               <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.description_en)}</div></div>
+              <div><b>${esc(l.description_id)}</b><div class="caption muted">${esc(l.hs_title || l.description_en || '')}</div></div>
             </div>`).join('');
           rebindCards();
           return;
@@ -2867,13 +2856,13 @@ route(/^\/settings$/, async (app) => {
             const r = await api('/api/hs/search?q=' + encodeURIComponent(q), { timeout: 5000 });
             const rows = Array.isArray(r.results) ? r.results : [];
             if (!rows.length) {
-              sResults.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px;grid-column:1/-1">Tidak ada HS code cocok. Coba kata kunci lain (Inggris juga OK).</div>';
+              sResults.innerHTML = '<div class="empty muted body-sm" style="padding:20px 12px;grid-column:1/-1">Tidak ada HS code cocok. Coba kata lain, misalnya nama bahan bakunya, atau ketik kode HS-nya.</div>';
               return;
             }
             sResults.innerHTML = rows.map((l) => `
               <div class="option-card ${state.hs.includes(l.code) ? 'selected' : ''}" data-hs="${l.code}" style="margin-bottom:0">
                 <span class="hs-code-chip">${l.code.replace(/^(\d{4})/, '$1.')}</span>
-                <div><b>${esc(l.description)}</b></div>
+                <div><b>${esc(l.description)}</b><div class="caption muted">${esc(l.description_en || '')}${l.buyers ? ` · <span style="color:var(--orange)">${fmtN(l.buyers)} buyer</span>` : ''}</div></div>
               </div>`).join('');
             rebindCards();
           } catch (err) {

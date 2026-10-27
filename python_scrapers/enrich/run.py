@@ -33,6 +33,7 @@ SELECT id, name, country, city, website, email, phone, description
  WHERE is_hidden = FALSE
    AND (contact_checked_at IS NULL
         OR (email IS NULL AND contact_checked_at < NOW() - INTERVAL '30 days'))
+   AND (id %% %s) = %s
  ORDER BY contact_checked_at NULLS FIRST,
           (source IN ('ai_agent','usda_oid','trade_directory','agencebio_fr','brreg_no')) DESC,
           (website IS NOT NULL) DESC,
@@ -93,7 +94,7 @@ async def run(a: argparse.Namespace) -> int:
         if a.id:
             cur.execute("SELECT id, name, country, city, website, email, phone, description FROM scraped_buyers WHERE id=%s", (a.id,))
         else:
-            cur.execute(SELECT_QUEUE, (a.max,))
+            cur.execute(SELECT_QUEUE, (max(1, a.shards), a.shard % max(1, a.shards), a.max))
         rows = cur.fetchall()
     print(f"[enrich] {len(rows)} buyers queued, concurrency {a.concurrency}, budget {a.minutes} min")
     deadline = time.time() + a.minutes * 60
@@ -143,6 +144,8 @@ def cli() -> None:
     p.add_argument("--minutes", type=float, default=30)
     p.add_argument("--max", type=int, default=600)
     p.add_argument("--concurrency", type=int, default=8)
+    p.add_argument("--shard", type=int, default=0, help="this worker's slice of the queue (0-based)")
+    p.add_argument("--shards", type=int, default=1, help="number of parallel workers splitting the queue by id")
     p.add_argument("--id", type=int)
     p.add_argument("--no-search", action="store_true", help="domain guessing only")
     p.add_argument("--dry-run", action="store_true")

@@ -19,8 +19,8 @@ on:
         description: 'fresh | contacts | all'
         default: 'contacts'
       concurrency:
-        description: 'Parallel enrichment workers'
-        default: '8'
+        description: 'Parallel enrichment workers per shard'
+        default: '14'
 
 # Only one enrich run at a time. Additional invocations queue behind
 # it. Prevents the runaway that happened when self-chain + workflow_run
@@ -33,6 +33,13 @@ jobs:
   enrich:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Four runners work on disjoint slices of the queue (id % 4), each from
+    # its own IP, so search engines and websites see four light clients
+    # instead of one heavy one.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,12 +61,12 @@ jobs:
             exit 1
           fi
           MAX="${{ github.event.inputs.max || '600' }}"
-          CONC="${{ github.event.inputs.concurrency || '8' }}"
-          python -m python_scrapers.enrich.run --minutes 32 --max "$MAX" --concurrency "$CONC"
+          CONC="${{ github.event.inputs.concurrency || '14' }}"
+          python -m python_scrapers.enrich.run --minutes 32 --max "$MAX" --concurrency "$CONC" --shard ${{ matrix.shard }} --shards 4
       # Self-dispatch next enrich run so the enrichment loop is also
       # continuous, independent of GitHub cron reliability.
       - name: Chain next enrich
-        if: always()
+        if: always() && matrix.shard == 0
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_PAT }}
@@ -71,5 +78,5 @@ jobs:
           fi
           sleep 60
           gh workflow run enrich.yml --repo ${{ github.repository }} \
-            -f max=600 -f mode=contacts -f concurrency=8
+            -f max=600 -f mode=contacts -f concurrency=14
           exit 0

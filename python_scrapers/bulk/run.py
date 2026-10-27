@@ -5,6 +5,8 @@
   python -m python_scrapers.bulk.run --source no        # Brønnøysund (NO)
   python -m python_scrapers.bulk.run --source bio       # Agence BIO organic importers (FR)
   python -m python_scrapers.bulk.run --source osm       # OpenStreetMap, all target countries
+  python -m python_scrapers.bulk.run --source us        # Los Angeles / San Francisco / Seattle registries
+  python -m python_scrapers.bulk.run --source au        # Australian Business Register (ABN bulk extract)
   python -m python_scrapers.bulk.run --source counts    # print totals only
 
   --dry-run out.jsonl   write JSONL instead of the database
@@ -32,6 +34,8 @@ SOURCES = {
     "no": "brreg_no",
     "bio": "agencebio_fr",
     "osm": "osm",
+    "us": "us_city_registry",
+    "au": "abn_au",
 }
 
 
@@ -70,6 +74,9 @@ def main() -> int:
     ap.add_argument("--limit", type=int)
     ap.add_argument("--countries")
     ap.add_argument("--zip", help="uk: use a local BasicCompanyData zip")
+    ap.add_argument("--shard", type=int, default=0, help="osm: slice of the country list")
+    ap.add_argument("--shards", type=int, default=1)
+    ap.add_argument("--minutes", type=float, default=120, help="osm: time budget")
     args = ap.parse_args()
 
     if args.source == "counts":
@@ -92,9 +99,16 @@ def main() -> int:
         elif args.source == "bio":
             from . import fr_agencebio as m
             m.run(w, limit=args.limit)
+        elif args.source == "us":
+            from . import us_socrata as m
+            m.run(w, limit=args.limit)
+        elif args.source == "au":
+            from . import au_abn as m
+            m.run(w, workdir=os.environ.get("RUNNER_TEMP", "/tmp"), limit=args.limit)
         elif args.source == "osm":
             from . import osm as m
-            m.run(w, countries=args.countries.split(",") if args.countries else None, limit=args.limit)
+            m.run(w, countries=args.countries.split(",") if args.countries else None, limit=args.limit,
+                  shard=args.shard, shards=args.shards, minutes=args.minutes)
     s = w.summary()
     print(f"::notice title=Import {args.source}::" + " ".join(f"{k}={v}" for k, v in s.items()))
     return 0 if s["read"] else 1

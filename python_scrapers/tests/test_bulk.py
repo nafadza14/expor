@@ -81,3 +81,39 @@ def test_bulk_sources():
     ok(norm_email('Info@Shop.de') == ('info@shop.de', 'role') and norm_email('a@gmail.com')[1] == 'freemail', 'email norm')
 
 
+
+
+def test_us_and_au_sources():
+    import zipfile as zf
+    from python_scrapers.bulk import us_socrata as us, au_abn as au
+    la = us.CITIES[0]
+    r = us.to_record({"business_name": "PACIFIC RIM FOODS INC", "dba_name": "", "street_address": "1 Main St", "city": "LOS ANGELES",
+                      "zip_code": "90021", "naics": "424460", "primary_naics_description": "Fish & seafood merchant wholesalers",
+                      "location_account": "0000123"}, la)
+    assert r and r["hs_codes"][0] == "0306" and r["source_id"] == "la:0000123" and r["country"] == "US", r
+    assert us.to_record({"business_name": "JOE BAKERY", "naics": "311811"}, la) is None
+    assert us.to_record({"business_name": "X SEAFOOD", "naics": "424460", "location_end_date": "2020-01-01"}, la) is None
+    sf = us.CITIES[1]
+    r = us.to_record({"dba_name": "Golden Spice Importers", "ownership_name": "GSI LLC", "naic_code": "4200-4299",
+                      "naic_code_description": "Wholesale Trade", "full_business_address": "2 Bay St", "city": "San Francisco"}, sf)
+    assert r and "0904" in r["hs_codes"], r
+    xml = """<?xml version="1.0"?><Transfer>
+<ABR recordLastUpdatedDate="20260101"><ABN status="ACT" ABNStatusFromDate="20100101">12345678901</ABN>
+<EntityType><EntityTypeInd>PRV</EntityTypeInd></EntityType>
+<MainEntity><NonIndividualName type="MN"><NonIndividualNameText>PACIFIC COFFEE IMPORTS PTY LTD</NonIndividualNameText></NonIndividualName>
+<BusinessAddress><AddressDetails><State>NSW</State><Postcode>2000</Postcode></AddressDetails></BusinessAddress></MainEntity></ABR>
+<ABR><ABN status="ACT">22222222222</ABN><EntityType><EntityTypeInd>IND</EntityTypeInd></EntityType>
+<MainEntity><NonIndividualName><NonIndividualNameText>SPICE IMPORTS</NonIndividualNameText></NonIndividualName></MainEntity></ABR>
+<ABR><ABN status="CAN">33333333333</ABN><EntityType><EntityTypeInd>PRV</EntityTypeInd></EntityType>
+<MainEntity><NonIndividualName><NonIndividualNameText>OLD COFFEE TRADING PTY LTD</NonIndividualNameText></NonIndividualName></MainEntity></ABR>
+<ABR><ABN status="ACT">44444444444</ABN><EntityType><EntityTypeInd>PRV</EntityTypeInd></EntityType>
+<MainEntity><NonIndividualName><NonIndividualNameText>JKL HOLDINGS PTY LTD</NonIndividualNameText></NonIndividualName></MainEntity>
+<OtherEntity><NonIndividualName type="BN"><NonIndividualNameText>Bali Rattan Furniture Imports</NonIndividualNameText></NonIndividualName></OtherEntity></ABR>
+</Transfer>"""
+    path = os.path.join(tempfile.mkdtemp(), "abn.zip")
+    with zf.ZipFile(path, "w") as z:
+        z.writestr("20260101_Public01.xml", xml)
+    recs = [x for x in (au.to_record(r) for r in au.records(path)) if x]
+    assert [r["source_id"] for r in recs] == ["12345678901", "44444444444"], recs
+    assert recs[0]["city"] == "Sydney" and recs[0]["hs_codes"] == ["0901", "2101"]
+    assert recs[1]["name"] == "Bali Rattan Furniture Imports" and "4602" in recs[1]["hs_codes"], recs[1]

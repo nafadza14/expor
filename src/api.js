@@ -90,30 +90,39 @@ const USITC_TTL_MS = 30 * 24 * 60 * 60 * 1000; // tariff schedules rarely change
 // HS Nomenclature (WCO 6-digit standard) — offline lookup table from
 // github.com/datasets/harmonized-system. Loaded lazily on first request.
 let HS_NOMEN = null; // Map code → { code, description, parent, level, section }
+// Full HS (Indonesian + English) lives in src/hs.js. This Map view keeps the
+// older callers working: code -> { code, description (EN), description_id, parent, level }.
+const HS = require('./hs');
 function loadHsNomenclature() {
   if (HS_NOMEN) return HS_NOMEN;
   HS_NOMEN = new Map();
-  try {
-    const fs = require('node:fs');
-    const path = require('node:path');
-    const csvPath = path.join(__dirname, '..', 'data', 'hs-nomenclature.csv');
-    if (!fs.existsSync(csvPath)) { console.warn('[hs-nomen] CSV not found at', csvPath); return HS_NOMEN; }
-    const text = fs.readFileSync(csvPath, 'utf8');
-    const lines = text.split(/\r?\n/);
-    // header: section,hscode,description,parent,level
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
-      // CSV row can contain a quoted description with commas — parse minimally.
-      // Fields: section, hscode, description (possibly quoted), parent, level
-      const m = line.match(/^([^,]*),([^,]*),(?:"([^"]*)"|([^,]*)),([^,]*),([^,]*)$/);
-      if (!m) continue;
-      const section = m[1]; const hscode = m[2]; const desc = m[3] || m[4] || '';
-      const parent = m[5]; const level = parseInt(m[6] || '0', 10) || 0;
-      if (hscode) HS_NOMEN.set(hscode, { code: hscode, description: desc, parent, level, section });
-    }
-  } catch (e) { console.warn('[hs-nomen] load failed:', e.message || e); }
+  for (const n of HS.load()) {
+    HS_NOMEN.set(n.c, { code: n.c, description: HS.label(n, 'en'), description_id: HS.label(n, 'id'), parent: n.p || null, level: n.l });
+  }
   return HS_NOMEN;
+}
+
+// Buyers per HS heading / chapter in the live pool, cached for 10 minutes.
+let _poolHs = null;
+async function poolHsCounts() {
+  if (_poolHs && Date.now() - _poolHs.at < 10 * 60 * 1000) return _poolHs;
+  const pgc = require('./pg');
+  if (!pgc.hasPostgres()) return null;
+  const visible = "COALESCE((to_jsonb(sb)->>'is_hidden')::boolean, false) = false";
+  const rows = await pgc.query(`SELECT h, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS k
+                                  FROM scraped_buyers sb, UNNEST(hs_codes) h WHERE ${visible} GROUP BY h`);
+  const chs = await pgc.query(`SELECT LEFT(h, 2) AS ch, COUNT(DISTINCT sb.id)::int AS n,
+                                      COUNT(DISTINCT sb.id) FILTER (WHERE email IS NOT NULL OR phone IS NOT NULL)::int AS k
+                                 FROM scraped_buyers sb, UNNEST(hs_codes) h WHERE ${visible} GROUP BY 1`);
+  const hs4 = new Map(); const ch = new Map();
+  for (const r of rows) {
+    const k4 = String(r.h).slice(0, 4);
+    const cur = hs4.get(k4) || { n: 0, k: 0 };
+    hs4.set(k4, { n: Math.max(cur.n, r.n), k: Math.max(cur.k, r.k) });
+  }
+  for (const r of chs) ch.set(r.ch, { n: r.n, k: r.k });
+  _poolHs = { at: Date.now(), hs4, ch };
+  return _poolHs;
 }
 
 // Indonesian → English commodity synonym dictionary. When a user searches in
@@ -228,29 +237,12 @@ function commodityHs4For(query) {
   return out;
 }
 
-function searchHsNomenclature(query, limit = 10) {
-  const map = loadHsNomenclature();
-  if (!map || !map.size || !query) return [];
-  const expanded = expandQueryToEnglish(query);
-  const q = expanded.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
-  if (!q.length) return [];
-  const words = [...new Set(q)];
-  const boost = commodityHs4For(query);
-  const scored = [];
-  for (const entry of map.values()) {
-    if (entry.level !== 6) continue; // only 6-digit codes count as "final" HS
-    const desc = entry.description.toLowerCase();
-    // Ignore words that only appear in an exclusion ("not containing cocoa").
-    const positive = desc.replace(/\b(not containing|excluding|other than|without)\b[^;]*/g, ' ');
-    const head = positive.split(';')[0];
-    let score = 0;
-    for (const w of words) { if (head.includes(w)) score += 3 * w.length; else if (positive.includes(w)) score += w.length; }
-    if (boost.size && boost.has(entry.code.slice(0, 4))) score += 60;
-    if (HS6_PREFERRED[entry.code] && HS6_PREFERRED[entry.code].some((k) => (' ' + String(query).toLowerCase() + ' ').includes(' ' + k + ' '))) score += 40;
-    if (score > 0) scored.push({ ...entry, score });
-  }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+function searchHsNomenclature(query, limit = 10, levels = [6]) {
+  // Indonesian label in `description`, English in `description_en`.
+  return HS.search(query, { limit, levels, boostHs4: commodityHs4For(query) }).map((r) => ({
+    code: r.code, description: r.description, description_en: r.description_en,
+    parent: r.parent, level: r.level, section: null, score: r.score,
+  }));
 }
 
 async function fetchUsitcHts(hs) {
@@ -495,7 +487,8 @@ function renderTemplate(db, tpl, buyer, user) {
   const userHs = JSON.parse(user.hs_focus || '[]');
   const bHs = buyerHsCodes(db, buyer.id);
   const match = userHs.find((u) => bHs.some((b) => b.slice(0, 4) === u.slice(0, 4))) || bHs[0] || (userHs[0] || '090111');
-  const hsRow = db.prepare('SELECT * FROM hs_codes WHERE code=?').get(match) || { description_en: 'export products' };
+  const hsNode = HS.get(match) || HS.get(String(match).slice(0, 4));
+  const hsRow = hsNode ? { code: hsNode.c, description_en: HS.label(hsNode, 'en'), description_id: HS.label(hsNode, 'id') } : { description_en: 'export products' };
   let note = '';
   if (buyer.last_shipment_date) {
     const d = new Date(buyer.last_shipment_date);
@@ -738,13 +731,16 @@ async function handleApi(db, req, res, url, body) {
   if (route('GET', '/api/preview/buyers')) {
     const qStr = (q.get('q') || '').trim();
     if (!qStr) return json(res, 200, { ok: false, query: '', message: 'Query kosong.' });
-    const hsHits = searchHsNomenclature(qStr, 5);
+    const hsHits = searchHsNomenclature(qStr, 12);
     if (!hsHits.length) return json(res, 200, { ok: false, query: qStr, hs: null, buyers: [], message: 'HS code tidak ditemukan.' });
     const hs4 = hsHits[0].code.slice(0, 4);
     const hsBlock = {
       code: hsHits[0].code, description: hsHits[0].description,
     };
-    const alts = hsHits.slice(1, 4).map((h) => ({ code: h.code, description: h.description }));
+    // Alternatives: close matches only, same chapter first.
+    const close = hsHits.slice(1).filter((h) => (h.score || 0) >= (hsHits[0].score || 0) * 0.55);
+    const alts = [...close.filter((h) => h.code.slice(0, 2) === hsHits[0].code.slice(0, 2)), ...close.filter((h) => h.code.slice(0, 2) !== hsHits[0].code.slice(0, 2))]
+      .slice(0, 3).map((h) => ({ code: h.code, description: h.description }));
     // Real buyer pool (Postgres). Only names/locations/type and which
     // contact channels exist are shown; contact values never leave the API.
     if (require('./pg').hasPostgres()) {
@@ -824,11 +820,12 @@ async function handleApi(db, req, res, url, body) {
   if (route('GET', '/api/hs/search')) {
     const qStr = (q.get('q') || '').trim();
     if (!qStr) return json(res, 200, { ok: true, query: '', results: [] });
-    const results = searchHsNomenclature(qStr, 30).map((r) => ({
-      code: r.code,
-      description: r.description,
-      section: r.section,
-      parent: r.parent,
+    const levels = (q.get('levels') || '4,6,8').split(',').map(Number).filter((n) => [2, 4, 6, 8].includes(n));
+    const counts = await poolHsCounts().catch(() => null);
+    const results = searchHsNomenclature(qStr, Math.min(60, Number(q.get('limit')) || 30), levels.length ? levels : [4, 6, 8]).map((r) => ({
+      code: r.code, level: r.level, parent: r.parent,
+      description: r.description, description_en: r.description_en,
+      buyers: counts ? (counts.hs4.get(r.code.slice(0, 4)) || { n: 0, k: 0 }).n : null,
     }));
     return json(res, 200, { ok: true, query: qStr, results, count: results.length });
   }
@@ -1531,21 +1528,41 @@ async function handleApi(db, req, res, url, body) {
 
   // ===== HS taxonomy =====
   if (route('GET', '/api/hs')) {
-    const parent = q.get('parent');
-    const rows = parent
-      ? db.prepare('SELECT * FROM hs_codes WHERE parent_code=? ORDER BY code').all(parent)
-      : db.prepare('SELECT * FROM hs_codes WHERE parent_code IS NULL ORDER BY code').all();
-    const stats = rows.map((r) => {
-      const st = db.prepare(`SELECT COUNT(DISTINCT bh.buyer_id) buyers, COALESCE(SUM(bh.total_volume_kg),0) vol, COALESCE(SUM(bh.total_value_usd),0) val
-        FROM buyer_hs bh WHERE bh.hs_code LIKE ? AND bh.shipment_count > 0`).get(r.code + '%');
-      const top = db.prepare(`SELECT b.country, COUNT(DISTINCT b.id) n FROM buyers b JOIN buyer_hs bh ON bh.buyer_id=b.id
-        WHERE bh.hs_code LIKE ? GROUP BY b.country ORDER BY n DESC LIMIT 3`).all(r.code + '%');
-      return { ...r, buyer_count: st.buyers, volume_kg: Math.round(st.vol), value_usd: Math.round(st.val), top_countries: top };
+    // Browse the full HS tree: chapters -> headings -> 6-digit -> 8-digit.
+    const parent = (q.get('parent') || '').replace(/\D/g, '');
+    const node = parent ? HS.get(parent) : null;
+    if (parent && !node) return err(res, 404, 'Kode HS tidak ditemukan.');
+    const counts = await poolHsCounts().catch(() => null);
+    const countFor = (code) => {
+      if (!counts) return null;
+      if (code.length === 2) return counts.ch.get(code) || { n: 0, k: 0 };
+      return counts.hs4.get(code.slice(0, 4)) || { n: 0, k: 0 };
+    };
+    const crumbs = [];
+    for (let c = node; c; c = c.p ? HS.get(c.p) : null) crumbs.unshift(HS.view(c));
+    const nodes = HS.children(parent || null).map((n) => {
+      const ct = countFor(n.c);
+      return { ...HS.view(n), buyers: ct ? ct.n : null, buyers_with_contact: ct ? ct.k : null };
     });
-    return json(res, 200, stats);
+    const ct = node ? countFor(node.c) : null;
+    return json(res, 200, {
+      parent: node ? { ...HS.view(node), buyers: ct ? ct.n : null, buyers_with_contact: ct ? ct.k : null } : null,
+      crumbs, nodes,
+    });
   }
   if (route('GET', '/api/hs/leaf')) {
-    return json(res, 200, db.prepare('SELECT code, description_en, description_id FROM hs_codes WHERE level=6 ORDER BY code').all());
+    // "Popular" list for pickers: the commodities the crawlers cover.
+    let cfg = { commodities: [] };
+    try { cfg = require('../config/commodities.json'); } catch { /* none */ }
+    const counts = await poolHsCounts().catch(() => null);
+    return json(res, 200, (cfg.commodities || []).map((c) => {
+      const n = HS.get(c.hs4);
+      return {
+        code: c.hs4, description_id: c.label_id, description_en: c.label_en,
+        hs_title: n ? HS.shortTitle(n.i, 90) : null,
+        buyers: counts ? (counts.hs4.get(c.hs4) || { n: 0 }).n : null,
+      };
+    }));
   }
 
   // ===== buyer search (F1) =====
@@ -1740,8 +1757,8 @@ async function handleApi(db, req, res, url, body) {
       });
 
       const bHs = (b.hs_codes || []).map((code) => {
-        const meta = db.prepare('SELECT description_en, description_id FROM hs_codes WHERE code=? OR code=?').get(code, code.slice(0, 4));
-        return { hs_code: code, description_en: meta?.description_en || null, description_id: meta?.description_id || null };
+        const meta = HS.get(code) || HS.get(String(code).slice(0, 4));
+        return { hs_code: code, description_en: meta ? HS.shortTitle(meta.e, 90) : null, description_id: meta ? HS.shortTitle(meta.i, 90) : null };
       });
 
       const fit = productFit(userHs, b.hs_codes || []);
@@ -2242,7 +2259,8 @@ async function handleApi(db, req, res, url, body) {
 
     if (!matched) {
       // Fallback: search by text across HS codes in DB
-      const hsMatch = db.prepare("SELECT * FROM hs_codes WHERE description_en LIKE ? OR description_id LIKE ? LIMIT 1").get('%' + query + '%', '%' + query + '%');
+      const hit = searchHsNomenclature(query, 1, [4, 6])[0];
+      const hsMatch = hit ? { code: hit.code, description_en: hit.description_en, description_id: hit.description } : null;
       if (hsMatch) {
         matched = { hs: hsMatch.code.slice(0, 4), desc_en: hsMatch.description_en, desc_id: hsMatch.description_id, industry: ['General Trade'], titles: ['Procurement Manager', 'Sourcing Director', 'Category Buyer'], cargo_keywords: [query.toUpperCase()] };
       } else {

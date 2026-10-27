@@ -1,170 +1,1530 @@
 {
   "_doc": "Single source of truth for which commodities (HS-4) and destination countries the crawlers + AI research agent target. Read by python_scrapers/shared/commodities.py and src/scrape-config.js. Fields: hs4 = 4-digit HS heading written into scraped_buyers.hs_codes (the platform filters on it); keywords = English product search terms; buyer_terms = how buyers of this product describe themselves (used by the AI agent to build web search queries); naf = French NAF activity codes for the SIRENE crawler; osm_tags = OpenStreetMap [key, value] pairs that only tag industrial/wholesale-scale businesses (empty = OSM crawler skips this HS); priority 1 (highest) to 3.",
   "commodities": [
-    { "hs4": "0901", "label_id": "Kopi", "label_en": "Coffee", "priority": 1,
-      "keywords": ["coffee", "green coffee", "arabica", "robusta", "roastery"],
-      "buyer_terms": ["green coffee importer", "coffee roaster", "coffee trading company", "specialty coffee importer"],
-      "naf": ["46.37Z", "10.83Z"],
-      "osm_tags": [["shop", "roastery"], ["industry", "coffee_roasting"], ["craft", "coffee_roaster"]] },
-    { "hs4": "0902", "label_id": "Teh", "label_en": "Tea", "priority": 2,
-      "keywords": ["tea", "black tea", "green tea"],
-      "buyer_terms": ["tea importer", "tea blender", "tea packer", "tea wholesaler"],
-      "naf": ["46.37Z", "10.83Z"],
-      "osm_tags": [["industry", "tea_processing"]] },
-    { "hs4": "0904", "label_id": "Lada", "label_en": "Pepper", "priority": 1,
-      "keywords": ["pepper", "black pepper", "white pepper", "chili"],
-      "buyer_terms": ["spice importer", "pepper importer", "spice grinder", "seasoning manufacturer"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0905", "label_id": "Vanili", "label_en": "Vanilla", "priority": 1,
-      "keywords": ["vanilla", "vanilla bean"],
-      "buyer_terms": ["vanilla importer", "flavour house", "vanilla extract manufacturer"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0906", "label_id": "Kayu manis", "label_en": "Cinnamon", "priority": 2,
-      "keywords": ["cinnamon", "cassia"],
-      "buyer_terms": ["spice importer", "cassia importer", "spice wholesaler"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0907", "label_id": "Cengkeh", "label_en": "Cloves", "priority": 2,
-      "keywords": ["clove", "cloves"],
-      "buyer_terms": ["clove importer", "spice importer", "kretek manufacturer"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0908", "label_id": "Pala", "label_en": "Nutmeg, mace, cardamom", "priority": 2,
-      "keywords": ["nutmeg", "mace", "cardamom"],
-      "buyer_terms": ["nutmeg importer", "spice importer", "spice trader"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0910", "label_id": "Jahe, kunyit", "label_en": "Ginger, turmeric", "priority": 2,
-      "keywords": ["ginger", "turmeric", "dried ginger"],
-      "buyer_terms": ["ginger importer", "turmeric importer", "herbal ingredients distributor"],
-      "naf": ["46.37Z", "10.84Z"],
-      "osm_tags": [["industry", "food_processing"], ["industry", "spice_production"]] },
-    { "hs4": "0801", "label_id": "Kelapa", "label_en": "Coconuts (desiccated, fresh)", "priority": 1,
-      "keywords": ["desiccated coconut", "coconut", "coconut chips"],
-      "buyer_terms": ["desiccated coconut importer", "coconut products distributor", "bakery ingredients importer"],
-      "naf": ["46.31Z", "46.38B", "10.39B"],
-      "osm_tags": [] },
-    { "hs4": "1513", "label_id": "Minyak kelapa", "label_en": "Coconut oil", "priority": 1,
-      "keywords": ["coconut oil", "virgin coconut oil", "VCO"],
-      "buyer_terms": ["coconut oil importer", "vegetable oil distributor", "cosmetic raw materials distributor"],
-      "naf": ["46.33Z", "10.41B", "46.75Z"],
-      "osm_tags": [] },
-    { "hs4": "1511", "label_id": "Minyak sawit", "label_en": "Palm oil", "priority": 2,
-      "keywords": ["palm oil", "RBD palm olein", "crude palm oil"],
-      "buyer_terms": ["palm oil importer", "edible oil refinery", "vegetable oil trader"],
-      "naf": ["46.33Z", "10.41A", "10.41B"],
-      "osm_tags": [] },
-    { "hs4": "1702", "label_id": "Gula kelapa / gula aren", "label_en": "Coconut & palm sugar", "priority": 2,
-      "keywords": ["coconut sugar", "palm sugar"],
-      "buyer_terms": ["organic sweetener importer", "coconut sugar distributor", "natural food ingredients importer"],
-      "naf": ["46.36Z", "46.38B"],
-      "osm_tags": [] },
-    { "hs4": "1801", "label_id": "Biji kakao", "label_en": "Cocoa beans", "priority": 1,
-      "keywords": ["cocoa beans", "cacao beans", "fermented cocoa"],
-      "buyer_terms": ["cocoa bean importer", "chocolate maker", "bean to bar chocolate", "cocoa processor"],
-      "naf": ["46.37Z", "10.82Z"],
-      "osm_tags": [] },
-    { "hs4": "1804", "label_id": "Lemak kakao", "label_en": "Cocoa butter", "priority": 2,
-      "keywords": ["cocoa butter"],
-      "buyer_terms": ["cocoa butter importer", "chocolate manufacturer", "cosmetic ingredients distributor"],
-      "naf": ["46.36Z", "10.82Z"],
-      "osm_tags": [] },
-    { "hs4": "1805", "label_id": "Bubuk kakao", "label_en": "Cocoa powder", "priority": 2,
-      "keywords": ["cocoa powder"],
-      "buyer_terms": ["cocoa powder importer", "bakery ingredients distributor", "confectionery manufacturer"],
-      "naf": ["46.36Z", "10.82Z"],
-      "osm_tags": [] },
-    { "hs4": "2101", "label_id": "Kopi instan / ekstrak", "label_en": "Coffee extracts & instant coffee", "priority": 3,
-      "keywords": ["instant coffee", "coffee extract", "3 in 1 coffee"],
-      "buyer_terms": ["instant coffee importer", "beverage distributor", "private label coffee"],
-      "naf": ["46.37Z", "10.83Z"],
-      "osm_tags": [] },
-    { "hs4": "0306", "label_id": "Udang & krustasea", "label_en": "Shrimp & crustaceans", "priority": 1,
-      "keywords": ["frozen shrimp", "vannamei shrimp", "black tiger shrimp", "crab meat"],
-      "buyer_terms": ["seafood importer", "frozen shrimp importer", "seafood distributor"],
-      "naf": ["46.38A", "10.20Z"],
-      "osm_tags": [] },
-    { "hs4": "0304", "label_id": "Fillet ikan", "label_en": "Fish fillets (tuna, etc.)", "priority": 2,
-      "keywords": ["tuna loin", "frozen fish fillet", "tuna saku"],
-      "buyer_terms": ["seafood importer", "tuna importer", "frozen fish distributor"],
-      "naf": ["46.38A", "10.20Z"],
-      "osm_tags": [] },
-    { "hs4": "1604", "label_id": "Ikan olahan (tuna kaleng)", "label_en": "Prepared fish (canned tuna)", "priority": 2,
-      "keywords": ["canned tuna", "canned sardines"],
-      "buyer_terms": ["canned food importer", "canned tuna importer", "private label grocery importer"],
-      "naf": ["46.38A", "46.39B"],
-      "osm_tags": [] },
-    { "hs4": "1212", "label_id": "Rumput laut", "label_en": "Seaweed", "priority": 2,
-      "keywords": ["seaweed", "dried seaweed", "eucheuma cottonii", "gracilaria"],
-      "buyer_terms": ["seaweed importer", "carrageenan manufacturer", "agar manufacturer"],
-      "naf": ["46.38B", "10.89Z", "20.59Z"],
-      "osm_tags": [] },
-    { "hs4": "3301", "label_id": "Minyak atsiri (nilam, dll)", "label_en": "Essential oils (patchouli, etc.)", "priority": 1,
-      "keywords": ["patchouli oil", "essential oil", "clove leaf oil", "citronella oil"],
-      "buyer_terms": ["essential oil importer", "fragrance house", "aromatherapy distributor", "perfumery raw materials"],
-      "naf": ["46.75Z", "20.53Z", "46.45Z"],
-      "osm_tags": [] },
-    { "hs4": "4001", "label_id": "Karet alam", "label_en": "Natural rubber", "priority": 3,
-      "keywords": ["natural rubber", "SIR 20", "RSS rubber"],
-      "buyer_terms": ["natural rubber importer", "rubber trader", "rubber products manufacturer"],
-      "naf": ["46.76Z", "22.19Z"],
-      "osm_tags": [] },
-    { "hs4": "9403", "label_id": "Furnitur kayu", "label_en": "Wooden furniture", "priority": 1,
-      "keywords": ["teak furniture", "wooden furniture", "outdoor furniture"],
-      "buyer_terms": ["furniture importer", "furniture wholesaler", "home furnishing importer", "contract furniture supplier"],
-      "naf": ["46.47Z"],
-      "osm_tags": [] },
-    { "hs4": "4602", "label_id": "Kerajinan rotan & anyaman", "label_en": "Rattan & basketwork", "priority": 2,
-      "keywords": ["rattan", "wicker baskets", "seagrass baskets", "handicraft"],
-      "buyer_terms": ["home decor importer", "handicraft importer", "rattan furniture importer", "gift wholesaler"],
-      "naf": ["46.49Z", "46.47Z"],
-      "osm_tags": [] },
-    { "hs4": "2008", "label_id": "Buah olahan (nanas, dll)", "label_en": "Prepared fruit (pineapple, etc.)", "priority": 3,
-      "keywords": ["canned pineapple", "dried fruit", "fruit puree"],
-      "buyer_terms": ["canned fruit importer", "dried fruit importer", "food ingredients distributor"],
-      "naf": ["46.31Z", "46.39B", "10.39B"],
-      "osm_tags": [] }
+    {
+      "hs4": "0901",
+      "label_id": "Kopi",
+      "label_en": "Coffee",
+      "priority": 1,
+      "keywords": [
+        "coffee",
+        "green coffee",
+        "arabica",
+        "robusta",
+        "roastery"
+      ],
+      "buyer_terms": [
+        "green coffee importer",
+        "coffee roaster",
+        "coffee trading company",
+        "specialty coffee importer"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.83Z"
+      ],
+      "osm_tags": [
+        [
+          "shop",
+          "roastery"
+        ],
+        [
+          "industry",
+          "coffee_roasting"
+        ],
+        [
+          "craft",
+          "coffee_roaster"
+        ]
+      ]
+    },
+    {
+      "hs4": "0902",
+      "label_id": "Teh",
+      "label_en": "Tea",
+      "priority": 2,
+      "keywords": [
+        "tea",
+        "black tea",
+        "green tea"
+      ],
+      "buyer_terms": [
+        "tea importer",
+        "tea blender",
+        "tea packer",
+        "tea wholesaler"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.83Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "tea_processing"
+        ]
+      ]
+    },
+    {
+      "hs4": "0904",
+      "label_id": "Lada",
+      "label_en": "Pepper",
+      "priority": 1,
+      "keywords": [
+        "pepper",
+        "black pepper",
+        "white pepper",
+        "chili"
+      ],
+      "buyer_terms": [
+        "spice importer",
+        "pepper importer",
+        "spice grinder",
+        "seasoning manufacturer"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0905",
+      "label_id": "Vanili",
+      "label_en": "Vanilla",
+      "priority": 1,
+      "keywords": [
+        "vanilla",
+        "vanilla bean"
+      ],
+      "buyer_terms": [
+        "vanilla importer",
+        "flavour house",
+        "vanilla extract manufacturer"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0906",
+      "label_id": "Kayu manis",
+      "label_en": "Cinnamon",
+      "priority": 2,
+      "keywords": [
+        "cinnamon",
+        "cassia"
+      ],
+      "buyer_terms": [
+        "spice importer",
+        "cassia importer",
+        "spice wholesaler"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0907",
+      "label_id": "Cengkeh",
+      "label_en": "Cloves",
+      "priority": 2,
+      "keywords": [
+        "clove",
+        "cloves"
+      ],
+      "buyer_terms": [
+        "clove importer",
+        "spice importer",
+        "kretek manufacturer"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0908",
+      "label_id": "Pala",
+      "label_en": "Nutmeg, mace, cardamom",
+      "priority": 2,
+      "keywords": [
+        "nutmeg",
+        "mace",
+        "cardamom"
+      ],
+      "buyer_terms": [
+        "nutmeg importer",
+        "spice importer",
+        "spice trader"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0910",
+      "label_id": "Jahe, kunyit",
+      "label_en": "Ginger, turmeric",
+      "priority": 2,
+      "keywords": [
+        "ginger",
+        "turmeric",
+        "dried ginger"
+      ],
+      "buyer_terms": [
+        "ginger importer",
+        "turmeric importer",
+        "herbal ingredients distributor"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.84Z"
+      ],
+      "osm_tags": [
+        [
+          "industry",
+          "food_processing"
+        ],
+        [
+          "industry",
+          "spice_production"
+        ]
+      ]
+    },
+    {
+      "hs4": "0801",
+      "label_id": "Kelapa & kacang mete",
+      "label_en": "Coconuts & cashew nuts",
+      "priority": 1,
+      "keywords": [
+        "desiccated coconut",
+        "coconut",
+        "coconut chips",
+        "cashew",
+        "cashew nuts"
+      ],
+      "buyer_terms": [
+        "desiccated coconut importer",
+        "coconut products distributor",
+        "bakery ingredients importer",
+        "cashew importer",
+        "nut importer"
+      ],
+      "naf": [
+        "46.31Z",
+        "46.38B",
+        "10.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1513",
+      "label_id": "Minyak kelapa",
+      "label_en": "Coconut oil",
+      "priority": 1,
+      "keywords": [
+        "coconut oil",
+        "virgin coconut oil",
+        "VCO"
+      ],
+      "buyer_terms": [
+        "coconut oil importer",
+        "vegetable oil distributor",
+        "cosmetic raw materials distributor"
+      ],
+      "naf": [
+        "46.33Z",
+        "10.41B",
+        "46.75Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1511",
+      "label_id": "Minyak sawit",
+      "label_en": "Palm oil",
+      "priority": 2,
+      "keywords": [
+        "palm oil",
+        "RBD palm olein",
+        "crude palm oil"
+      ],
+      "buyer_terms": [
+        "palm oil importer",
+        "edible oil refinery",
+        "vegetable oil trader"
+      ],
+      "naf": [
+        "46.33Z",
+        "10.41A",
+        "10.41B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1702",
+      "label_id": "Gula kelapa / gula aren",
+      "label_en": "Coconut & palm sugar",
+      "priority": 2,
+      "keywords": [
+        "coconut sugar",
+        "palm sugar"
+      ],
+      "buyer_terms": [
+        "organic sweetener importer",
+        "coconut sugar distributor",
+        "natural food ingredients importer"
+      ],
+      "naf": [
+        "46.36Z",
+        "46.38B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1801",
+      "label_id": "Biji kakao",
+      "label_en": "Cocoa beans",
+      "priority": 1,
+      "keywords": [
+        "cocoa beans",
+        "cacao beans",
+        "fermented cocoa"
+      ],
+      "buyer_terms": [
+        "cocoa bean importer",
+        "chocolate maker",
+        "bean to bar chocolate",
+        "cocoa processor"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.82Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1804",
+      "label_id": "Lemak kakao",
+      "label_en": "Cocoa butter",
+      "priority": 2,
+      "keywords": [
+        "cocoa butter"
+      ],
+      "buyer_terms": [
+        "cocoa butter importer",
+        "chocolate manufacturer",
+        "cosmetic ingredients distributor"
+      ],
+      "naf": [
+        "46.36Z",
+        "10.82Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1805",
+      "label_id": "Bubuk kakao",
+      "label_en": "Cocoa powder",
+      "priority": 2,
+      "keywords": [
+        "cocoa powder"
+      ],
+      "buyer_terms": [
+        "cocoa powder importer",
+        "bakery ingredients distributor",
+        "confectionery manufacturer"
+      ],
+      "naf": [
+        "46.36Z",
+        "10.82Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "2101",
+      "label_id": "Kopi instan / ekstrak",
+      "label_en": "Coffee extracts & instant coffee",
+      "priority": 3,
+      "keywords": [
+        "instant coffee",
+        "coffee extract",
+        "3 in 1 coffee"
+      ],
+      "buyer_terms": [
+        "instant coffee importer",
+        "beverage distributor",
+        "private label coffee"
+      ],
+      "naf": [
+        "46.37Z",
+        "10.83Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0306",
+      "label_id": "Udang & krustasea",
+      "label_en": "Shrimp & crustaceans",
+      "priority": 1,
+      "keywords": [
+        "frozen shrimp",
+        "vannamei shrimp",
+        "black tiger shrimp",
+        "crab meat"
+      ],
+      "buyer_terms": [
+        "seafood importer",
+        "frozen shrimp importer",
+        "seafood distributor"
+      ],
+      "naf": [
+        "46.38A",
+        "10.20Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0304",
+      "label_id": "Fillet ikan",
+      "label_en": "Fish fillets (tuna, etc.)",
+      "priority": 2,
+      "keywords": [
+        "tuna loin",
+        "frozen fish fillet",
+        "tuna saku"
+      ],
+      "buyer_terms": [
+        "seafood importer",
+        "tuna importer",
+        "frozen fish distributor"
+      ],
+      "naf": [
+        "46.38A",
+        "10.20Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1604",
+      "label_id": "Ikan olahan (tuna kaleng)",
+      "label_en": "Prepared fish (canned tuna)",
+      "priority": 2,
+      "keywords": [
+        "canned tuna",
+        "canned sardines"
+      ],
+      "buyer_terms": [
+        "canned food importer",
+        "canned tuna importer",
+        "private label grocery importer"
+      ],
+      "naf": [
+        "46.38A",
+        "46.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1212",
+      "label_id": "Rumput laut",
+      "label_en": "Seaweed",
+      "priority": 2,
+      "keywords": [
+        "seaweed",
+        "dried seaweed",
+        "eucheuma cottonii",
+        "gracilaria"
+      ],
+      "buyer_terms": [
+        "seaweed importer",
+        "carrageenan manufacturer",
+        "agar manufacturer"
+      ],
+      "naf": [
+        "46.38B",
+        "10.89Z",
+        "20.59Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "3301",
+      "label_id": "Minyak atsiri (nilam, dll)",
+      "label_en": "Essential oils (patchouli, etc.)",
+      "priority": 1,
+      "keywords": [
+        "patchouli oil",
+        "essential oil",
+        "clove leaf oil",
+        "citronella oil"
+      ],
+      "buyer_terms": [
+        "essential oil importer",
+        "fragrance house",
+        "aromatherapy distributor",
+        "perfumery raw materials"
+      ],
+      "naf": [
+        "46.75Z",
+        "20.53Z",
+        "46.45Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4001",
+      "label_id": "Karet alam",
+      "label_en": "Natural rubber",
+      "priority": 3,
+      "keywords": [
+        "natural rubber",
+        "SIR 20",
+        "RSS rubber"
+      ],
+      "buyer_terms": [
+        "natural rubber importer",
+        "rubber trader",
+        "rubber products manufacturer"
+      ],
+      "naf": [
+        "46.76Z",
+        "22.19Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "9403",
+      "label_id": "Furnitur kayu",
+      "label_en": "Wooden furniture",
+      "priority": 1,
+      "keywords": [
+        "teak furniture",
+        "wooden furniture",
+        "outdoor furniture"
+      ],
+      "buyer_terms": [
+        "furniture importer",
+        "furniture wholesaler",
+        "home furnishing importer",
+        "contract furniture supplier"
+      ],
+      "naf": [
+        "46.47Z"
+      ],
+      "osm_tags": [
+        [
+          "shop",
+          "furniture"
+        ]
+      ]
+    },
+    {
+      "hs4": "4602",
+      "label_id": "Kerajinan rotan & anyaman",
+      "label_en": "Rattan & basketwork",
+      "priority": 2,
+      "keywords": [
+        "rattan",
+        "wicker baskets",
+        "seagrass baskets",
+        "handicraft"
+      ],
+      "buyer_terms": [
+        "home decor importer",
+        "handicraft importer",
+        "rattan furniture importer",
+        "gift wholesaler"
+      ],
+      "naf": [
+        "46.49Z",
+        "46.47Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "2008",
+      "label_id": "Buah olahan (nanas, dll)",
+      "label_en": "Prepared fruit (pineapple, etc.)",
+      "priority": 3,
+      "keywords": [
+        "canned pineapple",
+        "dried fruit",
+        "fruit puree"
+      ],
+      "buyer_terms": [
+        "canned fruit importer",
+        "dried fruit importer",
+        "food ingredients distributor"
+      ],
+      "naf": [
+        "46.31Z",
+        "46.39B",
+        "10.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0802",
+      "label_id": "Pinang & kemiri",
+      "label_en": "Areca nuts & candlenuts",
+      "priority": 3,
+      "keywords": [
+        "areca nut",
+        "betel nut",
+        "candlenut",
+        "kemiri"
+      ],
+      "buyer_terms": [
+        "areca nut importer",
+        "betel nut importer",
+        "candlenut importer",
+        "nut importer"
+      ],
+      "naf": [
+        "46.21Z",
+        "46.37Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0714",
+      "label_id": "Porang, singkong & umbi",
+      "label_en": "Konjac, cassava & tubers",
+      "priority": 3,
+      "keywords": [
+        "konjac",
+        "porang",
+        "cassava",
+        "glucomannan"
+      ],
+      "buyer_terms": [
+        "konjac importer",
+        "konjac flour buyer",
+        "cassava chips importer"
+      ],
+      "naf": [
+        "46.21Z",
+        "46.38B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1108",
+      "label_id": "Tepung tapioka",
+      "label_en": "Tapioca starch",
+      "priority": 3,
+      "keywords": [
+        "tapioca",
+        "tapioca starch",
+        "cassava starch"
+      ],
+      "buyer_terms": [
+        "tapioca starch importer",
+        "starch distributor",
+        "food ingredients importer"
+      ],
+      "naf": [
+        "46.38B",
+        "46.75Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0410",
+      "label_id": "Sarang burung walet",
+      "label_en": "Edible bird's nest",
+      "priority": 3,
+      "keywords": [
+        "bird's nest",
+        "edible bird nest",
+        "swiftlet nest"
+      ],
+      "buyer_terms": [
+        "bird's nest importer",
+        "bird nest distributor"
+      ],
+      "naf": [
+        "46.38B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0307",
+      "label_id": "Cumi, sotong & gurita",
+      "label_en": "Squid, cuttlefish & octopus",
+      "priority": 3,
+      "keywords": [
+        "squid",
+        "cuttlefish",
+        "octopus",
+        "molluscs"
+      ],
+      "buyer_terms": [
+        "squid importer",
+        "octopus importer",
+        "frozen seafood importer"
+      ],
+      "naf": [
+        "46.38A",
+        "10.20Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0303",
+      "label_id": "Ikan beku (tuna, cakalang)",
+      "label_en": "Frozen fish (tuna, skipjack)",
+      "priority": 3,
+      "keywords": [
+        "frozen tuna",
+        "skipjack",
+        "frozen fish"
+      ],
+      "buyer_terms": [
+        "frozen tuna importer",
+        "frozen fish importer",
+        "tuna cannery"
+      ],
+      "naf": [
+        "46.38A",
+        "10.20Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0302",
+      "label_id": "Ikan segar (tuna, kakap)",
+      "label_en": "Fresh fish (tuna, snapper)",
+      "priority": 3,
+      "keywords": [
+        "fresh tuna",
+        "sashimi tuna",
+        "snapper",
+        "grouper"
+      ],
+      "buyer_terms": [
+        "fresh tuna importer",
+        "fresh fish importer",
+        "seafood wholesaler"
+      ],
+      "naf": [
+        "46.38A"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1605",
+      "label_id": "Kepiting & udang olahan",
+      "label_en": "Prepared crab & shrimp",
+      "priority": 3,
+      "keywords": [
+        "crab meat",
+        "pasteurized crab",
+        "swimming crab",
+        "prepared shrimp"
+      ],
+      "buyer_terms": [
+        "crab meat importer",
+        "seafood importer",
+        "seafood distributor"
+      ],
+      "naf": [
+        "46.38A",
+        "10.20Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1211",
+      "label_id": "Gaharu & tanaman obat",
+      "label_en": "Agarwood & medicinal plants",
+      "priority": 3,
+      "keywords": [
+        "agarwood",
+        "oud",
+        "gaharu",
+        "medicinal herbs"
+      ],
+      "buyer_terms": [
+        "agarwood importer",
+        "oud trader",
+        "herbal ingredients importer"
+      ],
+      "naf": [
+        "46.46Z",
+        "46.21Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1301",
+      "label_id": "Damar, kemenyan & getah alam",
+      "label_en": "Natural gums & resins (damar, benzoin)",
+      "priority": 3,
+      "keywords": [
+        "damar",
+        "benzoin",
+        "gum resin",
+        "copal"
+      ],
+      "buyer_terms": [
+        "natural resin importer",
+        "gum importer",
+        "incense raw material importer"
+      ],
+      "naf": [
+        "46.75Z",
+        "20.53Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "3201",
+      "label_id": "Gambir",
+      "label_en": "Gambier extract",
+      "priority": 3,
+      "keywords": [
+        "gambier",
+        "catechu",
+        "tannin extract"
+      ],
+      "buyer_terms": [
+        "gambier importer",
+        "tanning extract importer"
+      ],
+      "naf": [
+        "46.75Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "5305",
+      "label_id": "Sabut kelapa (coir)",
+      "label_en": "Coconut coir & cocopeat",
+      "priority": 3,
+      "keywords": [
+        "coir",
+        "cocopeat",
+        "coco peat",
+        "coconut fibre"
+      ],
+      "buyer_terms": [
+        "coir importer",
+        "cocopeat importer",
+        "horticulture substrate distributor"
+      ],
+      "naf": [
+        "46.21Z",
+        "46.76Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4402",
+      "label_id": "Arang kelapa & briket",
+      "label_en": "Coconut charcoal & briquettes",
+      "priority": 3,
+      "keywords": [
+        "charcoal briquettes",
+        "coconut shell charcoal",
+        "shisha charcoal",
+        "hookah charcoal"
+      ],
+      "buyer_terms": [
+        "charcoal importer",
+        "shisha charcoal distributor",
+        "bbq charcoal importer"
+      ],
+      "naf": [
+        "46.71Z",
+        "46.75Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "3802",
+      "label_id": "Karbon aktif",
+      "label_en": "Activated carbon",
+      "priority": 3,
+      "keywords": [
+        "activated carbon",
+        "activated charcoal"
+      ],
+      "buyer_terms": [
+        "activated carbon importer",
+        "activated carbon distributor"
+      ],
+      "naf": [
+        "46.75Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4412",
+      "label_id": "Kayu lapis (plywood)",
+      "label_en": "Plywood",
+      "priority": 3,
+      "keywords": [
+        "plywood",
+        "laminated veneer lumber",
+        "blockboard"
+      ],
+      "buyer_terms": [
+        "plywood importer",
+        "timber importer",
+        "building materials importer"
+      ],
+      "naf": [
+        "46.73A"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4421",
+      "label_id": "Kerajinan & barang kayu",
+      "label_en": "Wooden handicrafts & articles",
+      "priority": 3,
+      "keywords": [
+        "wooden handicraft",
+        "wooden home decor",
+        "wooden articles"
+      ],
+      "buyer_terms": [
+        "home decor importer",
+        "handicraft importer",
+        "gift wholesaler"
+      ],
+      "naf": [
+        "46.49Z",
+        "46.47Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "6109",
+      "label_id": "Kaos & pakaian rajut",
+      "label_en": "T-shirts & knitted garments",
+      "priority": 3,
+      "keywords": [
+        "t-shirts",
+        "knitwear",
+        "garments"
+      ],
+      "buyer_terms": [
+        "apparel importer",
+        "garment importer",
+        "clothing wholesaler"
+      ],
+      "naf": [
+        "46.42Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "6204",
+      "label_id": "Pakaian wanita (gaun, setelan)",
+      "label_en": "Women's dresses & suits",
+      "priority": 3,
+      "keywords": [
+        "women's apparel",
+        "dresses",
+        "modest fashion"
+      ],
+      "buyer_terms": [
+        "apparel importer",
+        "fashion distributor",
+        "clothing wholesaler"
+      ],
+      "naf": [
+        "46.42Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "5208",
+      "label_id": "Kain katun & batik",
+      "label_en": "Cotton fabrics & batik",
+      "priority": 3,
+      "keywords": [
+        "cotton fabric",
+        "batik fabric",
+        "woven cotton"
+      ],
+      "buyer_terms": [
+        "fabric importer",
+        "textile wholesaler",
+        "batik importer"
+      ],
+      "naf": [
+        "46.41Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "6404",
+      "label_id": "Sepatu olahraga & kanvas",
+      "label_en": "Sports & canvas footwear",
+      "priority": 3,
+      "keywords": [
+        "sneakers",
+        "sports shoes",
+        "canvas shoes"
+      ],
+      "buyer_terms": [
+        "footwear importer",
+        "shoe distributor",
+        "footwear wholesaler"
+      ],
+      "naf": [
+        "46.42Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "6403",
+      "label_id": "Sepatu kulit",
+      "label_en": "Leather footwear",
+      "priority": 3,
+      "keywords": [
+        "leather shoes",
+        "leather boots"
+      ],
+      "buyer_terms": [
+        "footwear importer",
+        "shoe wholesaler"
+      ],
+      "naf": [
+        "46.42Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4202",
+      "label_id": "Tas & koper",
+      "label_en": "Bags, handbags & luggage",
+      "priority": 3,
+      "keywords": [
+        "handbags",
+        "bags",
+        "luggage",
+        "rattan bags"
+      ],
+      "buyer_terms": [
+        "handbag importer",
+        "bag distributor",
+        "fashion accessories importer"
+      ],
+      "naf": [
+        "46.42Z",
+        "46.49Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "2402",
+      "label_id": "Rokok kretek & cerutu",
+      "label_en": "Kretek cigarettes & cigars",
+      "priority": 3,
+      "keywords": [
+        "cigars",
+        "kretek",
+        "clove cigarettes"
+      ],
+      "buyer_terms": [
+        "cigar importer",
+        "tobacco distributor"
+      ],
+      "naf": [
+        "46.35Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1902",
+      "label_id": "Mi instan & pasta",
+      "label_en": "Instant noodles & pasta",
+      "priority": 3,
+      "keywords": [
+        "instant noodles",
+        "noodles"
+      ],
+      "buyer_terms": [
+        "asian food importer",
+        "noodle distributor",
+        "ethnic food wholesaler"
+      ],
+      "naf": [
+        "46.38B",
+        "46.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "1905",
+      "label_id": "Biskuit, wafer & makanan ringan",
+      "label_en": "Biscuits, wafers & snacks",
+      "priority": 3,
+      "keywords": [
+        "biscuits",
+        "wafers",
+        "crackers",
+        "snacks"
+      ],
+      "buyer_terms": [
+        "snack importer",
+        "confectionery importer",
+        "food distributor"
+      ],
+      "naf": [
+        "46.36Z",
+        "46.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "2106",
+      "label_id": "Olahan makanan (santan, bumbu)",
+      "label_en": "Food preparations (coconut milk, seasonings)",
+      "priority": 3,
+      "keywords": [
+        "coconut milk powder",
+        "food preparations",
+        "seasoning mix"
+      ],
+      "buyer_terms": [
+        "asian food importer",
+        "food ingredients distributor"
+      ],
+      "naf": [
+        "46.38B",
+        "46.39B"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0804",
+      "label_id": "Mangga, manggis & nanas",
+      "label_en": "Mangoes, mangosteens & pineapples",
+      "priority": 3,
+      "keywords": [
+        "mango",
+        "mangosteen",
+        "pineapple",
+        "tropical fruit"
+      ],
+      "buyer_terms": [
+        "tropical fruit importer",
+        "fresh produce importer"
+      ],
+      "naf": [
+        "46.31Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "0803",
+      "label_id": "Pisang",
+      "label_en": "Bananas",
+      "priority": 3,
+      "keywords": [
+        "bananas",
+        "cavendish banana"
+      ],
+      "buyer_terms": [
+        "banana importer",
+        "fresh produce importer"
+      ],
+      "naf": [
+        "46.31Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "3304",
+      "label_id": "Kosmetik & perawatan kulit",
+      "label_en": "Cosmetics & skincare",
+      "priority": 3,
+      "keywords": [
+        "cosmetics",
+        "skincare",
+        "beauty products"
+      ],
+      "buyer_terms": [
+        "cosmetics importer",
+        "beauty distributor"
+      ],
+      "naf": [
+        "46.45Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "3401",
+      "label_id": "Sabun",
+      "label_en": "Soap",
+      "priority": 3,
+      "keywords": [
+        "soap",
+        "natural soap",
+        "coconut soap"
+      ],
+      "buyer_terms": [
+        "soap importer",
+        "personal care distributor"
+      ],
+      "naf": [
+        "46.45Z",
+        "46.44Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "7113",
+      "label_id": "Perhiasan perak & emas",
+      "label_en": "Silver & gold jewellery",
+      "priority": 3,
+      "keywords": [
+        "silver jewellery",
+        "jewelry",
+        "handmade jewelry"
+      ],
+      "buyer_terms": [
+        "jewellery importer",
+        "jewelry wholesaler"
+      ],
+      "naf": [
+        "46.48Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "6912",
+      "label_id": "Keramik & gerabah",
+      "label_en": "Ceramic tableware & pottery",
+      "priority": 3,
+      "keywords": [
+        "ceramics",
+        "pottery",
+        "stoneware",
+        "terracotta"
+      ],
+      "buyer_terms": [
+        "homeware importer",
+        "ceramics importer",
+        "tableware wholesaler"
+      ],
+      "naf": [
+        "46.44Z",
+        "46.49Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "9401",
+      "label_id": "Kursi & sofa",
+      "label_en": "Seats, chairs & sofas",
+      "priority": 3,
+      "keywords": [
+        "chairs",
+        "outdoor furniture",
+        "sofas",
+        "teak chairs"
+      ],
+      "buyer_terms": [
+        "furniture importer",
+        "outdoor furniture importer",
+        "furniture wholesaler"
+      ],
+      "naf": [
+        "46.47Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4015",
+      "label_id": "Sarung tangan karet",
+      "label_en": "Rubber gloves",
+      "priority": 3,
+      "keywords": [
+        "rubber gloves",
+        "latex gloves",
+        "nitrile gloves"
+      ],
+      "buyer_terms": [
+        "glove importer",
+        "medical supplies distributor"
+      ],
+      "naf": [
+        "46.46Z",
+        "46.69Z"
+      ],
+      "osm_tags": []
+    },
+    {
+      "hs4": "4011",
+      "label_id": "Ban (karet)",
+      "label_en": "Tyres",
+      "priority": 3,
+      "keywords": [
+        "tyres",
+        "tires",
+        "motorcycle tyres"
+      ],
+      "buyer_terms": [
+        "tyre importer",
+        "tire distributor",
+        "tyre wholesaler"
+      ],
+      "naf": [
+        "46.73A"
+      ],
+      "osm_tags": []
+    }
   ],
   "countries": [
-    { "iso2": "US", "name": "United States", "priority": 1 },
-    { "iso2": "DE", "name": "Germany", "priority": 1 },
-    { "iso2": "NL", "name": "Netherlands", "priority": 1 },
-    { "iso2": "JP", "name": "Japan", "priority": 1 },
-    { "iso2": "GB", "name": "United Kingdom", "priority": 1 },
-    { "iso2": "FR", "name": "France", "priority": 1 },
-    { "iso2": "AU", "name": "Australia", "priority": 1 },
-    { "iso2": "AE", "name": "United Arab Emirates", "priority": 1 },
-    { "iso2": "CN", "name": "China", "priority": 1 },
-    { "iso2": "KR", "name": "South Korea", "priority": 1 },
-    { "iso2": "SA", "name": "Saudi Arabia", "priority": 1 },
-    { "iso2": "IT", "name": "Italy", "priority": 2 },
-    { "iso2": "BE", "name": "Belgium", "priority": 2 },
-    { "iso2": "ES", "name": "Spain", "priority": 2 },
-    { "iso2": "CA", "name": "Canada", "priority": 2 },
-    { "iso2": "SG", "name": "Singapore", "priority": 2 },
-    { "iso2": "MY", "name": "Malaysia", "priority": 2 },
-    { "iso2": "IN", "name": "India", "priority": 2 },
-    { "iso2": "TW", "name": "Taiwan", "priority": 2 },
-    { "iso2": "TR", "name": "Turkey", "priority": 2 },
-    { "iso2": "EG", "name": "Egypt", "priority": 2 },
-    { "iso2": "CH", "name": "Switzerland", "priority": 2 },
-    { "iso2": "PL", "name": "Poland", "priority": 2 },
-    { "iso2": "SE", "name": "Sweden", "priority": 2 },
-    { "iso2": "NZ", "name": "New Zealand", "priority": 2 },
-    { "iso2": "TH", "name": "Thailand", "priority": 3 },
-    { "iso2": "VN", "name": "Vietnam", "priority": 3 },
-    { "iso2": "PH", "name": "Philippines", "priority": 3 },
-    { "iso2": "AT", "name": "Austria", "priority": 3 },
-    { "iso2": "DK", "name": "Denmark", "priority": 3 },
-    { "iso2": "IE", "name": "Ireland", "priority": 3 },
-    { "iso2": "NO", "name": "Norway", "priority": 3 },
-    { "iso2": "PT", "name": "Portugal", "priority": 3 },
-    { "iso2": "MX", "name": "Mexico", "priority": 3 },
-    { "iso2": "BR", "name": "Brazil", "priority": 3 },
-    { "iso2": "ZA", "name": "South Africa", "priority": 3 },
-    { "iso2": "PK", "name": "Pakistan", "priority": 3 },
-    { "iso2": "BD", "name": "Bangladesh", "priority": 3 }
+    {
+      "iso2": "US",
+      "name": "United States",
+      "priority": 1
+    },
+    {
+      "iso2": "DE",
+      "name": "Germany",
+      "priority": 1
+    },
+    {
+      "iso2": "NL",
+      "name": "Netherlands",
+      "priority": 1
+    },
+    {
+      "iso2": "JP",
+      "name": "Japan",
+      "priority": 1
+    },
+    {
+      "iso2": "GB",
+      "name": "United Kingdom",
+      "priority": 1
+    },
+    {
+      "iso2": "FR",
+      "name": "France",
+      "priority": 1
+    },
+    {
+      "iso2": "AU",
+      "name": "Australia",
+      "priority": 1
+    },
+    {
+      "iso2": "AE",
+      "name": "United Arab Emirates",
+      "priority": 1
+    },
+    {
+      "iso2": "CN",
+      "name": "China",
+      "priority": 1
+    },
+    {
+      "iso2": "KR",
+      "name": "South Korea",
+      "priority": 1
+    },
+    {
+      "iso2": "SA",
+      "name": "Saudi Arabia",
+      "priority": 1
+    },
+    {
+      "iso2": "IT",
+      "name": "Italy",
+      "priority": 2
+    },
+    {
+      "iso2": "BE",
+      "name": "Belgium",
+      "priority": 2
+    },
+    {
+      "iso2": "ES",
+      "name": "Spain",
+      "priority": 2
+    },
+    {
+      "iso2": "CA",
+      "name": "Canada",
+      "priority": 2
+    },
+    {
+      "iso2": "SG",
+      "name": "Singapore",
+      "priority": 2
+    },
+    {
+      "iso2": "MY",
+      "name": "Malaysia",
+      "priority": 2
+    },
+    {
+      "iso2": "IN",
+      "name": "India",
+      "priority": 2
+    },
+    {
+      "iso2": "TW",
+      "name": "Taiwan",
+      "priority": 2
+    },
+    {
+      "iso2": "TR",
+      "name": "Turkey",
+      "priority": 2
+    },
+    {
+      "iso2": "EG",
+      "name": "Egypt",
+      "priority": 2
+    },
+    {
+      "iso2": "CH",
+      "name": "Switzerland",
+      "priority": 2
+    },
+    {
+      "iso2": "PL",
+      "name": "Poland",
+      "priority": 2
+    },
+    {
+      "iso2": "SE",
+      "name": "Sweden",
+      "priority": 2
+    },
+    {
+      "iso2": "NZ",
+      "name": "New Zealand",
+      "priority": 2
+    },
+    {
+      "iso2": "TH",
+      "name": "Thailand",
+      "priority": 3
+    },
+    {
+      "iso2": "VN",
+      "name": "Vietnam",
+      "priority": 3
+    },
+    {
+      "iso2": "PH",
+      "name": "Philippines",
+      "priority": 3
+    },
+    {
+      "iso2": "AT",
+      "name": "Austria",
+      "priority": 3
+    },
+    {
+      "iso2": "DK",
+      "name": "Denmark",
+      "priority": 3
+    },
+    {
+      "iso2": "IE",
+      "name": "Ireland",
+      "priority": 3
+    },
+    {
+      "iso2": "NO",
+      "name": "Norway",
+      "priority": 3
+    },
+    {
+      "iso2": "PT",
+      "name": "Portugal",
+      "priority": 3
+    },
+    {
+      "iso2": "MX",
+      "name": "Mexico",
+      "priority": 3
+    },
+    {
+      "iso2": "BR",
+      "name": "Brazil",
+      "priority": 3
+    },
+    {
+      "iso2": "ZA",
+      "name": "South Africa",
+      "priority": 3
+    },
+    {
+      "iso2": "PK",
+      "name": "Pakistan",
+      "priority": 3
+    },
+    {
+      "iso2": "BD",
+      "name": "Bangladesh",
+      "priority": 3
+    }
   ]
 }

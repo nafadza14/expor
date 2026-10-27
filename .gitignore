@@ -1,6 +1,7 @@
 node_modules/
 data/*
 !data/hs-nomenclature.csv
+!data/hs-id.json
 .vercel/
 .claude/
 *.db

@@ -19,8 +19,9 @@ ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
-UA = "EksporIn bulk importer (+https://exporin-eight.vercel.app)"
+UA = "EksporIn bulk importer (+https://exporin-eight.vercel.app; ops@eksporin.id)"
 
 # (key, value) -> (hs codes, industry label, buyer_type)
 TAGS: list[tuple[str, str, list[str], str, str]] = [
@@ -32,12 +33,21 @@ TAGS: list[tuple[str, str, list[str], str, str]] = [
     ("shop", "chocolate", COCOA, "chocolatier", "manufacturer"),
     ("craft", "chocolatier", COCOA, "chocolatier", "manufacturer"),
     ("craft", "confectionery", COCOA, "chocolate and confectionery maker", "manufacturer"),
+    ("shop", "furniture", ["9403", "9401", "4602"], "furniture retailer", "retail_chain"),
 ]
+# Small queries finish fast and fail alone; furniture is by far the largest.
+GROUPS = [TAGS[:3], TAGS[3:8], TAGS[8:]]
+
+# Biggest markets for Indonesian products first, so a short run still
+# covers them.
+ORDER = ["US", "DE", "NL", "JP", "GB", "FR", "AU", "AE", "SA", "KR", "CN", "IT", "BE", "ES", "CA", "SG",
+         "MY", "IN", "TW", "TR", "CH", "PL", "SE", "NZ", "AT", "DK", "NO", "IE", "PT", "EG", "TH", "VN",
+         "PH", "MX", "BR", "ZA", "PK", "BD"]
 
 
-def query(iso2: str) -> str:
-    parts = "\n".join(f'  nwr["{k}"="{v}"]["name"](area.c);' for k, v, *_ in TAGS)
-    return f"""[out:json][timeout:240];
+def query(iso2: str, tags=None) -> str:
+    parts = "\n".join(f'  nwr["{k}"="{v}"]["name"](area.c);' for k, v, *_ in (tags or TAGS))
+    return f"""[out:json][timeout:110];
 area["ISO3166-1"="{iso2}"][admin_level=2]->.c;
 (
 {parts}
@@ -45,21 +55,45 @@ area["ISO3166-1"="{iso2}"][admin_level=2]->.c;
 out center tags;"""
 
 
-def fetch(iso2: str) -> list[dict]:
-    q = query(iso2)
-    last = None
-    for attempt in range(6):
-        url = ENDPOINTS[attempt % len(ENDPOINTS)]
-        try:
-            r = httpx.post(url, data={"data": q}, headers={"User-Agent": UA}, timeout=300)
-            if r.status_code == 200:
-                return r.json().get("elements") or []
-            last = f"HTTP {r.status_code}"
-        except Exception as e:
-            last = str(e)[:120]
-        time.sleep(10 + attempt * 10)
-    print(f"::warning::Overpass {iso2} failed: {last}")
-    return []
+class Overpass:
+    """Rotates endpoints; an endpoint that keeps failing is tried last."""
+
+    def __init__(self) -> None:
+        self.fails = {u: 0 for u in ENDPOINTS}
+        self.client = httpx.Client(timeout=httpx.Timeout(130, connect=15),
+                                   headers={"User-Agent": UA, "Accept": "application/json"})
+
+    def run(self, q: str, deadline: float) -> Optional[list[dict]]:
+        last = None
+        for attempt in range(4):
+            if time.time() > deadline:
+                break
+            url = sorted(ENDPOINTS, key=lambda u: self.fails[u])[attempt % len(ENDPOINTS)]
+            try:
+                r = self.client.post(url, data={"data": q})
+                if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                    self.fails[url] = max(0, self.fails[url] - 1)
+                    return r.json().get("elements") or []
+                last = f"{url.split('/')[2]} HTTP {r.status_code}"
+            except Exception as e:
+                last = f"{url.split('/')[2]} {type(e).__name__}"
+            self.fails[url] += 1
+            time.sleep(4 + attempt * 6)
+        print(f"[osm] query failed: {last}")
+        return None
+
+
+def fetch(iso2: str, op: Optional["Overpass"] = None, deadline: Optional[float] = None) -> list[dict]:
+    op = op or Overpass()
+    deadline = deadline or time.time() + 600
+    out: list[dict] = []
+    for group in GROUPS:
+        els = op.run(query(iso2, group), deadline)
+        if els is None:
+            print(f"::warning::Overpass {iso2} group {group[0][1]} failed")
+            continue
+        out += els
+    return out
 
 
 def to_record(el: dict, iso2: str) -> Optional[dict]:
@@ -96,17 +130,29 @@ def to_record(el: dict, iso2: str) -> Optional[dict]:
     }
 
 
-def run(writer, countries: Optional[list[str]] = None, limit: Optional[int] = None) -> None:
-    codes = countries or [c["iso2"] for c in target_countries(9)]
+def run(writer, countries: Optional[list[str]] = None, limit: Optional[int] = None,
+        shard: int = 0, shards: int = 1, minutes: float = 120) -> None:
+    configured = [c["iso2"] for c in target_countries(9)]
+    codes = countries or [c for c in ORDER if c in configured] + [c for c in configured if c not in ORDER]
+    codes = [c for i, c in enumerate(codes) if i % max(1, shards) == shard % max(1, shards)]
+    stop = time.time() + minutes * 60
+    op = Overpass()
     n = 0
     for iso2 in codes:
-        els = fetch(iso2)
-        print(f"[osm] {iso2}: {len(els)} elements")
+        if time.time() > stop:
+            print(f"::warning::OSM time budget used; not reached: {iso2} and later")
+            break
+        # At most 12 minutes per country so one slow country cannot eat the run.
+        els = fetch(iso2, op, min(stop, time.time() + 12 * 60))
+        kept = 0
         for el in els:
             rec = to_record(el, iso2)
             if rec:
                 writer.add(rec)
+                kept += 1
                 n += 1
                 if limit and n >= limit:
                     return
-        time.sleep(5)
+        writer.flush()
+        print(f"[osm] {iso2}: {len(els)} elements, {kept} kept")
+        time.sleep(2)
