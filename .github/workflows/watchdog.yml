@@ -52,3 +52,31 @@ jobs:
           else
             echo "Fresh. No action."
           fi
+
+      # Same keep-alive for the buyer-source engine (hourly) and the contact
+      # enricher: GitHub often drops cron slots for these, and a dropped slot
+      # means no new buyer lists / no new contacts for that hour.
+      - name: Keep sources + enrich running
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          now_ts=$(date -u +%s)
+          check() {
+            wf="$1"; max_age="$2"; shift 2
+            info=$(gh run list --repo ${{ github.repository }} --workflow="$wf" --limit 1 \
+                     --json status,updatedAt --jq '.[0] | "\(.status) \(.updatedAt)"' 2>/dev/null)
+            status=$(echo "$info" | cut -d' ' -f1); last=$(echo "$info" | cut -d' ' -f2)
+            if [ "$status" = "in_progress" ] || [ "$status" = "queued" ] || [ "$status" = "pending" ]; then
+              echo "$wf: $status, nothing to do"; return
+            fi
+            age=$max_age
+            [ -n "$last" ] && age=$(( now_ts - $(date -u -d "$last" +%s 2>/dev/null || echo 0) ))
+            echo "$wf: last run ${age}s ago"
+            if [ "$age" -ge "$max_age" ]; then
+              echo "$wf stale. Dispatching."
+              gh workflow run "$wf" --repo ${{ github.repository }} "$@" || echo "dispatch failed (need WORKFLOW_PAT)"
+            fi
+          }
+          check sources.yml 4500
+          check enrich.yml 3000 -f max=600 -f mode=contacts -f concurrency=14

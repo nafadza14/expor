@@ -118,7 +118,7 @@ def to_record(row: dict, c: dict) -> Optional[dict]:
 
 def run(writer, cities: Optional[list[str]] = None, limit: Optional[int] = None) -> None:
     n = 0
-    with httpx.Client(timeout=httpx.Timeout(120, connect=20), headers={"User-Agent": UA, "Accept": "application/json"}) as client:
+    with httpx.Client(timeout=httpx.Timeout(120, connect=20), follow_redirects=True, headers={"User-Agent": UA, "Accept": "application/json"}) as client:
         for c in CITIES:
             if cities and c["key"] not in cities:
                 continue

@@ -64,6 +64,18 @@ UPDATE scraped_buyers sb SET quality_score = eksporin_quality(sb),
  WHERE id = ANY(%s)"""
 
 
+REFRESH_STALE_SQL = """
+UPDATE scraped_buyers sb SET quality_score = eksporin_quality(sb),
+       hidden_reason = eksporin_hidden_reason(sb),
+       is_hidden = eksporin_hidden_reason(sb) IS NOT NULL
+ WHERE sb.id IN (
+   SELECT id FROM scraped_buyers s
+    WHERE s.quality_score IS DISTINCT FROM eksporin_quality(s)
+       OR s.is_hidden IS DISTINCT FROM (eksporin_hidden_reason(s) IS NOT NULL)
+    LIMIT 2000
+    FOR UPDATE SKIP LOCKED)"""
+
+
 def _params(row_id: int, r: EnrichResult, had_email: bool, had_phone: bool, had_site: bool) -> dict:
     found = bool(r.website or r.email or r.phone)
     bump = (5 if (r.website and not had_site) else 0) + (12 if (r.email and not had_email) else 0) + (5 if (r.phone and not had_phone) else 0)
@@ -84,18 +96,38 @@ async def run(a: argparse.Namespace) -> int:
         print(json.dumps(r.__dict__, indent=1, ensure_ascii=False))
         return 0
 
-    with db_mod.conn() as c, c.cursor() as cur:
-        # Keep ranking / hiding current for rows written by any crawler.
-        cur.execute("""UPDATE scraped_buyers sb SET quality_score = eksporin_quality(sb),
-                              hidden_reason = eksporin_hidden_reason(sb),
-                              is_hidden = eksporin_hidden_reason(sb) IS NOT NULL
-                        WHERE quality_score IS DISTINCT FROM eksporin_quality(sb)
-                           OR is_hidden IS DISTINCT FROM (eksporin_hidden_reason(sb) IS NOT NULL)""")
-        if a.id:
-            cur.execute("SELECT id, name, country, city, website, email, phone, description FROM scraped_buyers WHERE id=%s", (a.id,))
-        else:
-            cur.execute(SELECT_QUEUE, (max(1, a.shards), a.shard % max(1, a.shards), a.max))
-        rows = cur.fetchall()
+    # Keep ranking / hiding current for rows written by any crawler. Only
+    # shard 0 does this, in small batches that skip rows another runner holds:
+    # four shards updating the whole table at once deadlocked and killed a
+    # shard every few runs. A failure here never stops the enrichment itself.
+    if a.shard % max(1, a.shards) == 0 and not a.id:
+        refreshed = 0
+        try:
+            for _ in range(40):
+                with db_mod.conn() as c, c.cursor() as cur:
+                    cur.execute("SET statement_timeout = '60s'")
+                    cur.execute(REFRESH_STALE_SQL)
+                    n = cur.rowcount
+                refreshed += n
+                if n < 2000:
+                    break
+            print(f"[enrich] refreshed score/visibility on {refreshed} rows")
+        except Exception as e:
+            print(f"::warning::score refresh skipped: {str(e)[:160]}")
+
+    rows = []
+    for attempt in range(3):
+        try:
+            with db_mod.conn() as c, c.cursor() as cur:
+                if a.id:
+                    cur.execute("SELECT id, name, country, city, website, email, phone, description FROM scraped_buyers WHERE id=%s", (a.id,))
+                else:
+                    cur.execute(SELECT_QUEUE, (max(1, a.shards), a.shard % max(1, a.shards), a.max))
+                rows = cur.fetchall()
+            break
+        except Exception as e:
+            print(f"::warning::queue read failed (attempt {attempt + 1}): {str(e)[:160]}")
+            time.sleep(10 + attempt * 20)
     print(f"[enrich] {len(rows)} buyers queued, concurrency {a.concurrency}, budget {a.minutes} min")
     deadline = time.time() + a.minutes * 60
     stats = {"done": 0, "site": 0, "new_site": 0, "email": 0, "phone": 0, "errors": 0}
@@ -113,12 +145,19 @@ async def run(a: argparse.Namespace) -> int:
                 stats["errors"] += 1
                 res = EnrichResult(note=f"error:{type(e).__name__}")
             p = _params(row_id, res, bool(email), bool(phone), bool(website))
-            try:
-                with db_mod.conn() as c, c.cursor() as cur:
-                    cur.execute(UPDATE_SQL, p)
-            except Exception as e:
+            saved = False
+            for attempt in range(3):
+                try:
+                    with db_mod.conn() as c, c.cursor() as cur:
+                        cur.execute(UPDATE_SQL, p)
+                    saved = True
+                    break
+                except Exception as e:
+                    last_err = str(e)[:120]
+                    await asyncio.sleep(2 + attempt * 4)
+            if not saved:
                 stats["errors"] += 1
-                print(f"[enrich] db error {row_id}: {str(e)[:120]}")
+                print(f"[enrich] db error {row_id}: {last_err}")
                 continue
             touched.append(row_id)
             stats["done"] += 1
@@ -131,8 +170,11 @@ async def run(a: argparse.Namespace) -> int:
 
     await asyncio.gather(*(worker() for _ in range(a.concurrency)))
     if touched:
-        with db_mod.conn() as c, c.cursor() as cur:
-            cur.execute(REFRESH_SQL, (touched,))
+        try:
+            with db_mod.conn() as c, c.cursor() as cur:
+                cur.execute(REFRESH_SQL, (sorted(touched),))
+        except Exception as e:
+            print(f"::warning::final score refresh failed: {str(e)[:160]}")
     summary = {**stats, "discovery": disc.stats, "search_backends": searcher.stats, "pages_fetched": fetcher.calls}
     print(f"[enrich] SUMMARY {json.dumps(summary)}")
     print(f"::notice title=enrich summary::{json.dumps(summary)}")

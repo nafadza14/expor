@@ -35,8 +35,9 @@ TAGS: list[tuple[str, str, list[str], str, str]] = [
     ("craft", "confectionery", COCOA, "chocolate and confectionery maker", "manufacturer"),
     ("shop", "furniture", ["9403", "9401", "4602"], "furniture retailer", "retail_chain"),
 ]
-# Small queries finish fast and fail alone; furniture is by far the largest.
-GROUPS = [TAGS[:3], TAGS[3:8], TAGS[8:]]
+# One tag per query: small queries finish inside the server timeout and a
+# failure only loses that one tag (grouped queries timed out for big countries).
+GROUPS = [[t] for t in TAGS]
 
 # Biggest markets for Indonesian products first, so a short run still
 # covers them.
@@ -47,7 +48,7 @@ ORDER = ["US", "DE", "NL", "JP", "GB", "FR", "AU", "AE", "SA", "KR", "CN", "IT",
 
 def query(iso2: str, tags=None) -> str:
     parts = "\n".join(f'  nwr["{k}"="{v}"]["name"](area.c);' for k, v, *_ in (tags or TAGS))
-    return f"""[out:json][timeout:110];
+    return f"""[out:json][timeout:180];
 area["ISO3166-1"="{iso2}"][admin_level=2]->.c;
 (
 {parts}
@@ -60,7 +61,7 @@ class Overpass:
 
     def __init__(self) -> None:
         self.fails = {u: 0 for u in ENDPOINTS}
-        self.client = httpx.Client(timeout=httpx.Timeout(130, connect=15),
+        self.client = httpx.Client(timeout=httpx.Timeout(200, connect=15),
                                    headers={"User-Agent": UA, "Accept": "application/json"})
 
     def run(self, q: str, deadline: float) -> Optional[list[dict]]:
@@ -83,14 +84,18 @@ class Overpass:
         return None
 
 
-def fetch(iso2: str, op: Optional["Overpass"] = None, deadline: Optional[float] = None) -> list[dict]:
+def fetch(iso2: str, op: Optional["Overpass"] = None, deadline: Optional[float] = None,
+          failed: Optional[list] = None, groups: Optional[list] = None) -> list[dict]:
     op = op or Overpass()
     deadline = deadline or time.time() + 600
     out: list[dict] = []
-    for group in GROUPS:
+    for group in groups or GROUPS:
         els = op.run(query(iso2, group), deadline)
         if els is None:
-            print(f"::warning::Overpass {iso2} group {group[0][1]} failed")
+            if failed is not None:
+                failed.append((iso2, group))
+            else:
+                print(f"::warning::Overpass {iso2} tag {group[0][1]} failed")
             continue
         out += els
     return out
@@ -138,12 +143,10 @@ def run(writer, countries: Optional[list[str]] = None, limit: Optional[int] = No
     stop = time.time() + minutes * 60
     op = Overpass()
     n = 0
-    for iso2 in codes:
-        if time.time() > stop:
-            print(f"::warning::OSM time budget used; not reached: {iso2} and later")
-            break
-        # At most 12 minutes per country so one slow country cannot eat the run.
-        els = fetch(iso2, op, min(stop, time.time() + 12 * 60))
+    failed: list = []
+
+    def keep(els: list[dict], iso2: str) -> int:
+        nonlocal n
         kept = 0
         for el in els:
             rec = to_record(el, iso2)
@@ -151,8 +154,32 @@ def run(writer, countries: Optional[list[str]] = None, limit: Optional[int] = No
                 writer.add(rec)
                 kept += 1
                 n += 1
-                if limit and n >= limit:
-                    return
         writer.flush()
+        return kept
+
+    for iso2 in codes:
+        if time.time() > stop:
+            print(f"::warning::OSM time budget used; not reached: {iso2} and later")
+            break
+        # At most 15 minutes per country so one slow country cannot eat the run.
+        els = fetch(iso2, op, min(stop, time.time() + 15 * 60), failed)
+        kept = keep(els, iso2)
         print(f"[osm] {iso2}: {len(els)} elements, {kept} kept")
+        if limit and n >= limit:
+            return
         time.sleep(2)
+
+    # Second pass: retry the tags that failed (servers are often only busy
+    # for a few minutes), with whatever time is left.
+    still: list = []
+    for iso2, group in failed:
+        if time.time() > stop:
+            still.append((iso2, group))
+            continue
+        els = fetch(iso2, op, min(stop, time.time() + 6 * 60), still, [group])
+        if els:
+            print(f"[osm] retry {iso2} {group[0][1]}: {keep(els, iso2)} kept")
+    if failed:
+        print(f"[osm] retried {len(failed)} failed tag queries, {len(still)} still failing")
+    for iso2, group in still[:25]:
+        print(f"::warning::Overpass {iso2} tag {group[0][1]} failed twice")
