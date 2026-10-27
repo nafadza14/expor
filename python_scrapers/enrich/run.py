@@ -30,7 +30,7 @@ from .discover import Discoverer, EnrichResult  # noqa: E402
 SELECT_QUEUE = """
 SELECT id, name, country, city, website, email, phone, description
   FROM scraped_buyers
- WHERE is_hidden = FALSE
+ WHERE (is_hidden = FALSE OR hidden_reason = 'unverified')
    AND (contact_checked_at IS NULL
         OR (email IS NULL AND contact_checked_at < NOW() - INTERVAL '30 days'))
    AND (id %% %s) = %s

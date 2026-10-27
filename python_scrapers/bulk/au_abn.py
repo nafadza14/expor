@@ -118,3 +118,11 @@ def run(writer, workdir: str = "/tmp", limit: Optional[int] = None, zips: Option
             print(f"[au] {os.path.basename(p)}: {seen} ABNs read, {kept} buyers kept")
             if not zips:
                 os.remove(p)
+    # Full run finished: rows from an older run that no longer qualify
+    # (cancelled ABN, stricter rules) are removed, unless another source
+    # also lists the company.
+    if not limit and not zips and getattr(writer, "_conn", None) is not None:
+        with writer._conn.cursor() as cur:
+            cur.execute("""DELETE FROM scraped_buyers WHERE source = 'abn_au' AND updated_at < %s
+                              AND sources_seen = ARRAY['abn_au']::text[]""", (writer._db_start,))
+            print(f"[au] removed {cur.rowcount} rows that no longer qualify")

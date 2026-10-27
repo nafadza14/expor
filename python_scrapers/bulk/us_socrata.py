@@ -53,18 +53,28 @@ def first(row: dict, keys: list[str]) -> Optional[str]:
 def rows(client: httpx.Client, c: dict) -> Iterator[dict]:
     offset = 0
     url = f"https://{c['domain']}/resource/{c['id']}.json"
+    order = True
     while True:
+        last = None
+        r = None
         for attempt in range(4):
+            params = {"$limit": PAGE, "$offset": offset}
+            if order:
+                params["$order"] = ":id"
             try:
-                r = client.get(url, params={"$limit": PAGE, "$offset": offset, "$order": ":id"})
+                r = client.get(url, params=params)
                 if r.status_code == 200:
                     break
-                print(f"[us] {c['key']} HTTP {r.status_code}: {r.text[:160]}")
+                last = f"HTTP {r.status_code}: {r.text[:120]}"
+                if r.status_code == 400 and order:
+                    order = False  # some views do not allow ordering by :id
+                    continue
             except Exception as e:
-                print(f"[us] {c['key']} {type(e).__name__}")
+                last = f"{type(e).__name__}: {str(e)[:80]}"
+            r = None
             time.sleep(5 + attempt * 10)
-        else:
-            print(f"::warning::{c['city']} registry unavailable at offset {offset}")
+        if r is None or r.status_code != 200:
+            print(f"::warning::{c['city']} registry unavailable at offset {offset}: {last}")
             return
         batch = r.json()
         if not isinstance(batch, list) or not batch:

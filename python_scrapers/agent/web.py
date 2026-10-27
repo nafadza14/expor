@@ -297,6 +297,7 @@ class Page:
     contact_links: list[str] = field(default_factory=list)
     error: str | None = None
     meta_description: str = ""
+    links: list[tuple[str, str]] = field(default_factory=list)  # same-host (url, anchor text)
 
 
 OBFUSCATED_EMAIL_RE = re.compile(
@@ -367,6 +368,7 @@ def extract_page(url: str, html: str, status: int = 200) -> Page:
     if md and md.get("content"):
         meta_desc = _clean(md["content"])[:400]
     contact_links: list[str] = []
+    links: list[tuple[str, str]] = []
     base_host = host_of(url)
     for a in soup.find_all("a", href=True):
         href = a["href"]
@@ -376,6 +378,8 @@ def extract_page(url: str, html: str, status: int = 200) -> Page:
         absu = urljoin(url, href)
         if host_of(absu) != base_host:
             continue
+        if len(links) < 400:
+            links.append((absu.split("#")[0], label[:80]))
         if CONTACT_HINT.search(href) or CONTACT_HINT.search(label):
             if absu not in contact_links:
                 contact_links.append(absu)
@@ -405,7 +409,7 @@ def extract_page(url: str, html: str, status: int = 200) -> Page:
             phones_u.append(p)
     return Page(url=url, final_url=url, status=status, title=title, text=text,
                 emails=emails_l[:10], phones=phones_u[:5], contact_links=contact_links[:10],
-                meta_description=meta_desc)
+                meta_description=meta_desc, links=links)
 
 
 def pdf_page(url: str, final_url: str, data: bytes, status: int) -> Page:
@@ -415,7 +419,7 @@ def pdf_page(url: str, final_url: str, data: bytes, status: int) -> Page:
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(data))
         parts = []
-        for pg in reader.pages[:60]:
+        for pg in reader.pages[:150]:
             try:
                 parts.append(pg.extract_text() or "")
             except Exception:

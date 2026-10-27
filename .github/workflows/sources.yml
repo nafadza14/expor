@@ -1,0 +1,93 @@
+# Self-expanding buyer sources (python_scrapers/sources).
+#
+# Every hour:
+#   discover  runs ~60 NEW search queries (commodity x country x language,
+#             thinnest coverage first, never repeated), keeps pages that are
+#             real lists of buyers (importer lists, association members,
+#             exhibitor lists, registers) and records them in buyer_sources.
+#   harvest   three runners read the recorded lists (with pagination) and
+#             save the companies found; each company name must appear on the
+#             page and contacts are kept only if printed there.
+#   report    prints source totals as notices on the run page.
+
+name: Buyer sources (discover + harvest)
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: 'New search queries this run'
+        default: '60'
+
+concurrency:
+  group: buyer-sources
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - run: pip install -r python_scrapers/requirements.txt
+      - name: Discover new buyer lists
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview' }}
+        run: python -m python_scrapers.sources.run discover --minutes 30 --max-queries "${{ github.event.inputs.queries || '60' }}"
+
+  harvest:
+    needs: discover
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - run: pip install -r python_scrapers/requirements.txt
+      - name: Harvest buyer lists
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+          SUMOPOD_AI_KEY: ${{ secrets.SUMOPOD_AI_KEY }}
+          AGENT_MODEL: ${{ vars.AGENT_MODEL || 'MiniMax-M3.1-Flash-Preview' }}
+        run: python -m python_scrapers.sources.run harvest --minutes 38 --shard ${{ matrix.shard }} --shards 3
+
+  report:
+    needs: harvest
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python_scrapers/requirements.txt
+      - run: pip install -r python_scrapers/requirements.txt
+      - name: Totals
+        env:
+          DATABASE_URL_POSTGRESS: ${{ secrets.DATABASE_URL_POSTGRESS }}
+        run: |
+          python -m python_scrapers.sources.run report
+          python -m python_scrapers.bulk.run --source counts

@@ -67,7 +67,7 @@ def _chunks(text: str, size: int = 9000, max_chunks: int = 5) -> list[str]:
 
 
 async def harvest(page: Page, *, commodity: dict, mission_country: str, listing_type: str,
-                  model: Optional[str] = None) -> tuple[list[dict], dict]:
+                  model: Optional[str] = None, max_chunks: int = 5) -> tuple[list[dict], dict]:
     """Returns (records ready for Store.save, stats)."""
     stats = {"proposed": 0, "kept": 0, "dropped_name": 0, "dropped_country": 0, "tokens": 0}
     text = page.text or ""
@@ -79,7 +79,7 @@ async def harvest(page: Page, *, commodity: dict, mission_country: str, listing_
     allowed = {c["iso2"] for c in load_config()["countries"]}
     seen: set[str] = set()
     records: list[dict] = []
-    for chunk in _chunks(text):
+    for chunk in _chunks(text, max_chunks=max_chunks):
         try:
             msg = await llm.chat([{"role": "system", "content": PROMPT},
                                   {"role": "user", "content": f"Listing type: {listing_type}. Product focus: {commodity['label_en']}.\n\n{chunk}"}],

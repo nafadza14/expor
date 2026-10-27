@@ -221,18 +221,28 @@ def classify_naics(codes: Iterable[Optional[str]], *texts: Optional[str]) -> Opt
 # ------------------------------------------------- name only (no activity code)
 # Registries without activity codes (Australia, city lists without NAICS):
 # a company is kept only if its name names a commodity AND says it trades.
-TRADE = re.compile(r"\b(import\w*|export\w*|trad(e|es|er|ers|ing)|wholesal\w*|distribut\w*|merchants?|suppl(y|ies|iers?)|roast\w*|sourcing|commodit\w*|brokers?|agenc(y|ies)|international|global|oriental|asian)\b", re.I)
-WEAK_ONLY = {"4412", "6109", "6204", "5208", "4202", "1905", "0804", "0803", "6404", "6403", "4011", "9401"}  # words too common alone
+TRADE = re.compile(r"\b(import\w*|export\w*|trad(e|es|er|ers|ing)|wholesal\w*|distribut\w*|merchants?|suppl(y|ies|iers?)|roast\w*|sourcing|commodit\w*|brokers?)\b", re.I)
+STRONG = re.compile(r"\b(import\w*|wholesal\w*|distribut\w*|export\w*)\b", re.I)
+# Commodity words that are unambiguous in a company name. Anything else
+# ("oil", "nuts", "gum", "wood", "fashion", "gifts", "beauty", "fish") also
+# means other trades, so it needs an explicit import/wholesale word.
+SPECIFIC = re.compile(
+    r"\b(coffee\w*|kaffee|cafe|tea|teas|spices?|pepper|vanill\w*|cinnamon|cloves?|nutmeg|ginger|turmeric|cardamom|"
+    r"cocoa|cacao|chocolat\w*|coconuts?|copra|kokos\w*|cashews?|areca|betel|candlenuts?|coir|coco ?peat|"
+    r"palm oil|essential oils?|patchouli|seaweeds?|agar|carrageenan|rattan|wicker|batik|kretek|cigars?|"
+    r"bird'?s? ?nests?|swiftlet|konjac|glucomannan|tapioca|cassava|agarwood|oud|charcoal|briquet\w*|shisha|"
+    r"shrimps?|prawns?|squid|octopus|crab\w*|tuna|seafoods?|rubber|latex|plywood|teak|cocopeat|noodles?|asian foods?|oriental foods?)\b",
+    re.I)
+WEAK_ONLY = set()  # kept for compatibility
 
 
 def classify_name(name: Optional[str], *texts: Optional[str]) -> Optional[dict]:
     if not name or not TRADE.search(name):
         return None
     hs = words_hs(name, *texts)
-    # Generic words ("wood", "fashion", "fruit") need a second, specific hit.
-    specific = [h for h in hs if h not in WEAK_ONLY]
-    strong = re.search(r"\b(import\w*|wholesal\w*|distribut\w*)\b", name, re.I)
-    if not specific and not (hs and strong):
+    if not hs:
+        return None
+    if not (SPECIFIC.search(name) or STRONG.search(name)):
         return None
     btype = "importer" if re.search(r"\bimport", name, re.I) else "trader"
     return {"hs_codes": hs, "industry": "importer / trader (by company name)", "buyer_type": btype, "nace": None}
