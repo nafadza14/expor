@@ -128,10 +128,14 @@ function seed(db) {
       .run('admin@super-vanilla.com', hashPassword('supersekali'), 'Super Vanilla Admin', 'PT Super Vanilla',
         'business', JSON.stringify(['090510', '090520']), JSON.stringify(['US', 'DE', 'FR', 'JP']));
 
-    // Super admin
+    // Super admin. Only a scrypt hash is stored in the repo; set
+    // SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD_HASH on Vercel to change it
+    // (hash: node -e "console.log(require('./src/auth').hashPassword('new password'))").
     db.prepare(`INSERT INTO users (email,password_hash,name,org_name,plan,is_admin,onboarded)
       VALUES (?,?,?,?,?,?,1)`)
-      .run('test@zieads.com', hashPassword('asikasikjos14'), 'Super Admin', 'EksporIn Admin', 'business', 1);
+      .run((process.env.SUPERADMIN_EMAIL || 'admin@zieads.com').toLowerCase(),
+        process.env.SUPERADMIN_PASSWORD_HASH || '2cac667abe072c7126e004d7a99b5a5a:7235f9536eca5d28e83f1909bf371d7e5673ac6fc35ad57c8c2d0748d0fbaf5d0f96bdb6ed0aedcf0543abe83af01e89e0c7dd1535a33693c8590b2e7c5d0173',
+        'Super Admin', 'EksporIn', 'business', 1);
   });
 }
 

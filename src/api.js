@@ -1136,6 +1136,12 @@ async function handleApi(db, req, res, url, body) {
     return true;
   };
 
+  // Super admin dashboard (Postgres-backed): src/admin.js
+  if (p.startsWith('/api/admin/v2/')) {
+    if (!requireAdmin()) return;
+    return require('./admin').handle(req, res, p, q, body, { json, err, user, billing });
+  }
+
   if (route('GET', '/api/admin/stats')) {
     if (!requireAdmin()) return;
     const total = db.prepare('SELECT COUNT(*) c FROM users').get().c;

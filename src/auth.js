@@ -51,9 +51,13 @@ const clearCookie = () => 'eksporin_session=; HttpOnly; Path=/; Max-Age=0; SameS
 
 const { createHmac } = require('node:crypto');
 
-const ADMIN_TOKEN_SECRET =
-  process.env.ADMIN_TOKEN_SECRET ||
-  'eksporin-admin-fallback-secret-do-not-use-in-prod-swap-via-env';
+// Never a constant from the repo (anyone could forge admin tokens with
+// it): ADMIN_TOKEN_SECRET, else derived from the database URL (a server
+// secret), else random per process (local dev; tokens die on restart).
+const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET
+  || (process.env.DATABASE_URL_POSTGRESS
+    ? require('node:crypto').createHash('sha256').update('eksporin-admin|' + process.env.DATABASE_URL_POSTGRESS).digest('hex')
+    : randomBytes(32).toString('hex'));
 
 function _sign(payload) {
   return createHmac('sha256', ADMIN_TOKEN_SECRET).update(payload).digest('base64url');

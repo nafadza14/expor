@@ -198,6 +198,7 @@ function modal(html, { wide = false } = {}) {
   $('.modal-overlay', root).addEventListener('click', (e) => { if (e.target.classList.contains('modal-overlay')) closeModal(); });
 }
 window.closeModal = () => { $('#modal-root').innerHTML = ''; };
+window.addEventListener('hashchange', () => { const r = document.getElementById('modal-root'); if (r) r.innerHTML = ''; });
 function upgradeModal(msg, info) {
   const bal = info && typeof info.balance === 'number' ? info.balance : null;
   const need = info && info.needed ? Math.max(10000, Math.ceil(info.needed / 10000) * 10000) : 10000;
@@ -1083,13 +1084,14 @@ route(/^\/login$/, (app) => {
     // (which preserves the seeded plan=business on the local row).
     const LOCAL_ONLY_ACCOUNTS = new Set([
       'demo@eksporin.id',
-      'test@zieads.com',
+      'admin@zieads.com',
     ]);
     try {
       // Local-only accounts skip the Supabase round-trip.
       if (isDemo || LOCAL_ONLY_ACCOUNTS.has(email)) {
         const r = await api('/api/auth/login', { method: 'POST', body: { email, password } });
         ME = null;
+        if (r.admin_token) { try { localStorage.setItem('eksporin_admin_token', r.admin_token); } catch {} }
         // Fetch /api/me to check is_admin, then route accordingly.
         let isAdmin = false;
         try { const meCheck = await api('/api/me'); isAdmin = !!meCheck.is_admin; } catch {}
@@ -3102,16 +3104,13 @@ route(/^\/billing$/, async (app, m, params) => {
 // sync it to the local backend BEFORE the router runs so protected APIs work.
 // ================= admin shell (separate from user shell) =================
 const ADMIN_TABS = [
-  { id: 'overview',  label: 'Overview',        icon: I.chart },
-  { id: 'users',     label: 'Users',           icon: I.users },
-  { id: 'buyers',    label: 'Buyer Inventory', icon: I.building },
-  { id: 'scrape',    label: 'Scrape Pipeline', icon: I.spider },
-  { id: 'shipments', label: 'Shipments',       icon: I.ship },
-  { id: 'messages',  label: 'Outreach',        icon: I.send },
-  { id: 'revenue',   label: 'Revenue',         icon: I.money },
-  { id: 'hs-usage',  label: 'HS & Countries',  icon: I.globe },
-  { id: 'system',    label: 'System',          icon: I.settings },
-  { id: 'audit',     label: 'Audit Log',       icon: I.clipboard },
+  { id: 'overview', label: 'Ringkasan',         icon: I.chart },
+  { id: 'buyers',   label: 'Data Buyer',        icon: I.building },
+  { id: 'sources',  label: 'Sumber & Scraping', icon: I.spider },
+  { id: 'users',    label: 'Pengguna',          icon: I.users },
+  { id: 'revenue',  label: 'Pendapatan',        icon: I.money },
+  { id: 'usage',    label: 'Penggunaan',        icon: I.globe },
+  { id: 'system',   label: 'Sistem',            icon: I.settings },
 ];
 
 function adminShell(activeTab, content) {
@@ -3230,14 +3229,11 @@ route(/^\/admin\/login$/, (app) => {
 
 route(/^\/admin$/, async (app, m, params) => {
   // Custom auth guard: unauthenticated → dedicated admin login (not user login).
-  // If we have a stored admin token, keep the admin logged in even when
-  // /api/me temporarily fails (Vercel cold start, dropped connection, ...).
   const hasAdminToken = (() => { try { return !!localStorage.getItem('eksporin_admin_token'); } catch { return false; } })();
   if (!ME) {
     try { ME = await api('/api/me'); }
     catch {
       if (!hasAdminToken) { location.hash = '#/admin/login'; return; }
-      // Fallback: synthesize a minimal admin ME so the page still mounts.
       ME = { id: 0, email: '(admin)', name: 'Super Admin', is_admin: true, plan: 'business', onboarded: true, hs_focus: [], target_countries: [] };
     }
   }
@@ -3253,475 +3249,367 @@ route(/^\/admin$/, async (app, m, params) => {
     </div></div>`;
     return;
   }
-  const tab = params.get('tab') || 'overview';
+  const tab = ADMIN_TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'overview';
   const draw = (content) => { app.innerHTML = adminShell(tab, content); bindAdminShell(); };
-  draw('<div class="admin-loading"><div class="spinner"></div> Memuat data admin…</div>');
+  draw('<div class="admin-loading"><div class="spinner"></div> Memuat data…</div>');
+
+  // ---------- small view helpers ----------
+  const N = (v) => fmtN(Number(v) || 0);
+  const RP = (v) => 'Rp' + (Number(v) || 0).toLocaleString('id-ID');
+  const PCT = (a, b) => (b ? Math.round((Number(a) / Number(b)) * 100) : 0) + '%';
+  const dt = (v) => v ? new Date(v).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-';
+  const ago = (v) => {
+    if (!v) return '-';
+    const s = (Date.now() - new Date(v).getTime()) / 1000;
+    if (s < 90) return 'baru saja';
+    if (s < 3600) return Math.round(s / 60) + ' mnt lalu';
+    if (s < 86400) return Math.round(s / 3600) + ' jam lalu';
+    return Math.round(s / 86400) + ' hari lalu';
+  };
+  const kpi = (label, value, hint, hero) => `<div class="admin-kpi${hero ? ' admin-kpi-hero' : ''}"><div class="admin-kpi-lbl">${label}</div>
+    <div class="admin-kpi-num">${value}</div><div class="admin-kpi-hint">${hint || '&nbsp;'}</div></div>`;
+  const panel = (title, body, extra = '') => `<section class="admin-panel"><div class="ad-panel-head"><h3>${title}</h3>${extra}</div>${body}</section>`;
+  const bars = (rows, labelKey, valueKey, { max, fmt = N, sub } = {}) => {
+    const top = max || Math.max(1, ...rows.map((r) => Number(r[valueKey]) || 0));
+    return rows.length ? rows.map((r) => `<div class="admin-bar-row"><span class="ad-bar-lbl" title="${esc(String(r[labelKey]))}">${esc(String(r[labelKey]))}</span>
+      <div class="admin-bar"><div style="width:${Math.max(1, Math.round(((Number(r[valueKey]) || 0) / top) * 100))}%"></div></div>
+      <span class="ad-bar-val">${fmt(r[valueKey])}${sub ? `<small>${sub(r)}</small>` : ''}</span></div>`).join('')
+      : '<p class="muted body-sm">Belum ada data.</p>';
+  };
+  // Column chart (SVG) for a daily series.
+  const chart = (series, key, { color = 'var(--orange)', fmt = N, height = 140 } = {}) => {
+    if (!series || !series.length) return '<p class="muted body-sm">Belum ada data.</p>';
+    if (series.length < 30) { // fill missing days so one busy day is not drawn full width
+      const by = {}; series.forEach((s) => { by[String(s.day).slice(0, 10)] = s; });
+      const out = []; const d0 = new Date(); d0.setUTCHours(0, 0, 0, 0);
+      for (let i = 29; i >= 0; i--) { const k = new Date(d0.getTime() - i * 864e5).toISOString().slice(0, 10); out.push(by[k] || { day: k, [key]: 0 }); }
+      series = out;
+    }
+    const w = 640; const h = height; const pad = 18; const bw = (w - pad) / series.length;
+    const max = Math.max(1, ...series.map((s) => Number(s[key]) || 0));
+    const cols = series.map((s, i) => {
+      const v = Number(s[key]) || 0; const bh = Math.round((v / max) * (h - 30));
+      return `<g><rect x="${pad + i * bw + 1}" y="${h - 18 - bh}" width="${Math.max(2, bw - 3)}" height="${bh}" rx="2" fill="${color}"><title>${s.day}: ${fmt(v)}</title></rect>
+        ${i % Math.ceil(series.length / 6) === 0 ? `<text x="${pad + i * bw}" y="${h - 4}" font-size="10" fill="#9a9a9a">${s.day.slice(5)}</text>` : ''}</g>`;
+    }).join('');
+    const total = series.reduce((a, s) => a + (Number(s[key]) || 0), 0);
+    return `<div class="ad-chart-total">${fmt(total)} <span>30 hari · maks ${fmt(max)}/hari</span></div>
+      <svg viewBox="0 0 ${w} ${h}" class="ad-chart" preserveAspectRatio="none"><line x1="${pad}" x2="${w}" y1="${h - 18}" y2="${h - 18}" stroke="#eee"/>${cols}</svg>`;
+  };
+  const table = (cols, rows, empty = 'Belum ada data.') => rows.length ? `<div class="tbl-wrap"><table class="tbl ad-tbl"><thead><tr>${cols.map((c) => `<th${c.r ? ' class="r"' : ''}>${c.h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td${c.r ? ' class="r"' : ''}>${c.f(r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+    : `<p class="muted body-sm">${empty}</p>`;
+  const pill = (txt, kind) => `<span class="ad-pill ad-pill-${kind || 'neutral'}">${esc(String(txt))}</span>`;
+  const statusPill = (s) => pill(s || '-', { success: 'ok', active: 'ok', paid: 'ok', completed: 'ok', failure: 'bad', failed: 'bad', error: 'bad', rejected: 'bad', timed_out: 'bad', cancelled: 'warn', exhausted: 'warn', pending: 'warn', in_progress: 'info', queued: 'info', expired: 'neutral' }[s] || 'neutral');
+  const SRC = { companies_house_uk: 'Companies House (UK)', sirene_fr: 'SIRENE (FR)', brreg_no: 'Brønnøysund (NO)', agencebio_fr: 'Agence BIO (FR)', osm: 'OpenStreetMap', us_city_registry: 'Registri kota (US)', abn_au: 'ABN (AU)', trade_directory: 'Daftar buyer (web)', ai_agent: 'AI agent', gleif: 'GLEIF', sec_edgar_us: 'SEC EDGAR', google_business: 'Google Business', wikidata: 'Wikidata', usda_oid: 'USDA Organic' };
+  const srcName = (s) => SRC[s] || s;
+  const HSNAME = {};
+  try { (await api('/api/hs/leaf')).forEach((x) => { HSNAME[x.code] = x.description_id; }); } catch { /* optional */ }
+  const hsName = (h) => `${h} ${HSNAME[h] ? '· ' + HSNAME[h] : ''}`;
+  const refreshBtn = '<button class="btn btn-sm btn-neutral" id="ad-refresh">↻ Muat ulang</button>';
+  const bindRefresh = () => {
+    const b = document.getElementById('ad-refresh');
+    if (b) b.onclick = async () => { b.disabled = true; try { await api('/api/admin/v2/refresh', { method: 'POST' }); } catch {} location.reload(); };
+  };
+  const fail = (e) => draw(`<div class="admin-panel"><h3>Gagal memuat</h3><p class="muted">${esc(e?.data?.error || e?.message || String(e))}</p>
+    <p class="muted body-sm">Dashboard admin membaca database Postgres. Pastikan DATABASE_URL_POSTGRESS terpasang dan migration terbaru sudah jalan.</p></div>`);
 
   try {
+    // ===================================================== RINGKASAN
     if (tab === 'overview') {
-      // Fetch stats + optional Postgres scrape summary in parallel.
-      const [s, scrapeStatus] = await Promise.all([
-        api('/api/admin/stats'),
-        api('/api/admin/scrape/status').catch(() => null),
-      ]);
-      const plansBar = s.users.by_plan.map((p) => {
-        const pct = s.users.total ? (p.c / s.users.total) * 100 : 0;
-        const color = { trial: '#9ca3af', expired: '#d1d5db', hemat: '#3b82f6', growth: '#ef4d23', business: '#7c3aed' }[p.plan] || '#9ca3af';
-        return `<div class="admin-bar-row">
-          <span class="body-sm" style="text-transform:capitalize;font-weight:500">${esc(p.plan)}</span>
-          <div class="admin-bar"><div style="width:${pct}%;background:${color}"></div></div>
-          <b class="num body-sm" style="text-align:right">${p.c} <span class="muted-3">(${pct.toFixed(0)}%)</span></b>
-        </div>`;
-      }).join('');
-      const scrapePending = scrapeStatus?.jobs_by_status?.find((r) => r.status === 'pending')?.c || 0;
-      const scrapeDone = scrapeStatus?.jobs_by_status?.find((r) => r.status === 'done')?.c || 0;
+      const [o, pl] = await Promise.all([api('/api/admin/v2/overview'), api('/api/admin/v2/pipelines').catch(() => null)]);
+      const b = o.buyers || {}; const u = o.users || {}; const r = o.revenue || {}; const s = o.sources || {};
+      const wf = (pl && pl.ok ? pl.workflows : []);
       draw(`
+        <div class="ad-head"><p class="muted body-sm">Diperbarui ${dt(o.at)} · data langsung dari database</p>${refreshBtn}</div>
+        <h4 class="ad-sec">Data buyer</h4>
         <div class="admin-kpi-grid">
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Users</div><div class="admin-kpi-num">${fmtN(s.users.total)}</div><div class="admin-kpi-hint">${s.users.onboarded} onboarded · ${s.users.admins} admin</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Signup (7 hari)</div><div class="admin-kpi-num">${fmtN(s.users.recent_7d)}</div><div class="admin-kpi-hint">${s.users.recent_30d} dalam 30 hari</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Outreach Sent</div><div class="admin-kpi-num">${fmtN(s.engagement.messages_sent)}</div><div class="admin-kpi-hint">${s.engagement.messages_replied} dibalas (${s.engagement.messages_sent ? Math.round((s.engagement.messages_replied / s.engagement.messages_sent) * 100) : 0}%)</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Buyer Tersimpan</div><div class="admin-kpi-num">${fmtN(s.engagement.saved_buyers)}</div><div class="admin-kpi-hint">di ${s.engagement.lists} daftar</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Buyer Terscrape</div><div class="admin-kpi-num">${fmtN(scrapeStatus?.total_buyers || 0)}</div><div class="admin-kpi-hint">${scrapeDone} job selesai</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Scrape Queue</div><div class="admin-kpi-num">${fmtN(scrapePending)}</div><div class="admin-kpi-hint">job pending</div></div>
+          ${kpi('Total buyer', N(b.total), `${N(b.visible)} tampil ke user`, true)}
+          ${kpi('Punya kontak', N(b.with_contact), `${PCT(b.with_contact, b.visible)} dari yang tampil`)}
+          ${kpi('Punya email', N(b.with_email), `${N(b.with_phone)} punya telepon`)}
+          ${kpi('Baru 24 jam', '+' + N(b.new_24h), `+${N(b.new_7d)} dalam 7 hari`)}
+          ${kpi('Kontak ditemukan 24 jam', '+' + N(b.enriched_24h), `${N(b.enrich_queue)} antre dicek`)}
+          ${kpi('Negara', N(b.countries), `${N(b.with_website)} punya website`)}
         </div>
+        <h4 class="ad-sec">Pengguna & pendapatan</h4>
+        <div class="admin-kpi-grid">
+          ${kpi('Total pengguna', N(u.total), `+${N(u.new_24h)} hari ini · +${N(u.new_7d)} 7 hari`, true)}
+          ${kpi('Aktif 24 jam', N(u.active_24h), `${N(u.active_7d)} aktif 7 hari`)}
+          ${kpi('Paket berbayar aktif', N(u.paying_active), `${N(u.trial_active)} trial · ${N(u.expired)} tidak aktif`)}
+          ${kpi('Pendapatan 30 hari', RP(r.d30), `bersih ${RP(r.d30_net)} · hari ini ${RP(r.d1)}`)}
+          ${kpi('Total pendapatan', RP(r.total), `${N(r.paid_orders)} pembayaran · ${N(r.pending_24h)} pending 24j`)}
+          ${kpi('Saldo user tersimpan', RP(u.balances), 'kewajiban ke pengguna')}
+        </div>
+        ${s ? `<h4 class="ad-sec">Mesin sumber</h4><div class="admin-kpi-grid">
+          ${kpi('Daftar buyer aktif', N(s.active), `${N(s.total)} ditemukan total · +${N(s.new_24h)} hari ini`)}
+          ${kpi('Buyer dari daftar', N(s.buyers_new), 'hasil harvest')}
+          ${kpi('Query pencarian', N(s.queries), `+${N(s.queries_24h)} dalam 24 jam`)}
+        </div>` : ''}
         <div class="admin-grid-2">
-          <div class="admin-panel">
-            <h3>Distribusi Paket</h3>
-            <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">${plansBar}</div>
-          </div>
-          <div class="admin-panel">
-            <h3>Usage Bulan Ini</h3>
-            <div style="margin-top:14px">
-              ${s.usage_this_month.length ? s.usage_this_month.map((u) => `<div class="admin-list-row"><span style="text-transform:capitalize">${esc(u.meter)}</span><b>${fmtN(u.total)}</b></div>`).join('') : '<p class="muted body-sm">Belum ada aktivitas.</p>'}
-            </div>
-          </div>
+          ${panel('Buyer baru per hari', chart(o.series, 'buyers'))}
+          ${panel('Kontak ditemukan per hari', chart(o.series, 'enriched', { color: '#16a34a' }))}
+          ${panel('Pendaftaran per hari', chart(o.series, 'signups', { color: '#2563eb' }))}
+          ${panel('Pendapatan per hari', chart(o.series, 'revenue', { color: '#7c3aed', fmt: RP }))}
         </div>
-        <div class="admin-panel" style="margin-top:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <h3 style="margin:0">Aktivitas Terbaru <span class="pill pill-neutral" style="font-size:10px;margin-left:6px">LIVE</span></h3>
-            <span class="caption muted-3" id="feed-updated">Memuat…</span>
-          </div>
-          <div id="feed-list" style="max-height:520px;overflow:auto">
-            <p class="muted body-sm" style="padding:12px">Memuat aktivitas…</p>
-          </div>
-        </div>
-      `);
-      // Render + auto-refresh the live activity feed every 10s.
-      const KIND_STYLE = {
-        'user.signup':        { pill: 'pill-info',    icon: '👤' },
-        'outreach.sent':      { pill: 'pill-warning', icon: '✉️' },
-        'buyer.discovered':   { pill: 'pill-success', icon: '🔍' },
-        'buyer.enriched':     { pill: 'pill-success', icon: '✨' },
-        'buyer.updated':      { pill: 'pill-neutral', icon: '♻️' },
-        'scrape.job.done':    { pill: 'pill-success', icon: '✓' },
-        'scrape.job.failed':  { pill: 'pill-danger',  icon: '⚠️' },
-        'scrape.job.running': { pill: 'pill-warning', icon: '⚙️' },
-      };
-      const renderFeed = async () => {
-        try {
-          const { events } = await api('/api/admin/activity');
-          const now = Date.now();
-          const fmtRel = (ts) => {
-            const t = new Date(ts).getTime();
-            const s = Math.max(1, Math.round((now - t) / 1000));
-            if (s < 60) return s + ' dtk';
-            if (s < 3600) return Math.round(s / 60) + ' mnt';
-            if (s < 86400) return Math.round(s / 3600) + ' jam';
-            return Math.round(s / 86400) + ' hari';
-          };
-          const el = document.getElementById('feed-list');
-          const upd = document.getElementById('feed-updated');
-          if (!el) return;
-          el.innerHTML = events.length ? events.map((e) => {
-            const style = KIND_STYLE[e.kind] || { pill: 'pill-neutral', icon: '•' };
-            return `<div class="admin-feed-row">
-              <div class="admin-feed-icon">${style.icon}</div>
-              <div class="admin-feed-body">
-                <div class="body-sm">${esc(e.title)}</div>
-                <div class="caption muted-3"><span class="pill ${style.pill}" style="font-size:9px">${esc(e.kind)}</span> · ${fmtRel(e.ts)} lalu</div>
-              </div>
-            </div>`;
-          }).join('') : '<p class="muted body-sm" style="padding:12px">Belum ada aktivitas tercatat.</p>';
-          if (upd) upd.textContent = 'Update ' + new Date().toLocaleTimeString('id-ID');
-        } catch (_e) { /* keep last state */ }
-      };
-      clearInterval(window.__adminFeedTimer);
-      renderFeed();
-      window.__adminFeedTimer = setInterval(() => { if (parseHash().path === '/admin' && (params.get('tab') || 'overview') === 'overview') renderFeed(); else clearInterval(window.__adminFeedTimer); }, 10000);
-    } else if (tab === 'users') {
-      const q = params.get('q') || '';
-      const d = await api('/api/admin/users?q=' + encodeURIComponent(q));
-      draw(`
-        <div class="admin-toolbar">
-          <input class="input" id="admin-uq" placeholder="Cari email / nama / usaha…" value="${esc(q)}" style="max-width:360px">
-          <span class="admin-count">${d.users.length} user ditampilkan</span>
-        </div>
-        <div class="admin-panel" style="padding:0;overflow:hidden">
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>User</th><th>Plan</th><th>Status</th><th class="r">Lists</th><th class="r">Outreach</th><th>Signup</th><th>Aksi</th></tr></thead>
-            <tbody>
-            ${d.users.map((u) => `<tr>
-              <td>
-                <b>${esc(u.name)}</b>${u.is_admin ? ' <span class="pill pill-orange" style="font-size:10px">ADMIN</span>' : ''}
-                <div class="caption muted-3">${esc(u.email)}${u.org_name ? ' · ' + esc(u.org_name) : ''}</div>
-              </td>
-              <td>
-                <select class="input" data-plan-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:100px">
-                  ${u.plan === 'expired' ? '<option value="" selected disabled>expired</option>' : ''}
-                  ${['trial', 'hemat', 'growth', 'business'].map((p) => `<option value="${p}" ${u.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
-                </select>
-                ${u.balance_idr ? `<div class="caption muted-3">Saldo Rp${Number(u.balance_idr).toLocaleString('id-ID')}</div>` : ''}
-              </td>
-              <td>
-                <select class="input" data-status-user="${u.id}" style="height:30px;padding:2px 8px;font-size:12px;min-width:110px">
-                  ${['active', 'suspended', 'banned'].map((s) => `<option value="${s}" ${(u.status || 'active') === s ? 'selected' : ''}>${s}</option>`).join('')}
-                </select>
-              </td>
-              <td class="r num">${fmtN(u.list_count)}</td>
-              <td class="r num">${fmtN(u.message_count)}</td>
-              <td class="caption num body-sm">${fmtDate(u.created_at)}</td>
-              <td>${u.is_admin ? '<span class="muted-3 caption">-</span>' : `<button class="btn btn-sm btn-danger" data-del-user="${u.id}" data-email="${esc(u.email)}">Hapus</button>`}</td>
-            </tr>`).join('')}
-            </tbody>
-          </table></div>
-        </div>
-      `);
-      $('#admin-uq')?.addEventListener('input', (e) => { clearTimeout(window.__auq); window.__auq = setTimeout(() => { location.hash = '#/admin?tab=users&q=' + encodeURIComponent(e.target.value); }, 400); });
-      $$('[data-plan-user]').forEach((el) => el.onchange = async () => { try { await api('/api/admin/user/plan', { method: 'POST', body: { user_id: +el.dataset.planUser, plan: el.value } }); toast('Plan updated ✓'); } catch (e) { toast(e.data?.error || 'Fail', true); } });
-      $$('[data-status-user]').forEach((el) => el.onchange = async () => { try { await api('/api/admin/user/status', { method: 'POST', body: { user_id: +el.dataset.statusUser, status: el.value } }); toast('Status updated ✓'); } catch (e) { toast(e.data?.error || 'Fail', true); } });
-      $$('[data-del-user]').forEach((el) => el.onclick = () => {
-        modal(`<h2 style="margin-bottom:10px">Hapus user?</h2><p class="muted" style="margin-bottom:20px">"${el.dataset.email}" akan dihapus permanen bersama semua data-nya.</p>
-          <div style="display:flex;gap:8px"><button class="btn btn-danger" id="cd-yes">Ya, hapus</button><button class="btn btn-neutral" onclick="closeModal()">Batal</button></div>`);
-        $('#cd-yes').onclick = async () => { try { await api('/api/admin/user?id=' + el.dataset.delUser, { method: 'DELETE' }); closeModal(); toast('User dihapus'); location.hash = '#/admin?tab=users&t=' + Date.now(); } catch (e) { toast(e.data?.error || 'Fail', true); } };
-      });
-    } else if (tab === 'buyers') {
-      const country = params.get('c') || '';
-      const search = params.get('q') || '';
-      const d = await api('/api/admin/buyers?q=' + encodeURIComponent(search) + '&country=' + encodeURIComponent(country));
-      draw(`
-        <div class="admin-toolbar">
-          <input class="input" id="admin-bq" placeholder="Cari nama / kota buyer…" value="${esc(search)}" style="max-width:280px">
-          <select class="input" id="admin-bc" style="max-width:220px">
-            <option value="">Semua negara</option>
-            ${d.countries.map((c) => `<option value="${c.country}" ${country === c.country ? 'selected' : ''}>${flag(c.country)} ${esc(c.name)} (${c.c})</option>`).join('')}
-          </select>
-          <span class="admin-count">${d.buyers.length} buyer</span>
-        </div>
-        <div class="admin-panel" style="padding:0;overflow:hidden">
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Buyer</th><th>Negara</th><th>Industri</th><th class="r">Ship 12bln</th><th class="r">Value USD</th><th class="r">Skor</th><th class="r">Disimpan</th><th>HS Codes</th></tr></thead>
-            <tbody>
-            ${d.buyers.map((b) => `<tr>
-              <td><b class="body-sm">${esc(b.name)}</b>${b.has_indonesian_supplier ? ' <span class="pill pill-info" style="font-size:10px">🇮🇩</span>' : ''}<div class="caption muted-3">${esc(b.city || '')} · ${b.size_bucket}</div></td>
-              <td>${flag(b.country)} ${esc(COUNTRY_NAMES[b.country] || b.country)}</td>
-              <td class="body-sm muted">${esc(b.industry || '-')}</td>
-              <td class="r num">${fmtN(b.shipments_12mo)}</td>
-              <td class="r num">${fmtUSD(b.value_12mo_usd)}</td>
-              <td class="r"><span class="pill ${b.base_score >= 80 ? 'pill-danger' : b.base_score >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:11px">${b.base_score}</span></td>
-              <td class="r num">${b.times_saved}</td>
-              <td class="caption body-sm">${(b.hs_codes || '').split(',').slice(0,3).map((h) => `<span class="tag">${h}</span>`).join(' ')}</td>
-            </tr>`).join('')}
-            </tbody>
-          </table></div>
-        </div>
-      `);
-      $('#admin-bq')?.addEventListener('input', (e) => { clearTimeout(window.__abq); window.__abq = setTimeout(() => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(e.target.value) + '&c=' + encodeURIComponent(country); }, 400); });
-      $('#admin-bc')?.addEventListener('change', (e) => { location.hash = '#/admin?tab=buyers&q=' + encodeURIComponent(search) + '&c=' + encodeURIComponent(e.target.value); });
-    } else if (tab === 'scrape') {
-      // Data source discovery pipeline: reads from Postgres (Supabase).
-      let status = null, buyers = [];
-      try {
-        [status, buyers] = await Promise.all([
-          api('/api/admin/scrape/status'),
-          api('/api/admin/scrape/buyers?limit=50').then((r) => r.buyers || []),
-        ]);
-      } catch (e) {
-        draw(`<div class="admin-panel"><h3 style="margin-bottom:8px">Pipeline belum siap</h3>
-          <p class="muted body-sm">${esc(e.data?.detail || e.message || 'Postgres tidak dapat diakses.')}</p>
-          <p class="caption muted-3" style="margin-top:8px">Pastikan env <code>DATABASE_URL_POSTGRESS</code> tersedia dan migration sudah dijalankan.</p></div>`);
-        return;
-      }
-      const statusBy = (s) => (status.jobs_by_status.find((r) => r.status === s)?.c || 0);
-      const bySrcMap = Object.fromEntries(status.by_source.map((r) => [r.source, r.c]));
-      const live = status.live || {};
-      draw(`
-        <div class="admin-kpi-grid">
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Buyer</div><div class="admin-kpi-num">${fmtN(status.total_buyers)}</div><div class="admin-kpi-hint">${fmtN(live.enriched || 0)} enriched · ${fmtN(live.unenriched || 0)} raw</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Baru 1 Jam</div><div class="admin-kpi-num">${fmtN(live.new_1h || 0)}</div><div class="admin-kpi-hint">${fmtN(live.updated_1h || 0)} merge / update</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Baru 24 Jam</div><div class="admin-kpi-num">${fmtN(live.new_24h || 0)}</div><div class="admin-kpi-hint">${fmtN(live.jobs_done_1h || 0)} job selesai 1 jam</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Queue</div><div class="admin-kpi-num">${fmtN(statusBy('pending'))}</div><div class="admin-kpi-hint">${fmtN(live.running_now || 0)} running · ${fmtN(statusBy('failed'))} gagal</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Multi-source</div><div class="admin-kpi-num">${fmtN(live.multi_source_hits || 0)}</div><div class="admin-kpi-hint">buyer terverif ≥2 sumber</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Refresh</div><div class="admin-kpi-num" style="font-size:16px;padding-top:8px">tiap 8 dtk</div><div class="admin-kpi-hint" id="scrape-updated">baru saja</div></div>
-        </div>
-
-        <div class="admin-toolbar" style="margin-top:16px">
-          <button class="btn btn-outline btn-sm" id="scrape-seed">+ Seed antrian (all sources × HS × country)</button>
-          <button class="btn btn-primary btn-sm" id="scrape-run">▶ Proses 5 job sekarang</button>
-          <button class="btn btn-outline btn-sm" id="scrape-enrich">✨ Enrich 5 buyer sekarang</button>
-          <span class="admin-count">${status.recent_jobs.length} job terbaru</span>
-        </div>
-
-        <div class="admin-grid" style="grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px">
-          <div class="admin-panel">
-            <h3 style="margin-bottom:12px">Buyer per sumber</h3>
-            <table class="tbl">
-              <thead><tr><th>Source</th><th class="r">Buyer</th></tr></thead>
-              <tbody>
-                ${[
-                  ['ai_agent', 'AI Research Agent (web + LLM, verified)'],
-                  ['gleif', 'GLEIF LEI Registry Crawler'],
-                  ['companies_house_uk', 'UK Companies House Crawler'],
-                  ['sirene_fr', 'France SIRENE NAF Crawler'],
-                  ['sec_edgar_us', 'US SEC EDGAR Filings Crawler'],
-                  ['google_business', 'Google Business Crawler (OSM)'],
-                  ['kompass', 'Kompass B2B Directory Crawler'],
-                  ['europages', 'Europages Directory Crawler'],
-                  ['wikidata', 'Wikidata Entity Crawler'],
-                  ['importyeti', 'ImportYeti US Bill-of-Lading Crawler'],
-                  ['itpc', 'Kemendag ITPC Inquiry Crawler'],
-                ].map(([s, label]) => `<tr>
-                  <td class="body-sm">${esc(label)}<div class="caption muted-3">${esc(s)}</div></td>
-                  <td class="r num">${fmtN(bySrcMap[s] || 0)}</td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="admin-panel">
-            <h3 style="margin-bottom:12px">Job terbaru</h3>
-            <div style="max-height:280px;overflow:auto">
-              <table class="tbl">
-                <thead><tr><th>Source</th><th>HS</th><th>Country</th><th>Status</th><th class="r">N</th></tr></thead>
-                <tbody>
-                  ${status.recent_jobs.map((j) => `<tr>
-                    <td class="body-sm">${esc(j.source)}</td>
-                    <td class="caption">${esc(j.hs_code || '-')}</td>
-                    <td>${j.country ? flag(j.country) + ' ' + esc(j.country) : '-'}</td>
-                    <td><span class="pill ${j.status === 'done' ? 'pill-success' : j.status === 'failed' ? 'pill-danger' : j.status === 'running' ? 'pill-warning' : 'pill-neutral'}" style="font-size:10px">${esc(j.status)}</span>${j.error ? `<div class="caption muted-3" title="${esc(j.error)}">${esc(j.error.slice(0,32))}</div>` : ''}</td>
-                    <td class="r num">${fmtN(j.result_count || 0)}</td>
-                  </tr>`).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div class="admin-panel" style="margin-top:16px;padding:0;overflow:hidden">
-          <div style="padding:14px 18px;border-bottom:1px solid var(--border-default)">
-            <h3 style="margin:0">50 buyer terbaru</h3>
-          </div>
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Nama</th><th>Negara</th><th>Industri</th><th>Source</th><th>Enriched</th><th>HS</th><th class="r">Skor</th><th class="r">Aksi</th></tr></thead>
-            <tbody>
-              ${buyers.length ? buyers.map((b) => `<tr>
-                <td><b class="body-sm">${esc(b.name)}</b>${b.website ? `<div class="caption"><a href="${esc(b.website)}" target="_blank" rel="noopener" class="muted">${esc(b.website.replace(/^https?:\/\//, '').slice(0,40))}</a></div>` : ''}${b.email ? `<div class="caption muted">${esc(b.email)}</div>` : ''}</td>
-                <td>${b.country ? flag(b.country) + ' ' + esc(b.country) : '-'}${b.city ? `<div class="caption muted-3">${esc(b.city)}</div>` : ''}</td>
-                <td class="body-sm muted">${esc(b.industry || '-')}${b.size_bucket ? `<div class="caption muted-3">${esc(b.size_bucket)}</div>` : ''}</td>
-                <td><span class="pill pill-neutral" style="font-size:10px">${esc(b.source)}</span></td>
-                <td>${b.enriched_at ? `<span class="pill pill-success" style="font-size:10px">✓</span>` : `<span class="pill pill-neutral" style="font-size:10px">-</span>`}</td>
-                <td class="caption">${(b.hs_codes || []).slice(0,3).map((h) => `<span class="tag">${esc(h)}</span>`).join(' ') || '-'}</td>
-                <td class="r"><span class="pill ${b.data_confidence >= 80 ? 'pill-success' : b.data_confidence >= 60 ? 'pill-warning' : 'pill-neutral'}" style="font-size:10px">${b.data_confidence}</span></td>
-                <td class="r"><button class="btn btn-sm btn-outline" data-enrich-buyer="${b.id}">Enrich</button></td>
-              </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:24px;text-align:center">Belum ada buyer terscrape. Klik "Seed antrian" lalu "Proses 5 job".</td></tr>`}
-            </tbody>
-          </table></div>
-        </div>
-      `);
-      $('#scrape-seed')?.addEventListener('click', async (e) => {
-        e.target.disabled = true; e.target.textContent = 'Enqueuing…';
-        try { const r = await api('/api/admin/scrape/seed', { method: 'POST' }); toast(`+${r.enqueued} job masuk antrian`); location.hash = '#/admin?tab=scrape&t=' + Date.now(); }
-        catch (err) { toast(err.data?.error || 'Gagal seed', true); e.target.disabled = false; e.target.textContent = '+ Seed antrian (all sources × HS × country)'; }
-      });
-      $('#scrape-run')?.addEventListener('click', async (e) => {
-        e.target.disabled = true; e.target.textContent = 'Memproses…';
-        try {
-          const r = await api('/api/admin/scrape/run', { method: 'POST', body: { max: 5 } });
-          toast(`Selesai. ${r.buyers_persisted} buyer baru, ${r.ok} ok, ${r.skipped} skip, ${r.failed} gagal`);
-          location.hash = '#/admin?tab=scrape&t=' + Date.now();
-        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal run', true); e.target.disabled = false; e.target.textContent = '▶ Proses 5 job sekarang'; }
-      });
-      $('#scrape-enrich')?.addEventListener('click', async (e) => {
-        e.target.disabled = true; e.target.textContent = 'Enriching…';
-        try {
-          const r = await api('/api/admin/scrape/enrich', { method: 'POST', body: { max: 5 } });
-          toast(`Selesai. ${r.ok}/${r.processed} buyer enriched`);
-          location.hash = '#/admin?tab=scrape&t=' + Date.now();
-        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal enrich', true); e.target.disabled = false; e.target.textContent = '✨ Enrich 5 buyer sekarang'; }
-      });
-      $$('[data-enrich-buyer]').forEach((el) => el.addEventListener('click', async () => {
-        const id = el.dataset.enrichBuyer;
-        el.disabled = true; el.textContent = '…';
-        try {
-          await api('/api/admin/scrape/enrich?id=' + id, { method: 'POST' });
-          toast('Buyer enriched');
-          location.hash = '#/admin?tab=scrape&t=' + Date.now();
-        } catch (err) { toast(err.data?.detail || err.data?.error || 'Gagal', true); el.disabled = false; el.textContent = 'Enrich'; }
-      }));
-      // Faster auto-refresh (8s) so a running cron shows progress live.
-      clearInterval(window.__adminScrapeTimer);
-      window.__adminScrapeTimer = setInterval(() => {
-        if (parseHash().path === '/admin' && (params.get('tab') || 'overview') === 'scrape') {
-          location.hash = '#/admin?tab=scrape&t=' + Date.now();
-        } else {
-          clearInterval(window.__adminScrapeTimer);
-        }
-      }, 8000);
-    } else if (tab === 'shipments') {
-      const d = await api('/api/admin/shipments');
-      draw(`
-        <div class="admin-kpi-grid">
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Shipment</div><div class="admin-kpi-num">${fmtN(d.stats.total)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Volume</div><div class="admin-kpi-num">${fmtKg(d.stats.total_kg)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Nilai</div><div class="admin-kpi-num">${fmtUSD(d.stats.total_usd)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">HS Unik</div><div class="admin-kpi-num">${fmtN(d.stats.unique_hs)}</div><div class="admin-kpi-hint">${fmtN(d.stats.unique_buyers)} buyer unik</div></div>
-        </div>
-        <div class="admin-panel" style="padding:0;overflow:hidden">
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Tanggal</th><th>HS</th><th>Buyer</th><th>Eksportir</th><th>Rute</th><th class="r">Berat</th><th class="r">Nilai</th></tr></thead>
-            <tbody>
-            ${d.shipments.map((s) => `<tr>
-              <td class="caption num body-sm">${fmtDate(s.shipment_date)}</td>
-              <td><span class="hs-code-chip">${s.hs_code.replace(/^(\d{4})/, '$1.')}</span></td>
-              <td><b class="body-sm">${esc(s.buyer_name)}</b> <span class="caption">${flag(s.buyer_country)}</span></td>
-              <td class="body-sm">${flag(s.exporter_country)} ${esc(s.exporter_name)} ${s.is_indonesian ? '<span class="pill pill-info" style="font-size:10px">🇮🇩</span>' : ''}</td>
-              <td class="caption muted">${esc(s.origin_port || '')} → ${esc(s.dest_port || '')}</td>
-              <td class="r num">${fmtKg(s.weight_kg)}</td>
-              <td class="r num">${fmtUSD(s.value_usd)}</td>
-            </tr>`).join('')}
-            </tbody>
-          </table></div>
-        </div>
-      `);
-    } else if (tab === 'messages') {
-      const d = await api('/api/admin/messages');
-      const rateOpened = d.funnel.total ? Math.round((d.funnel.opened / d.funnel.total) * 100) : 0;
-      const rateReplied = d.funnel.total ? Math.round((d.funnel.replied / d.funnel.total) * 100) : 0;
-      draw(`
-        <div class="admin-kpi-grid">
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Total Terkirim</div><div class="admin-kpi-num">${fmtN(d.funnel.total)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Open Rate</div><div class="admin-kpi-num">${rateOpened}%</div><div class="admin-kpi-hint">${d.funnel.opened} dibuka</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Reply Rate</div><div class="admin-kpi-num">${rateReplied}%</div><div class="admin-kpi-hint">${d.funnel.replied} dibalas</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">Channel</div><div class="admin-kpi-num" style="font-size:16px;padding-top:4px">${d.by_channel.map((c) => `${c.channel === 'email' ? '✉️' : '💬'} ${c.c}`).join(' · ')}</div></div>
-        </div>
-        <div class="admin-panel" style="padding:0;overflow:hidden">
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Dari User</th><th>Ke Buyer</th><th>Subjek</th><th>Channel</th><th>Status</th><th>Dikirim</th></tr></thead>
-            <tbody>
-            ${d.messages.map((mg) => `<tr>
-              <td><b class="body-sm">${esc(mg.user_name)}</b><div class="caption muted-3">${esc(mg.user_email)}</div></td>
-              <td>${flag(mg.buyer_country)} ${esc(mg.buyer_name)}</td>
-              <td class="body-sm muted">${esc(mg.subject || '(WhatsApp)')}</td>
-              <td>${mg.channel === 'email' ? '✉️' : '💬'} ${mg.channel}</td>
-              <td>${statusPill(mg.status)}</td>
-              <td class="caption num body-sm">${fmtDate(mg.sent_at)}</td>
-            </tr>`).join('')}
-            </tbody>
-          </table></div>
-        </div>
-      `);
-    } else if (tab === 'revenue') {
-      const d = await api('/api/admin/revenue');
-      draw(`
-        <div class="admin-kpi-grid">
-          <div class="admin-kpi admin-kpi-hero"><div class="admin-kpi-lbl">MRR (Monthly)</div><div class="admin-kpi-num">${fmtIDR(d.mrr)}</div><div class="admin-kpi-hint">${d.paid_users} paying users</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">ARR (Annual)</div><div class="admin-kpi-num">${fmtIDR(d.arr)}</div></div>
-          <div class="admin-kpi"><div class="admin-kpi-lbl">ARPU</div><div class="admin-kpi-num">${fmtIDR(d.arpu)}</div><div class="admin-kpi-hint">per paying user / bulan</div></div>
-        </div>
-        <div class="admin-grid-2">
-          <div class="admin-panel">
-            <h3>Revenue per Paket</h3>
-            <div style="margin-top:14px">
-              ${d.by_plan.map((p) => `<div class="admin-list-row">
-                <div><b style="text-transform:capitalize">${esc(p.plan)}</b> <span class="caption muted">× ${p.c} user @ ${fmtIDR(p.price)}</span></div>
-                <b>${fmtIDR(p.revenue)}</b>
-              </div>`).join('')}
-            </div>
-          </div>
-          <div class="admin-panel">
-            <h3>Riwayat Perubahan Plan (50 terakhir)</h3>
-            <div style="margin-top:14px;max-height:400px;overflow-y:auto">
-              ${d.plan_change_history.length ? d.plan_change_history.map((e) => `<div class="admin-list-row">
-                <div><span class="caption muted-3">User ${esc(e.target)}</span><div class="body-sm">→ ${esc((e.meta && JSON.parse(e.meta).plan) || '?')}</div></div>
-                <span class="caption muted-3">${fmtDate(e.created_at)}</span>
-              </div>`).join('') : '<p class="muted body-sm">Belum ada riwayat.</p>'}
-            </div>
-          </div>
-        </div>
-      `);
-    } else if (tab === 'hs-usage') {
-      const d = await api('/api/admin/hs-usage');
-      const maxHs = d.top_hs_focus[0]?.count || 1;
-      const maxC = d.top_target_countries[0]?.count || 1;
-      draw(`
-        <div class="admin-grid-2">
-          <div class="admin-panel">
-            <h3>Top HS Focus User</h3>
-            <p class="caption muted-3" style="margin-bottom:14px">HS code paling sering dipilih user waktu onboarding.</p>
-            ${d.top_hs_focus.length ? d.top_hs_focus.map((h) => `<div class="admin-bar-row">
-              <span class="hs-code-chip">${h.code.replace(/^(\d{4})/, '$1.')}</span>
-              <div class="admin-bar"><div style="width:${(h.count / maxHs) * 100}%"></div></div>
-              <b class="num body-sm" style="text-align:right">${h.count}</b>
-            </div>`).join('') : '<p class="muted body-sm">Belum ada data.</p>'}
-          </div>
-          <div class="admin-panel">
-            <h3>Top Target Countries</h3>
-            <p class="caption muted-3" style="margin-bottom:14px">Negara yang paling sering dipilih user sebagai target ekspor.</p>
-            ${d.top_target_countries.length ? d.top_target_countries.map((c) => `<div class="admin-bar-row">
-              <span class="body-sm">${flag(c.code)} ${esc(c.name)}</span>
-              <div class="admin-bar"><div style="width:${(c.count / maxC) * 100}%"></div></div>
-              <b class="num body-sm" style="text-align:right">${c.count}</b>
-            </div>`).join('') : '<p class="muted body-sm">Belum ada data.</p>'}
-          </div>
-        </div>
-      `);
-    } else if (tab === 'system') {
-      const d = await api('/api/admin/system');
-      draw(`
-        <div class="admin-grid-2">
-          <div class="admin-panel">
-            <h3>Runtime</h3>
-            <div style="margin-top:14px">
-              <div class="admin-list-row"><span>Node</span><b>${esc(d.node_version)}</b></div>
-              <div class="admin-list-row"><span>Uptime</span><b>${Math.floor(d.uptime_sec / 60)}m ${d.uptime_sec % 60}s</b></div>
-              <div class="admin-list-row"><span>Memory RSS</span><b>${d.memory_mb} MB</b></div>
-              <div class="admin-list-row"><span>DB Engine</span><b>${esc(d.db_engine)}</b></div>
-              <div class="admin-list-row"><span>HS Nomenclature Loaded</span><b>${fmtN(d.hs_nomenclature_loaded)} kode</b></div>
-            </div>
-          </div>
-          <div class="admin-panel">
-            <h3>Cache Stats</h3>
-            <div style="margin-top:14px">
-              <div class="admin-list-row"><span>Supabase token cache</span><b>${d.caches.supabase_token} entri</b></div>
-              <div class="admin-list-row"><span>UN Comtrade cache</span><b>${d.caches.comtrade} entri</b></div>
-              <div class="admin-list-row"><span>USITC HTS cache</span><b>${d.caches.usitc} entri</b></div>
-            </div>
-            <h3 style="margin-top:20px">Integrasi</h3>
-            <div style="margin-top:14px">
-              ${Object.entries(d.integrations).map(([k, v]) => `<div class="admin-list-row"><span style="text-transform:capitalize">${k.replace(/_/g, ' ')}</span><span class="pill ${v ? 'pill-success' : 'pill-danger'}" style="font-size:11px">${v ? '● live' : '× off'}</span></div>`).join('')}
-            </div>
-          </div>
-        </div>
-      `);
-    } else if (tab === 'audit') {
-      const d = await api('/api/admin/audit');
-      draw(`
-        <div class="admin-panel" style="padding:0;overflow:hidden">
-          <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>Waktu</th><th>Admin</th><th>Aksi</th><th>Target</th><th>Meta</th></tr></thead>
-            <tbody>
-            ${d.events.length ? d.events.map((e) => `<tr>
-              <td class="caption num body-sm">${fmtDate(e.created_at)}</td>
-              <td><b class="body-sm">${esc(e.actor_name || '?')}</b><div class="caption muted-3">${esc(e.actor_email || '-')}</div></td>
-              <td><span class="pill pill-info" style="font-size:11px">${esc(e.action)}</span></td>
-              <td class="caption">${esc(e.target || '-')}</td>
-              <td class="caption muted-3" style="font-family:monospace;font-size:11px">${esc(e.meta || '-')}</td>
-            </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:40px" class="muted">Belum ada tindakan admin tercatat.</td></tr>'}
-            </tbody></table></div>
-        </div>
-      `);
+        <div style="margin-top:20px">${panel('Status otomatisasi (GitHub Actions)', pl && pl.ok ? table([
+          { h: 'Workflow', f: (w) => `<b>${esc(w.name)}</b>` },
+          { h: 'Run terakhir', f: (w) => `${statusPill(w.last.conclusion || w.last.status)} <span class="muted caption">${ago(w.last.updated_at)}</span>` },
+          { h: 'Durasi', r: true, f: (w) => w.last.minutes != null ? w.last.minutes + ' mnt' : '-' },
+          { h: 'Sukses / gagal (80 run terakhir)', r: true, f: (w) => `${w.ok} / ${w.failed}` },
+          { h: '', r: true, f: (w) => `<a href="${esc(w.last.url)}" target="_blank" rel="noopener">Buka ›</a>` },
+        ], wf) : `<p class="muted body-sm">${esc((pl && pl.error) || 'Tidak bisa membaca GitHub.')} Pasang GITHUB_TOKEN di Vercel bila sering kena batas.</p>`)}</div>`);
+      bindRefresh();
+      return;
     }
-  } catch (err) {
-    draw(`<div class="empty" style="padding:40px"><h3>Gagal memuat data</h3><p class="muted">${esc(err.data?.error || err.message || 'Coba refresh')}</p></div>`);
-  }
+
+    // ===================================================== DATA BUYER
+    if (tab === 'buyers') {
+      const d = await api('/api/admin/v2/buyers');
+      const f = d.funnel || {};
+      const qb = ['0-9', '10-19', '20-29', '30-39', '40-49', '50-59', '60-69', '70-79', '80-89', '90-100'];
+      draw(`
+        <div class="ad-head"><p class="muted body-sm">Komposisi database buyer, per sumber, negara dan komoditas.</p>${refreshBtn}</div>
+        ${panel('Per sumber', table([
+          { h: 'Sumber', f: (r) => `<b>${esc(srcName(r.source))}</b><div class="caption muted">${esc(r.source)}</div>` },
+          { h: 'Total', r: true, f: (r) => N(r.total) },
+          { h: 'Tampil', r: true, f: (r) => N(r.visible) },
+          { h: 'Berkontak', r: true, f: (r) => `${N(r.contact)} <span class="caption muted">${PCT(r.contact, r.visible)}</span>` },
+          { h: 'Email', r: true, f: (r) => N(r.email) },
+          { h: 'Website', r: true, f: (r) => N(r.website) },
+          { h: 'Baru 24j / 7h', r: true, f: (r) => `+${N(r.new_24h)} / +${N(r.new_7d)}` },
+          { h: 'Update terakhir', r: true, f: (r) => ago(r.last_update) },
+        ], d.bySource))}
+        <div class="admin-grid-2" style="margin-top:20px">
+          ${panel('Per negara (tampil)', `<div class="ad-scroll">${bars(d.byCountry.map((r) => ({ ...r, label: `${flag(r.country)} ${CNAME[r.country] || r.country}` })), 'label', 'total', { sub: (r) => ` · ${N(r.contact)} kontak` })}</div>`)}
+          ${panel('Per komoditas (HS 4)', `<div class="ad-scroll">${bars(d.byHs.map((r) => ({ ...r, label: hsName(r.hs4) })), 'label', 'total', { sub: (r) => ` · ${N(r.contact)} kontak` })}</div>`)}
+          ${panel('Progres pencari kontak', `
+            <div class="ad-funnel">
+              <div><b>${N(f.never_checked)}</b><span>belum dicek</span></div>
+              <div><b>${N(f.checked)}</b><span>sudah dicek</span></div>
+              <div><b>${N(f.checked_site)}</b><span>website ditemukan</span></div>
+              <div><b>${N(f.checked_email)}</b><span>email ditemukan</span></div>
+            </div>
+            <p class="muted body-sm" style="margin-top:12px">24 jam terakhir: ${N(f.checked_24h)} dicek, ${N(f.found_24h)} dapat kontak baru (${PCT(f.found_24h, f.checked_24h)}).</p>`)}
+          ${panel('Kualitas (skor kelengkapan)', bars((d.quality || []).map((r) => ({ label: qb[r.bucket] || r.bucket, n: r.n })), 'label', 'n'))}
+          ${panel('Disembunyikan dari user', bars(d.hidden, 'reason', 'n') + '<p class="caption muted" style="margin-top:8px">not_a_buyer = bukan pembeli, unreachable = tidak ada website/kontak setelah 2x cek, unverified = dari nama saja, menunggu website.</p>')}
+          ${panel('Jenis email & jenis buyer', bars(d.emailStatus, 'status', 'n') + '<div style="height:14px"></div>' + bars(d.buyerType, 'type', 'n'))}
+        </div>
+        <div style="margin-top:20px">${panel('Cari & periksa buyer', `
+          <div class="admin-toolbar">
+            <input class="input" id="bq" placeholder="Nama perusahaan" style="max-width:240px">
+            <select class="input" id="bsrc" style="max-width:200px"><option value="">Semua sumber</option>${d.bySource.map((r) => `<option value="${esc(r.source)}">${esc(srcName(r.source))}</option>`).join('')}</select>
+            <input class="input" id="bco" placeholder="Negara (DE)" style="max-width:110px">
+            <input class="input" id="bhs" placeholder="HS (0901)" style="max-width:110px">
+            <select class="input" id="bflt" style="max-width:170px"><option value="">Semua</option><option value="contact">Berkontak</option><option value="hidden">Tersembunyi</option></select>
+            <select class="input" id="bsort" style="max-width:150px"><option value="recent">Terbaru</option><option value="updated">Update terakhir</option><option value="quality">Kualitas</option></select>
+            <button class="btn btn-sm btn-primary" id="bgo">Cari</button>
+          </div><div id="blist"><div class="muted body-sm">Memuat…</div></div>`)}</div>`);
+      bindRefresh();
+      let page = 1;
+      const load = async () => {
+        const qs = new URLSearchParams({ page, sort: $('#bsort').value });
+        if ($('#bq').value.trim()) qs.set('q', $('#bq').value.trim());
+        if ($('#bsrc').value) qs.set('source', $('#bsrc').value);
+        if ($('#bco').value.trim()) qs.set('country', $('#bco').value.trim());
+        if ($('#bhs').value.trim()) qs.set('hs', $('#bhs').value.trim());
+        if ($('#bflt').value === 'contact') qs.set('contact', '1');
+        if ($('#bflt').value === 'hidden') qs.set('hidden', '1');
+        const r = await api('/api/admin/v2/buyers/list?' + qs);
+        $('#blist').innerHTML = `<div class="caption muted" style="margin-bottom:8px">${N(r.total)} buyer · halaman ${r.page}</div>` + table([
+          { h: 'Perusahaan', f: (x) => `<b>${esc(x.name)}</b><div class="caption muted">${flag(x.country)} ${esc(x.country || '')}${x.city ? ' · ' + esc(x.city) : ''}${x.buyer_type ? ' · ' + esc(x.buyer_type) : ''}</div>` },
+          { h: 'Kontak', f: (x) => `${x.website ? `<a href="${esc(x.website)}" target="_blank" rel="noopener">${esc(x.website.replace(/^https?:\/\/(www\.)?/, ''))}</a><br>` : ''}${x.email ? esc(x.email) + (x.email_status ? ` <span class="caption muted">${esc(x.email_status)}</span>` : '') + '<br>' : ''}${x.phone ? esc(x.phone) : ''}${!x.website && !x.email && !x.phone ? '<span class="muted">-</span>' : ''}` },
+          { h: 'HS', f: (x) => esc((x.hs_codes || []).slice(0, 4).join(', ')) },
+          { h: 'Sumber', f: (x) => `${esc(srcName(x.source))}${(x.sources_seen || []).length > 1 ? ` <span class="caption muted">+${x.sources_seen.length - 1}</span>` : ''}${x.evidence_url ? `<br><a class="caption" href="${esc(x.evidence_url)}" target="_blank" rel="noopener">bukti ›</a>` : ''}` },
+          { h: 'Skor', r: true, f: (x) => `${x.quality ?? '-'}${x.hidden ? `<br>${pill(x.hidden_reason || 'hidden', 'warn')}` : ''}` },
+          { h: 'Masuk', r: true, f: (x) => `<span class="caption">${ago(x.created_at)}</span>` },
+        ], r.rows, 'Tidak ada buyer yang cocok.') + `<div class="ad-pager"><button class="btn btn-sm btn-neutral" id="bprev" ${r.page <= 1 ? 'disabled' : ''}>‹ Sebelumnya</button>
+          <button class="btn btn-sm btn-neutral" id="bnext" ${r.page * r.per >= r.total ? 'disabled' : ''}>Berikutnya ›</button></div>`;
+        $('#bprev').onclick = () => { page--; load(); };
+        $('#bnext').onclick = () => { page++; load(); };
+      };
+      $('#bgo').onclick = () => { page = 1; load(); };
+      $('#bq').onkeydown = (e) => { if (e.key === 'Enter') { page = 1; load(); } };
+      load().catch(fail);
+      return;
+    }
+
+    // ===================================================== SUMBER & SCRAPING
+    if (tab === 'sources') {
+      const [d, pl] = await Promise.all([api('/api/admin/v2/sources'), api('/api/admin/v2/pipelines').catch(() => null)]);
+      const qSeries = (d.queries || []).map((x) => ({ day: String(x.day).slice(0, 10), queries: x.queries, found: x.found }));
+      draw(`
+        <div class="ad-head"><p class="muted body-sm">Mesin yang terus mencari daftar buyer baru di web, plus semua job otomatis.</p>${refreshBtn}</div>
+        ${d.ready ? `
+        <div class="admin-kpi-grid">${(d.byStatus || []).map((x) => kpi(`Daftar ${x.status}`, N(x.n), `${N(x.new)} buyer baru · ${N(x.kept)} diambil`, x.status === 'active')).join('')}</div>
+        <div class="admin-grid-2">
+          ${panel('Query pencarian per hari', chart(qSeries, 'queries', { color: '#2563eb' }))}
+          ${panel('Daftar baru ditemukan per hari', chart(qSeries, 'found', { color: '#16a34a' }))}
+          ${panel('Per bahasa pencarian', bars(d.byLang, 'lang', 'queries', { sub: (r) => ` · ${N(r.found)} daftar` }))}
+          ${panel('Per jenis daftar', bars(d.byKind, 'kind', 'n', { sub: (r) => ` · ${N(r.new)} buyer` }))}
+        </div>
+        <div style="margin-top:20px">${panel('Daftar paling produktif', table([
+          { h: 'Sumber', f: (x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener"><b>${esc(x.host)}</b></a><div class="caption muted">${esc(x.kind || '')} ${x.hs4 ? '· ' + esc(hsName(x.hs4)) : ''} ${x.country ? '· ' + flag(x.country) + ' ' + esc(x.country) : ''}</div>` },
+          { h: 'Status', f: (x) => statusPill(x.status) },
+          { h: 'Halaman', r: true, f: (x) => N(x.pages_read) },
+          { h: 'Diambil', r: true, f: (x) => N(x.buyers_kept) },
+          { h: 'Baru', r: true, f: (x) => `<b>${N(x.buyers_new)}</b>` },
+          { h: 'Dibaca', r: true, f: (x) => ago(x.last_harvested_at) },
+        ], d.top, 'Belum ada daftar yang menghasilkan buyer.'))}</div>
+        <div style="margin-top:20px">${panel('Daftar terbaru ditemukan', table([
+          { h: 'Halaman', f: (x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc((x.title || x.host).slice(0, 70))}</a><div class="caption muted">${esc(x.host)} · "${esc((x.discovered_query || '').slice(0, 60))}"</div>` },
+          { h: 'Skor', r: true, f: (x) => `${x.judge_score ?? '-'}` },
+          { h: '± perusahaan', r: true, f: (x) => N(x.est_companies) },
+          { h: 'Status', f: (x) => statusPill(x.status) + (x.last_error ? `<div class="caption muted">${esc(x.last_error.slice(0, 50))}</div>` : '') },
+          { h: 'Baru', r: true, f: (x) => N(x.buyers_new) },
+          { h: 'Ditemukan', r: true, f: (x) => ago(x.discovered_at) },
+        ], d.recent, 'Mesin sumber belum menemukan daftar. Cek workflow "Buyer sources".'))}</div>`
+        : panel('Mesin sumber belum aktif', '<p class="muted body-sm">Tabel buyer_sources belum ada. Push kode terbaru agar migration 006 jalan.</p>')}
+        <div style="margin-top:20px">${panel('Run GitHub Actions terakhir', pl && pl.ok ? table([
+          { h: 'Workflow', f: (x) => `<b>${esc(x.name)}</b><div class="caption muted">${esc(x.event)} · ${esc(x.sha)}</div>` },
+          { h: 'Status', f: (x) => statusPill(x.conclusion || x.status) },
+          { h: 'Mulai', r: true, f: (x) => dt(x.created_at) },
+          { h: 'Durasi', r: true, f: (x) => x.minutes != null ? x.minutes + ' mnt' : '-' },
+          { h: '', r: true, f: (x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">Log ›</a>` },
+        ], pl.runs) : `<p class="muted body-sm">${esc((pl && pl.error) || 'Tidak bisa membaca GitHub.')}</p>`)}</div>
+        ${d.jobs && d.jobs.length ? `<div style="margin-top:20px">${panel('Misi AI agent & crawler terakhir', table([
+          { h: 'Sumber', f: (x) => esc(x.source) },
+          { h: 'HS · negara', f: (x) => `${esc(x.hs_code || '')} ${x.country ? flag(x.country) + ' ' + esc(x.country) : ''}` },
+          { h: 'Status', f: (x) => statusPill(x.status) + (x.error ? `<div class="caption muted">${esc(String(x.error).slice(0, 60))}</div>` : '') },
+          { h: 'Hasil', r: true, f: (x) => N(x.result_count) },
+          { h: 'Selesai', r: true, f: (x) => ago(x.finished_at || x.started_at) },
+        ], d.jobs))}</div>` : ''}`);
+      bindRefresh();
+      return;
+    }
+
+    // ===================================================== PENGGUNA
+    if (tab === 'users') {
+      const qv = params.get('q') || ''; const pv = params.get('plan') || '';
+      const d = await api('/api/admin/v2/users?' + new URLSearchParams({ ...(qv ? { q: qv } : {}), ...(pv ? { plan: pv } : {}) }));
+      const planPill = (p) => pill(p, { business: 'violet', growth: 'ok', hemat: 'info', trial: 'neutral', expired: 'warn' }[p]);
+      draw(`
+        <div class="admin-kpi-grid">${(d.byPlan || []).map((x) => kpi(x.plan, N(x.n), '', x.plan === 'growth' || x.plan === 'business')).join('')}</div>
+        ${panel('Pengguna', `
+          <form class="admin-toolbar" id="uf">
+            <input class="input" name="q" value="${esc(qv)}" placeholder="Cari email / nama / usaha" style="max-width:280px">
+            <select class="input" name="plan" style="max-width:160px"><option value="">Semua paket</option>${['trial', 'hemat', 'growth', 'business', 'expired'].map((p) => `<option ${pv === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <button class="btn btn-sm btn-primary">Cari</button><span class="admin-count">${N(d.rows.length)} ditampilkan (maks 300)</span>
+          </form>
+          ${table([
+            { h: 'Pengguna', f: (x) => `<b>${esc(x.name || x.email.split('@')[0])}</b><div class="caption muted">${esc(x.email)}${x.org_name ? ' · ' + esc(x.org_name) : ''}</div>` },
+            { h: 'Paket', f: (x) => `${planPill(x.effective_plan)}<div class="caption muted">s/d ${dt(x.plan_expires_at)}</div>` },
+            { h: 'Saldo', r: true, f: (x) => RP(x.balance_idr) },
+            { h: 'Total bayar', r: true, f: (x) => RP(x.paid_total) },
+            { h: 'Pencarian / kontak', r: true, f: (x) => `${N(x.searches)} / ${N(x.contacts_opened)}` },
+            { h: 'Daftar', r: true, f: (x) => `<span class="caption">${dt(x.created_at)}</span>` },
+            { h: 'Terakhir aktif', r: true, f: (x) => `<span class="caption">${ago(x.last_seen_at)}</span>` },
+            { h: '', r: true, f: (x) => `<button class="btn btn-sm btn-neutral" data-user="${esc(x.email)}">Kelola</button>` },
+          ], d.rows, 'Belum ada pengguna.')}`)}`);
+      $('#uf').onsubmit = (e) => { e.preventDefault(); const fd = new FormData(e.target); location.hash = '#/admin?' + new URLSearchParams({ tab: 'users', q: fd.get('q') || '', plan: fd.get('plan') || '' }); };
+      $$('[data-user]').forEach((b) => b.onclick = async () => {
+        const email = b.dataset.user;
+        const u = await api('/api/admin/v2/user?email=' + encodeURIComponent(email));
+        const a = u.account;
+        modal(`<h2 style="margin-bottom:4px">${esc(a.name || email)}</h2><p class="muted body-sm" style="margin-bottom:16px">${esc(email)} · daftar ${dt(a.created_at)}</p>
+          <div class="admin-grid-2" style="gap:12px">
+            <div class="admin-panel"><h3>Ubah paket</h3><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <select class="input" id="mp" style="max-width:140px">${['trial', 'hemat', 'growth', 'business'].map((p) => `<option ${a.plan === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+              <input class="input" id="md" type="number" value="30" min="1" max="366" style="max-width:90px"><span class="caption muted" style="align-self:center">hari</span>
+              <button class="btn btn-sm btn-primary" id="mps">Simpan</button></div>
+              <p class="caption muted" style="margin-top:8px">Sekarang: ${esc(a.plan)} s/d ${dt(a.plan_expires_at)}</p></div>
+            <div class="admin-panel"><h3>Saldo: ${RP(a.balance_idr)}</h3><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+              <input class="input" id="mb" type="number" placeholder="+10000 / -5000" style="max-width:140px">
+              <input class="input" id="mn" placeholder="Alasan" style="max-width:160px">
+              <button class="btn btn-sm btn-primary" id="mbs">Terapkan</button></div>
+              <p class="caption muted" style="margin-top:8px">Tercatat di mutasi saldo sebagai "admin".</p></div>
+          </div>
+          <h4 class="ad-sec">Pembayaran</h4>${table([{ h: 'Order', f: (o) => esc(o.order_id) }, { h: 'Item', f: (o) => esc(o.plan || o.kind) }, { h: 'Nominal', r: true, f: (o) => RP(o.amount_idr) }, { h: 'Status', f: (o) => statusPill(o.status) }, { h: 'Waktu', r: true, f: (o) => dt(o.paid_at || o.created_at) }], u.orders, 'Belum ada pembayaran.')}
+          <h4 class="ad-sec">Mutasi saldo</h4>${table([{ h: 'Alasan', f: (l) => esc(l.reason) + (l.ref ? `<div class="caption muted">${esc(l.ref)}</div>` : '') }, { h: 'Mutasi', r: true, f: (l) => `<span style="color:${l.delta_idr > 0 ? 'var(--success-text)' : 'inherit'}">${l.delta_idr > 0 ? '+' : ''}${RP(l.delta_idr)}</span>` }, { h: 'Saldo', r: true, f: (l) => RP(l.balance_after) }, { h: 'Waktu', r: true, f: (l) => dt(l.created_at) }], u.ledger, 'Belum ada mutasi.')}
+          <h4 class="ad-sec">Kontak yang dibuka</h4>${table([{ h: 'Buyer', f: (x) => `${esc(x.name || '#' + x.buyer_id)} ${x.country ? flag(x.country) : ''}` }, { h: 'Jenis', f: (x) => esc(x.kind) }, { h: 'Dibayar', f: (x) => esc(x.paid_with) }, { h: 'Waktu', r: true, f: (x) => dt(x.created_at) }], u.unlocks, 'Belum ada.')}`);
+        document.getElementById('mps').onclick = async () => {
+          try { await api('/api/admin/v2/user/plan', { method: 'POST', body: { email, plan: $('#mp').value, days: Number($('#md').value) } }); toast('Paket diperbarui'); closeModal(); location.reload(); }
+          catch (e) { toast(e.data?.error || 'Gagal', true); }
+        };
+        document.getElementById('mbs').onclick = async () => {
+          const delta = Number($('#mb').value);
+          if (!delta) return toast('Isi nominal', true);
+          if (!confirm(`Ubah saldo ${email} sebesar ${RP(delta)}?`)) return;
+          try { const r = await api('/api/admin/v2/user/balance', { method: 'POST', body: { email, delta, note: $('#mn').value } }); toast('Saldo sekarang ' + RP(r.balance)); closeModal(); location.reload(); }
+          catch (e) { toast(e.data?.error || 'Gagal', true); }
+        };
+      });
+      return;
+    }
+
+    // ===================================================== PENDAPATAN
+    if (tab === 'revenue') {
+      const d = await api('/api/admin/v2/revenue');
+      const st = Object.fromEntries((d.statuses || []).map((x) => [x.status, x]));
+      const months = {};
+      for (const r of d.monthly || []) {
+        const m0 = months[r.month] || (months[r.month] = { month: r.month, plan: 0, topup: 0, orders: 0, fees: 0, net: 0 });
+        m0[r.kind] = Number(r.gross); m0.orders += r.orders; m0.fees += Number(r.fees); m0.net += Number(r.net);
+      }
+      draw(`
+        <div class="admin-kpi-grid">
+          ${kpi('Dibayar', RP(st.paid?.amount), `${N(st.paid?.n)} order`, true)}
+          ${kpi('Pending', RP(st.pending?.amount), `${N(st.pending?.n)} order`)}
+          ${kpi('Kedaluwarsa', RP(st.expired?.amount), `${N(st.expired?.n)} order`)}
+          ${kpi('Gagal', RP(st.failed?.amount), `${N(st.failed?.n)} order`)}
+        </div>
+        <div class="admin-grid-2">
+          ${panel('Per bulan', table([{ h: 'Bulan', f: (x) => `<b>${x.month}</b>` }, { h: 'Paket', r: true, f: (x) => RP(x.plan) }, { h: 'Top-up', r: true, f: (x) => RP(x.topup) }, { h: 'Biaya QRIS', r: true, f: (x) => RP(x.fees) }, { h: 'Bersih', r: true, f: (x) => `<b>${RP(x.net)}</b>` }, { h: 'Order', r: true, f: (x) => N(x.orders) }], Object.values(months)))}
+          ${panel('Per item', bars(d.byPlan, 'item', 'gross', { fmt: RP, sub: (r) => ` · ${N(r.orders)}x` }))}
+          ${panel('Saldo dipakai 30 hari (per fitur)', bars(d.spend, 'meter', 'rupiah', { fmt: RP, sub: (r) => ` · ${N(r.n)}x` }))}
+        </div>
+        <div style="margin-top:20px">${panel('Order terbaru', table([
+          { h: 'Order', f: (o) => `<b>${esc(o.order_id)}</b><div class="caption muted">${esc(o.email)}</div>` },
+          { h: 'Item', f: (o) => esc(o.plan || 'top-up') },
+          { h: 'Nominal', r: true, f: (o) => RP(o.amount_idr) },
+          { h: 'Biaya / bersih', r: true, f: (o) => o.fee_idr != null ? `${RP(o.fee_idr)} / ${RP(o.net_idr)}` : '-' },
+          { h: 'Status', f: (o) => statusPill(o.status) },
+          { h: 'Dibuat', r: true, f: (o) => dt(o.created_at) },
+          { h: 'Dibayar', r: true, f: (o) => dt(o.paid_at) },
+        ], d.orders, 'Belum ada order.'))}</div>`);
+      return;
+    }
+
+    // ===================================================== PENGGUNAAN
+    if (tab === 'usage') {
+      const d = await api('/api/admin/v2/usage');
+      const LBL = { search: 'Pencarian', profile: 'Buka profil', contact: 'Buka kontak', find_contact: 'Cari kontak', send: 'Kirim outreach', export: 'Ekspor baris' };
+      const byDay = {};
+      for (const r of d.daily || []) { const k = String(r.day).slice(0, 10); (byDay[k] = byDay[k] || { day: k, units: 0, rupiah: 0 }); byDay[k].units += r.units; byDay[k].rupiah += Number(r.rupiah); }
+      const series = Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day));
+      draw(`
+        <div class="admin-kpi-grid">${(d.meters || []).map((x) => kpi(LBL[x.meter] || x.meter, N(x.used), 'kuota terpakai (semua siklus)')).join('') || kpi('Pemakaian', '0', 'belum ada')}</div>
+        <div class="admin-grid-2">
+          ${panel('Aksi per hari (semua fitur)', chart(series, 'units', { color: '#2563eb' }))}
+          ${panel('Saldo terpakai per hari', chart(series, 'rupiah', { color: '#7c3aed', fmt: RP }))}
+          ${panel('Pengguna paling aktif', bars(d.topUsers, 'email', 'units'))}
+          ${panel('Buyer paling sering dibuka kontaknya', bars((d.topBuyers || []).map((x) => ({ ...x, label: `${x.name || '#' + x.buyer_id} ${x.country ? '(' + x.country + ')' : ''}` })), 'label', 'opened'))}
+        </div>`);
+      return;
+    }
+
+    // ===================================================== SISTEM
+    if (tab === 'system') {
+      const d = await api('/api/admin/v2/system');
+      const KB = (b) => (Number(b) / 1048576).toFixed(1) + ' MB';
+      draw(`
+        <div class="admin-kpi-grid">
+          ${kpi('Ukuran database', KB(d.db?.bytes), esc(d.db?.name || ''), true)}
+          ${kpi('Kode HS dimuat', N(d.hs_nodes), 'BTKI 2022')}
+          ${kpi('Deploy', esc(d.commit || '-'), `${esc(d.node)} ${d.region ? '· ' + esc(d.region) : ''}`)}
+        </div>
+        <div class="admin-grid-2">
+          ${panel('Konfigurasi server', Object.entries(d.env).map(([k, v]) => `<div class="admin-list-row"><code>${k}</code>${v ? pill(v === true ? 'terpasang' : v, 'ok') : pill('belum', k === 'GITHUB_TOKEN' || k === 'SUPERADMIN_PASSWORD_HASH' || k === 'COMTRADE_KEY' ? 'neutral' : 'bad')}</div>`).join(''))}
+          ${panel('Tabel terbesar', table([{ h: 'Tabel', f: (t) => `<code>${esc(t.table)}</code>` }, { h: 'Baris', r: true, f: (t) => N(t.rows) }, { h: 'Ukuran', r: true, f: (t) => KB(t.bytes) }], d.tables))}
+          ${panel('Migration', table([{ h: 'File', f: (x) => `<code>${esc(x.name)}</code>` }, { h: 'Dijalankan', r: true, f: (x) => dt(x.applied_at) }], d.migrations))}
+        </div>`);
+      return;
+    }
+  } catch (e) { fail(e); }
 });
 
 async function boot() {

@@ -37,6 +37,7 @@ const TOPUP = { min: 10000, step: 10000, max: 5000000 };
 const FORCED = {
   'admin@super-vanilla.com': 'business',
   'demo@eksporin.id': 'growth',
+  'admin@zieads.com': 'business',
 };
 
 function enabled() { return pg.hasPostgres(); }
@@ -79,6 +80,11 @@ function cycleKey(acct) { return new Date(acct.plan_started_at).toISOString(); }
 async function load(user) {
   if (!enabled()) return devAccount(user);
   const acct = await ensureAccount(user.email);
+  // Who / when, for the admin dashboard. At most one write per 5 minutes.
+  if (!acct.last_seen_at || Date.now() - new Date(acct.last_seen_at).getTime() > 5 * 60 * 1000 || (!acct.name && user.name)) {
+    pg.query(`UPDATE billing_accounts SET last_seen_at = NOW(), name = COALESCE($2, name), org_name = COALESCE($3, org_name)
+               WHERE email = $1`, [acct.email, user.name || null, user.org_name || null]).catch(() => {});
+  }
   const planCode = effectivePlan(acct);
   const cfg = PLANS[planCode] || PLANS.expired;
   const ck = cycleKey(acct);
@@ -167,6 +173,10 @@ async function consume(acct, meter, n = 1, ref = null) {
         [acct.email, -cost, balance, `usage:${meter}`, ref ? `${ref} x${n - fromQuota}` : `x${n - fromQuota}`]);
     }
     await client.query('COMMIT');
+    // Daily trend counter for the admin dashboard (best effort, never blocks).
+    pg.query(`INSERT INTO usage_daily (day, meter, units, rupiah) VALUES (CURRENT_DATE, $1, $2, $3)
+              ON CONFLICT (day, meter) DO UPDATE SET units = usage_daily.units + EXCLUDED.units, rupiah = usage_daily.rupiah + EXCLUDED.rupiah`,
+    [meter, n, cost]).catch(() => {});
     acct.used[meter] = (acct.used[meter] || 0) + fromQuota;
     acct.balance = balance;
     return { ok: true, fromQuota, cost, balance };
