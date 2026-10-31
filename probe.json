@@ -1,0 +1,450 @@
+{
+ "generated_at": "2026-10-31T01:53:10Z",
+ "http": {
+  "usda_oid_home": {
+   "status": 200,
+   "final_host": "organic.ams.usda.gov",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 9546,
+   "secs": 0.8,
+   "captcha_hint": false,
+   "title": "Organic Integrity Database"
+  },
+  "usda_oid_datahistory": {
+   "status": 200,
+   "final_host": "organic.ams.usda.gov",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 9551,
+   "secs": 0.2,
+   "captcha_hint": false,
+   "title": "Organic Integrity Database"
+  },
+  "traces_organic_dir": {
+   "status": 200,
+   "final_host": "webgate.ec.europa.eu",
+   "ctype": "text/html; charset=UTF-8",
+   "bytes": 483575,
+   "secs": 1.0,
+   "captcha_hint": false,
+   "title": "Organic operator certificates  - TRACES NT"
+  },
+  "nca_directory": {
+   "status": 200,
+   "final_host": "www.ncausa.org",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 160801,
+   "secs": 2.9,
+   "captcha_hint": false,
+   "title": "The NCA Business Directory"
+  },
+  "nca_members": {
+   "status": 200,
+   "final_host": "www.ncausa.org",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 169091,
+   "secs": 1.6,
+   "captcha_hint": false,
+   "title": "NCA Member List"
+  },
+  "fairtrade_finder": {
+   "status": 200,
+   "final_host": "www.fairtrade.net",
+   "ctype": "text/html;charset=utf-8",
+   "bytes": 189614,
+   "secs": 0.9,
+   "captcha_hint": false,
+   "title": "Fairtrade Finder"
+  },
+  "flocert_search": {
+   "status": 200,
+   "final_host": "www.flocert.net",
+   "ctype": "text/html; charset=UTF-8",
+   "bytes": 70759,
+   "secs": 0.8,
+   "captcha_hint": true,
+   "title": "Customer Search for Fairtrade-certified organisations"
+  },
+  "srilanka_edb_pdf": {
+   "status": 200,
+   "final_host": "www.srilankabusiness.com",
+   "ctype": "application/pdf",
+   "bytes": 137340,
+   "secs": 0.6,
+   "captcha_hint": false,
+   "title": null
+  },
+  "anuga_exhibitor": {
+   "status": 200,
+   "final_host": "www.anuga.com",
+   "ctype": "text/html;charset=utf-8",
+   "bytes": 132506,
+   "secs": 0.6,
+   "captcha_hint": true,
+   "title": "<strong>New English Teas Ltd.   </strong> | Anuga"
+  },
+  "dian_open_data": {
+   "status": 200,
+   "final_host": "www.dian.gov.co",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 92925,
+   "secs": 0.8,
+   "captcha_hint": false,
+   "title": "Datos Abiertos"
+  },
+  "msc_suppliers": {
+   "status": 200,
+   "final_host": "cert.msc.org",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 134903,
+   "secs": 5.3,
+   "captcha_hint": false,
+   "title": "MSC - Marine Stewardship Council - Supplier Directory — MSC"
+  },
+  "companies_house": {
+   "status": 200,
+   "final_host": "find-and-update.company-information.service.gov.uk",
+   "ctype": "text/html;charset=UTF-8",
+   "bytes": 52431,
+   "secs": 0.9,
+   "captcha_hint": false,
+   "title": "Company search results - Find and update company information - GOV.UK"
+  },
+  "sirene": {
+   "status": 200,
+   "final_host": "recherche-entreprises.api.gouv.fr",
+   "ctype": "application/json",
+   "bytes": 4893,
+   "secs": 0.8,
+   "captcha_hint": false,
+   "title": null
+  },
+  "overpass": {
+   "error": "ReadTimeout: ",
+   "secs": 25.6
+  },
+  "sumopod": {
+   "status": 401,
+   "final_host": "ai.sumopod.com",
+   "ctype": "application/json",
+   "bytes": 115,
+   "secs": 0.7,
+   "captcha_hint": false,
+   "title": null
+  },
+  "mojeek": {
+   "status": 403,
+   "final_host": "www.mojeek.com",
+   "ctype": "text/html; charset=UTF-8",
+   "bytes": 343,
+   "secs": 0.5,
+   "captcha_hint": false,
+   "title": "403 - Forbidden"
+  },
+  "bing": {
+   "status": 200,
+   "final_host": "www.bing.com",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 127952,
+   "secs": 0.1,
+   "captcha_hint": false,
+   "title": "cocoa importer germany - Search"
+  },
+  "ddg_html": {
+   "status": 200,
+   "final_host": "html.duckduckgo.com",
+   "ctype": "text/html; charset=UTF-8",
+   "bytes": 33645,
+   "secs": 0.7,
+   "captcha_hint": false,
+   "title": "cocoa importer germany at DuckDuckGo"
+  },
+  "brave_html": {
+   "status": 429,
+   "final_host": "search.brave.com",
+   "ctype": "text/html; charset=utf-8",
+   "bytes": 74240,
+   "secs": 0.8,
+   "captcha_hint": true,
+   "title": "Brave Search"
+  }
+ },
+ "search": {
+  "mojeek": [
+   {
+    "q": "cocoa bean importer Germany",
+    "error": "RuntimeError: HTTP 403"
+   },
+   {
+    "q": "Kaffee Rohkaffee Importeur Hamburg",
+    "error": "RuntimeError: HTTP 403"
+   },
+   {
+    "q": "spice importer Netherlands",
+    "error": "RuntimeError: HTTP 403"
+   }
+  ],
+  "bing": [
+   {
+    "q": "cocoa bean importer Germany",
+    "n": 8,
+    "domains": [
+     "en.m.wikipedia.org",
+     "naturalremedyideas.com",
+     "www.britannica.com",
+     "www.healthline.com",
+     "www.organicfacts.net",
+     "www.webmd.com"
+    ]
+   },
+   {
+    "q": "Kaffee Rohkaffee Importeur Hamburg",
+    "n": 8,
+    "domains": [
+     "www.bibleinfo.com",
+     "www.halloweenforum.com",
+     "www.jw.org"
+    ]
+   },
+   {
+    "q": "spice importer Netherlands",
+    "n": 8,
+    "domains": [
+     "en.m.wikipedia.org",
+     "leafyplace.com",
+     "oaktownspiceshop.com",
+     "spices3-oakland.com",
+     "www.spiceography.com",
+     "www.yelp.com"
+    ]
+   }
+  ],
+  "ddg": [
+   {
+    "q": "cocoa bean importer Germany",
+    "n": 8,
+    "domains": [
+     "bvcocoaproducts.com",
+     "freshdi.com",
+     "www.albrecht-dill.de",
+     "www.cbi.eu",
+     "www.exporters.sg",
+     "www.tradewheel.com",
+     "www.tridge.com"
+    ]
+   },
+   {
+    "q": "Kaffee Rohkaffee Importeur Hamburg",
+    "n": 8,
+    "domains": [
+     "meambar.com",
+     "rehmcoffee.de",
+     "worldcoffee.info",
+     "www.commoditybroker.de",
+     "www.kaffeestehl.com",
+     "www.quijote-kaffee.de",
+     "www.wlw.at",
+     "www.wlw.de"
+    ]
+   },
+   {
+    "q": "spice importer Netherlands",
+    "error": "RuntimeError: HTTP 202"
+   }
+  ],
+  "brave_html": [
+   {
+    "q": "cocoa bean importer Germany",
+    "error": "RuntimeError: HTTP 429"
+   },
+   {
+    "q": "Kaffee Rohkaffee Importeur Hamburg",
+    "error": "RuntimeError: HTTP 429"
+   },
+   {
+    "q": "spice importer Netherlands",
+    "error": "RuntimeError: HTTP 429"
+   }
+  ]
+ },
+ "browser": {
+  "usda_oid": {
+   "steps": [],
+   "title": "Organic Integrity Database",
+   "links": [
+    "United States Department of Agriculture => //usda.gov",
+    "Agricultural Marketing Service => //www.ams.usda.gov",
+    " => Home",
+    "Log In => EauthLogin?redirectUri=https://organic.ams.usda.gov/integrity/",
+    "Register => UserManagement/RegisterNewAccount",
+    "Home => Home",
+    "Contact Us => ContactUs",
+    "About => About",
+    " => Search",
+    "\"ARATANIA\" LLC => CP/OPP?cid=449&nopid=1721053330&ret=Home&retName=Home",
+    "[STC] Sertifikacijas un testesanas centrs => CP/CertifierProfilePage?cid=449&ret=Home&retName=Home",
+    "\"BREDUN\" LP => CP/OPP?cid=87&nopid=6903966799&ret=Home&retName=Home",
+    "[EKOAGROS] Ekoagros => CP/CertifierProfilePage?cid=87&ret=Home&retName=Home",
+    "\"GALLARCAS\" SPR DE RL => CP/OPP?cid=12&nopid=8699694577&ret=Home&retName=Home",
+    "[BAC] BioAgriCert => CP/CertifierProfilePage?cid=12&ret=Home&retName=Home",
+    "[EKOAGROS] Ekoagros => CP/CertifierProfilePage?cid=87&ret=Home&retName=Home",
+    "\"Peresvet\" LLC => CP/OPP?cid=32&nopid=2230010764&ret=Home&retName=Home",
+    "[QIMA] QIMA (formerly IBD Certifications) => CP/CertifierProfilePage?cid=32&ret=Home&retName=Home",
+    "\"Peresvet\" LLC (Harori 1 Farm) => CP/OPP?cid=32&nopid=2230011988&ret=Home&retName=Home",
+    "[QIMA] QIMA (formerly IBD Certifications) => CP/CertifierProfilePage?cid=32&ret=Home&retName=Home",
+    "\"Peresvet\" LLC (Kirov Farm) => CP/OPP?cid=32&nopid=2230010765&ret=Home&retName=Home",
+    "[QIMA] QIMA (formerly IBD Certifications) => CP/CertifierProfilePage?cid=32&ret=Home&retName=Home",
+    "\"Peresvet\" LLC (Oct1 Farm) => CP/OPP?cid=32&nopid=2230010766&ret=Home&retName=Home",
+    "[QIMA] QIMA (formerly IBD Certifications) => CP/CertifierProfilePage?cid=32&ret=Home&retName=Home",
+    "\"Peresvet\" LLC (Oct2 Farm) => CP/OPP?cid=32&nopid=2230011987&ret=Home&retName=Home",
+    "[QIMA] QIMA (formerly IBD Certifications) => CP/CertifierProfilePage?cid=32&ret=Home&retName=Home",
+    "“ARNIKA OIL” LLC => CP/OPP?cid=27&nopid=9963278001&ret=Home&retName=Home",
+    "[ETKO] Ecological Farming Control Organization => CP/CertifierProfilePage?cid=27&ret=Home&retName=Home",
+    "AskUSDA => https://ask.usda.gov/s/?utm_source=USDA&utm_medium=homepage&utm_campaign=homepage%20referrals",
+    "Privacy Policy => https://www.usda.gov/privacy-policy",
+    "USDA.gov => https://www.usda.gov/",
+    "USA.gov => https://www.usa.gov/",
+    "WhiteHouse.gov => https://www.whitehouse.gov/",
+    "FOIA => https://www.usda.gov/ogc/office-information-affairs/foia-division",
+    "Accessibility Statement => https://www.usda.gov/accessibility-statement",
+    "Non-­Discrimination Statement => https://www.usda.gov/non-discrimination-statement",
+    "Information Quality => https://www.usda.gov/ocio/guidelines-and-compliance-resources/information-quality-activities",
+    "Plain Writing => https://www.usda.gov/plain-writing",
+    "Contact USDA => https://ask.usda.gov/s/contactsupport",
+    "Reload => ",
+    "🗙 => "
+   ],
+   "buttons": [
+    "Reset Search Filters",
+    "Export to Excel",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "...",
+    "Return to top"
+   ],
+   "xhr": [
+    "GET https://organic.ams.usda.gov/integrity/_blazor/initializers",
+    "POST https://organic.ams.usda.gov/integrity/_blazor/negotiate"
+   ]
+  },
+  "usda_oid_datahistory": {
+   "tried": [
+    "https://organic.ams.usda.gov/integrity/Reports/DataHistory.aspx"
+   ],
+   "https://organic.ams.usda.gov/integrity/Reports/DataHistory.aspx": {
+    "title": "Organic Integrity Database",
+    "file_links": [
+     "January => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260101.xlsx",
+     "February => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260201.xlsx",
+     "March => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260301.xlsx",
+     "April => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260401.xlsx",
+     "May => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260501.xlsx",
+     "June => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260601.xlsx",
+     "July => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260701.xlsx",
+     "August => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260801.xlsx",
+     "September => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20260901.xlsx",
+     "October => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Data_20261001.xlsx",
+     "January => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260101.xlsx",
+     "February => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260201.xlsx",
+     "March => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260301.xlsx",
+     "April => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260401.xlsx",
+     "May => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260501.xlsx",
+     "July => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260701.xlsx",
+     "August => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260801.xlsx",
+     "September => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20260901.xlsx",
+     "October => https://organic.ams.usda.gov/Integrity/MonthlyReports/INTEGRITY_Export_20261001.xlsx",
+     "2025 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2025.xlsx",
+     "2024 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2024.xlsx",
+     "2023 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2023.xlsx",
+     "2022 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2022.xlsx",
+     "2021 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2021.xlsx",
+     "2020 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2020.xlsx",
+     "2019 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2019.xlsx",
+     "2018 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2018.xlsx",
+     "2017 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2017.xlsx",
+     "2016 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2016.xlsx",
+     "2015 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Data_2015.xlsx",
+     "2025 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2025.xlsx",
+     "2024 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2024.xlsx",
+     "2023 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2023.xlsx",
+     "2022 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2022.xlsx",
+     "2021 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2021.xlsx",
+     "2020 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2020.xlsx",
+     "2019 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2019.xlsx",
+     "2018 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2018.xlsx",
+     "2017 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2017.xlsx",
+     "2016 => https://www.ams.usda.gov/sites/default/files/media/INTEGRITY_Export_2016.xlsx"
+    ],
+    "text_sample": " United States Department of Agriculture\nAgricultural Marketing Service\nLog In\nRegister\nHome\nSearch\nReports\nTrade Partners\nContact Us   About  \nData History\n\nEach month we publish a snapshot of the full INTEGRITY public data set for USDA-NOP certified operations. The data is captured at the beginning of the month.\n\nMonthly Snapshots – Current Calendar Year\nData Submission Template Format:\nOperations/Scopes and Products on Separate Sheets\nJanuary\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nSearch Results Export Format:\nOperations, Scopes and Certified Products on the Same Sheet\nJanuary\nFebruary\nMarch\nApril\nMay\nJuly\nAugust\nSeptember\nOctober\nCounts of Certified Organic Operations:\nBy Country, U.S. State, and Certifier\nJanuary\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nHistorical Data\n\nYou can also download Microsoft Excel workbooks with annual USDA-NOP operation lists. INTEGRITY was launched in 2015, so older lists are in a different format.\n\nData Submission Template Format: Operations/Scopes and Products on Separate Sheets\n2025\n2024\n2023\n2022\n2021\n2020\n2019\n2018\n2017\n2016\n2015\nSearch Results Export Format:\nOperations, Scopes and Certified Products on the Same Sheet\"\n2025\n2024\n2023\n2022\n2021\n2020\n2019\n2018\n2017\n2016\nCounts of Certified Organic Operations:\nBy Country, U.S. State, and Certifier\n2023\n2022\n2021\n2020\n2019\n2018\n2017\n2016\n\nOlder annual operation lists:\n\n2014\n2013\n2012\n2011\n2010\n\nDisclaimer: For more up-to-date information about certified organic operations, please contact their certifying agent directly. To find a certifying agent’s contact information, visit our Certifier Locator page.\n\nOperations certified to another organic standard are allowed to export to the U.S. only if covered under an established organic equivalence arrangement. These operations do not appear in these snapshots and historical lists, but can be found in Trade Partner operation information through the Trade Partner menu.\n\n Return to top\nAskUSDA\nPrivacy Policy\nUSDA.gov\nUSA.gov\nWhiteHouse.gov\nFOIA\nAccessibility Statement\nNon-­Discrimination Statement\nInformation Quality\nPlain Writing\nContact USDA",
+    "download_error": "TimeoutError: Locator.click: Timeout 30000ms exceeded.\nCall log:\nwaiting for locator(\"a,button\").filter(has_text=re.compile(r\"xls|csv|download|export\", re.IGNORECASE)).first\n"
+   }
+  },
+  "traces": {
+   "title": "Organic operator certificates - TRACES NT",
+   "labels": [
+    "Search:",
+    "Country:",
+    "Region:",
+    "City",
+    "Postal Code:",
+    "Identifier:",
+    "Exact match",
+    "Control authority/Control body:",
+    "Operator type:",
+    "Status:",
+    "Issued",
+    "Suspended",
+    "Withdrawn",
+    "Expired",
+    "Activities:",
+    "Distribution",
+    "Distribution/Placing on the market",
+    "Export",
+    "Import",
+    "Preparation",
+    "Production",
+    "Storing",
+    "Categories of products:",
+    "(a) - Unprocessed plants and plant products, including seeds and other plant reproductive material",
+    "(b) - Livestock and unprocessed livestock products",
+    "(c) - Algae and unprocessed aquaculture products",
+    "(d) - Processed agricultural products, including aquaculture products, for use as food",
+    "(e) - Feed",
+    "(f) - Wine",
+    "(g) - Other products listed in Annex I to Regulation (EU) 2018/848 or not covered by the previous categories",
+    "Nomenclatures:",
+    "Product names:",
+    "Expires on:",
+    "Open Calendar \n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tDate/Time Format: dd/MM/yyyy",
+    "Reference",
+    "Operator",
+    "Competent authority or Control authority / Control body",
+    "Activities",
+    "Categories of products",
+    "Issued on",
+    "Expires on",
+    "Actions"
+   ],
+   "buttons": [
+    "Search",
+    "Advanced Search",
+    "Select",
+    "Select",
+    "Select",
+    "Advanced..."
+   ],
+   "text_sample": "This site uses cookies. Visit our cookies policy page or click the link in any footer for more information and to change your preferences.\n\nAccept all cookies\nAccept only essential cookies\nSkip to Main Content\nDocumentation\nFAQ\nContact\nBosnian (Bosnian)\nChinese (Chinese)\nDansk (Danish)\nDeutsch (German)\nEesti keel (Estonian)\nEnglish (English)\nEspañol (Spanish)\nEλληνικά (Greek)\nFrançais (French)\nGeorgian (Georgian)\nHrvatski (Croatian)\nIcelandic (Icelandic)\nIrish (Irish)\nItaliano (Italian)\nKorean (Korean)\nLatviešu (Latvian)\nlietuvių (Lithuanian)\nMacedonian (Macedonian)\nmagyar (Hungarian)\nMalti (Maltese)\nMontenegrin (Montenegrin)\nNederlands (Dutch)\nNorsk (Norwegian)\nPolski (Polish)\nPortuguês (Portuguese)\nRomână (Romanian)\nSerbian (Serbian)\nShqiptar (Albanian)\nSlovenčina (Slovak)\nslovenščina (Slovenian)\nsuomi (Finnish)\nSvenska (Swedish)\nTürkçe (Turc)\nUkrainian (Ukrainian)\nVietnamese (Vietnamese)\nčeština (Czech)\nбългарски (Bulgarian)\nРусский (Russian)\nLog in\nIMSOC\nTRACES · ADIS · EUROPHYT · iRASFF\nIMSOC Directory Publications Organic Operator Certificates\nOrganic operator certificates\nSearch:\n Search\nAdvanced Search \nShowing 0 / 0 Total items\nReference\tOperator\tCompetent authority or Control authority / Control body\tActivities\tCategories of products\tIssued on \tExpires on\t\nActions\n\nStart searching with Search button.\nLast update: 2026 Legal Notice Terms of Use Cookies Privacy Statement Accessibility Credits Contact Top Page\nEuropean Commission - DG Health & Food Safety.\nIMSOC - TRACES.NT 8.2.14 (12/10/2026 11:36:41) -\nprocessed by cls8.",
+   "calls": []
+  },
+  "nca": {
+   "error": "TimeoutError: Page.goto: Timeout 60000ms exceeded.\nCall log:\nnavigating to \"https://www.ncausa.org/Industry-Resources/Business-Directory\", waiting until \"networkidle\"\n"
+  }
+ }
+}
