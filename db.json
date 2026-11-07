@@ -1,0 +1,1265 @@
+{
+ "generated_at": "2026-11-07T02:25:10Z",
+ "columns": [
+  "address",
+  "buyer_type",
+  "city",
+  "contact_attempts",
+  "contact_checked_at",
+  "content_hash",
+  "country",
+  "created_at",
+  "data_confidence",
+  "description",
+  "email",
+  "email_source_url",
+  "email_status",
+  "enriched_at",
+  "evidence_url",
+  "hidden_reason",
+  "hs_codes",
+  "id",
+  "industry",
+  "is_hidden",
+  "last_shipment_date",
+  "name",
+  "phone",
+  "phone_source_url",
+  "quality_score",
+  "raw_json",
+  "size_bucket",
+  "source",
+  "source_id",
+  "sources_seen",
+  "total_shipments",
+  "total_value_usd",
+  "updated_at",
+  "verified_at",
+  "website",
+  "website_method"
+ ],
+ "totals": {
+  "buyers": 110673,
+  "with_website": 48237,
+  "with_email": 26816,
+  "with_phone": 28188,
+  "email_is_guessed_info": 7884,
+  "enriched": 48317,
+  "with_description": 34571,
+  "no_hs": 66,
+  "avg_conf": 76
+ },
+ "by_source": [
+  {
+   "source": "companies_house_uk",
+   "n": 48154,
+   "website": 20187,
+   "email": 11438,
+   "phone": 9538,
+   "enriched": 20380,
+   "conf": 78,
+   "last_new": "2026-11-07 00:21:59.917202+00"
+  },
+  {
+   "source": "sirene_fr",
+   "n": 27949,
+   "website": 10456,
+   "email": 5001,
+   "phone": 5059,
+   "enriched": 10433,
+   "conf": 79,
+   "last_new": "2026-11-01 23:55:59.850976+00"
+  },
+  {
+   "source": "osm",
+   "n": 22593,
+   "website": 11881,
+   "email": 6825,
+   "phone": 9568,
+   "enriched": 11798,
+   "conf": 68,
+   "last_new": "2026-11-02 01:32:57.74628+00"
+  },
+  {
+   "source": "us_city_registry",
+   "n": 4325,
+   "website": 1678,
+   "email": 870,
+   "phone": 734,
+   "enriched": 1678,
+   "conf": 73,
+   "last_new": "2026-11-01 23:46:03.553088+00"
+  },
+  {
+   "source": "brreg_no",
+   "n": 2928,
+   "website": 1728,
+   "email": 1394,
+   "phone": 1622,
+   "enriched": 1704,
+   "conf": 81,
+   "last_new": "2026-11-01 23:40:26.409858+00"
+  },
+  {
+   "source": "abn_au",
+   "n": 2607,
+   "website": 746,
+   "email": 466,
+   "phone": 309,
+   "enriched": 746,
+   "conf": 70,
+   "last_new": "2026-11-01 23:48:52.599727+00"
+  },
+  {
+   "source": "agencebio_fr",
+   "n": 720,
+   "website": 462,
+   "email": 225,
+   "phone": 396,
+   "enriched": 460,
+   "conf": 89,
+   "last_new": "2026-11-01 23:40:09.725935+00"
+  },
+  {
+   "source": "sec_edgar_us",
+   "n": 483,
+   "website": 328,
+   "email": 137,
+   "phone": 231,
+   "enriched": 352,
+   "conf": 95,
+   "last_new": "2026-11-06 12:27:35.487112+00"
+  },
+  {
+   "source": "google_business",
+   "n": 452,
+   "website": 375,
+   "email": 232,
+   "phone": 385,
+   "enriched": 370,
+   "conf": 84,
+   "last_new": "2026-11-01 16:46:28.310844+00"
+  },
+  {
+   "source": "gleif",
+   "n": 425,
+   "website": 360,
+   "email": 213,
+   "phone": 312,
+   "enriched": 360,
+   "conf": 97,
+   "last_new": "2026-11-06 23:39:46.181974+00"
+  },
+  {
+   "source": "wikidata",
+   "n": 32,
+   "website": 31,
+   "email": 10,
+   "phone": 29,
+   "enriched": 31,
+   "conf": 98,
+   "last_new": "2026-11-01 22:36:16.131346+00"
+  },
+  {
+   "source": "ai_agent",
+   "n": 5,
+   "website": 5,
+   "email": 5,
+   "phone": 5,
+   "enriched": 5,
+   "conf": 98,
+   "last_new": "2026-10-25 05:28:43.016803+00"
+  }
+ ],
+ "by_country": [
+  {
+   "country": "GB",
+   "n": 51591,
+   "email": 12720
+  },
+  {
+   "country": "FR",
+   "n": 32847,
+   "email": 6626
+  },
+  {
+   "country": "US",
+   "n": 4942,
+   "email": 1071
+  },
+  {
+   "country": "AU",
+   "n": 3751,
+   "email": 851
+  },
+  {
+   "country": "NO",
+   "n": 3091,
+   "email": 1476
+  },
+  {
+   "country": "TR",
+   "n": 2413,
+   "email": 471
+  },
+  {
+   "country": "BR",
+   "n": 2201,
+   "email": 432
+  },
+  {
+   "country": "BE",
+   "n": 998,
+   "email": 524
+  },
+  {
+   "country": "MY",
+   "n": 959,
+   "email": 246
+  },
+  {
+   "country": "MX",
+   "n": 838,
+   "email": 179
+  },
+  {
+   "country": "TW",
+   "n": 725,
+   "email": 30
+  },
+  {
+   "country": "DE",
+   "n": 621,
+   "email": 385
+  },
+  {
+   "country": "AE",
+   "n": 521,
+   "email": 92
+  },
+  {
+   "country": "PK",
+   "n": 510,
+   "email": 76
+  },
+  {
+   "country": "CN",
+   "n": 510,
+   "email": 20
+  },
+  {
+   "country": "CH",
+   "n": 456,
+   "email": 233
+  },
+  {
+   "country": "IE",
+   "n": 443,
+   "email": 179
+  },
+  {
+   "country": "DK",
+   "n": 373,
+   "email": 164
+  },
+  {
+   "country": "IT",
+   "n": 366,
+   "email": 167
+  },
+  {
+   "country": "SE",
+   "n": 315,
+   "email": 142
+  },
+  {
+   "country": "NZ",
+   "n": 272,
+   "email": 120
+  },
+  {
+   "country": "PL",
+   "n": 254,
+   "email": 117
+  },
+  {
+   "country": "VN",
+   "n": 203,
+   "email": 60
+  },
+  {
+   "country": "PT",
+   "n": 190,
+   "email": 40
+  },
+  {
+   "country": "SG",
+   "n": 187,
+   "email": 65
+  }
+ ],
+ "by_hs": [
+  {
+   "hs": "6204",
+   "n": 23502,
+   "email": 4915
+  },
+  {
+   "hs": "6109",
+   "n": 23491,
+   "email": 4911
+  },
+  {
+   "hs": "9403",
+   "n": 21801,
+   "email": 6346
+  },
+  {
+   "hs": "6404",
+   "n": 21141,
+   "email": 4383
+  },
+  {
+   "hs": "6403",
+   "n": 21130,
+   "email": 4375
+  },
+  {
+   "hs": "4602",
+   "n": 20891,
+   "email": 5966
+  },
+  {
+   "hs": "4202",
+   "n": 20879,
+   "email": 4301
+  },
+  {
+   "hs": "9401",
+   "n": 14505,
+   "email": 4229
+  },
+  {
+   "hs": "3304",
+   "n": 13932,
+   "email": 3017
+  },
+  {
+   "hs": "0902",
+   "n": 12494,
+   "email": 3119
+  },
+  {
+   "hs": "3301",
+   "n": 12019,
+   "email": 2633
+  },
+  {
+   "hs": "0901",
+   "n": 11425,
+   "email": 3432
+  },
+  {
+   "hs": "3401",
+   "n": 11297,
+   "email": 2442
+  },
+  {
+   "hs": "2101",
+   "n": 11202,
+   "email": 3286
+  },
+  {
+   "hs": "1801",
+   "n": 8942,
+   "email": 2276
+  },
+  {
+   "hs": "1804",
+   "n": 8913,
+   "email": 2260
+  },
+  {
+   "hs": "1805",
+   "n": 8910,
+   "email": 2262
+  },
+  {
+   "hs": "5208",
+   "n": 8802,
+   "email": 1935
+  },
+  {
+   "hs": "7113",
+   "n": 6403,
+   "email": 1418
+  },
+  {
+   "hs": "0904",
+   "n": 5477,
+   "email": 1296
+  },
+  {
+   "hs": "0905",
+   "n": 5469,
+   "email": 1301
+  },
+  {
+   "hs": "0910",
+   "n": 5384,
+   "email": 1273
+  },
+  {
+   "hs": "0908",
+   "n": 5375,
+   "email": 1256
+  },
+  {
+   "hs": "0906",
+   "n": 5363,
+   "email": 1257
+  },
+  {
+   "hs": "0907",
+   "n": 5342,
+   "email": 1245
+  },
+  {
+   "hs": "0306",
+   "n": 2225,
+   "email": 452
+  },
+  {
+   "hs": "0304",
+   "n": 2205,
+   "email": 448
+  },
+  {
+   "hs": "1604",
+   "n": 2183,
+   "email": 440
+  },
+  {
+   "hs": "0804",
+   "n": 1661,
+   "email": 368
+  },
+  {
+   "hs": "0803",
+   "n": 1616,
+   "email": 355
+  },
+  {
+   "hs": "4001",
+   "n": 1528,
+   "email": 414
+  },
+  {
+   "hs": "2402",
+   "n": 1396,
+   "email": 243
+  },
+  {
+   "hs": "4412",
+   "n": 1111,
+   "email": 267
+  },
+  {
+   "hs": "1513",
+   "n": 1070,
+   "email": 256
+  },
+  {
+   "hs": "1511",
+   "n": 1015,
+   "email": 245
+  },
+  {
+   "hs": "4011",
+   "n": 970,
+   "email": 198
+  },
+  {
+   "hs": "2008",
+   "n": 516,
+   "email": 144
+  },
+  {
+   "hs": "6912",
+   "n": 300,
+   "email": 78
+  },
+  {
+   "hs": "1905",
+   "n": 300,
+   "email": 65
+  },
+  {
+   "hs": "1702",
+   "n": 232,
+   "email": 63
+  }
+ ],
+ "by_industry": [
+  {
+   "industry": "clothing and footwear wholesale",
+   "n": 23347
+  },
+  {
+   "industry": "furniture retailer",
+   "n": 14375
+  },
+  {
+   "industry": "perfume and cosmetics wholesale",
+   "n": 13754
+  },
+  {
+   "industry": "textiles wholesale",
+   "n": 8687
+  },
+  {
+   "industry": "furniture and home furnishing wholesale",
+   "n": 6686
+  },
+  {
+   "industry": "coffee, tea, cocoa and spice wholesale",
+   "n": 4507
+  },
+  {
+   "industry": "watches and jewellery wholesale",
+   "n": 3836
+  },
+  {
+   "industry": "coffee and tea processing",
+   "n": 3123
+  },
+  {
+   "industry": "coffee and tea retailer",
+   "n": 2968
+  },
+  {
+   "industry": "importer / trader (by company name)",
+   "n": 2735
+  },
+  {
+   "industry": "cocoa and chocolate manufacturing",
+   "n": 2689
+  },
+  {
+   "industry": "jewellery wholesale",
+   "n": 2480
+  },
+  {
+   "industry": "tea retailer",
+   "n": 2164
+  },
+  {
+   "industry": "chocolatier",
+   "n": 1974
+  },
+  {
+   "industry": "(null)",
+   "n": 1916
+  },
+  {
+   "industry": "tobacco products wholesale",
+   "n": 1294
+  },
+  {
+   "industry": "spice and condiment processing",
+   "n": 1256
+  },
+  {
+   "industry": "rubber products manufacturing",
+   "n": 1154
+  },
+  {
+   "industry": "fruit and vegetable wholesale",
+   "n": 1152
+  },
+  {
+   "industry": "fish, seafood and specialty food wholesale",
+   "n": 1061
+  },
+  {
+   "industry": "fish and seafood processing",
+   "n": 1017
+  },
+  {
+   "industry": "wood and construction materials wholesale",
+   "n": 970
+  },
+  {
+   "industry": "motor vehicle parts wholesale",
+   "n": 832
+  },
+  {
+   "industry": "certified organic importer",
+   "n": 720
+  },
+  {
+   "industry": "chocolate and confectionery maker",
+   "n": 670
+  },
+  {
+   "industry": "oils and fats manufacturing",
+   "n": 630
+  },
+  {
+   "industry": "essential oils manufacturing",
+   "n": 603
+  },
+  {
+   "industry": "spice retailer",
+   "n": 366
+  },
+  {
+   "industry": "GENERAL",
+   "n": 347
+  },
+  {
+   "industry": "furniture",
+   "n": 310
+  }
+ ],
+ "enrich_activity": {
+  "enriched_24h": 0,
+  "updated_24h": 3333,
+  "created_24h": 3,
+  "touched_2h": 1868
+ },
+ "jobs_by_source": [
+  {
+   "source": "ai_agent",
+   "status": "done",
+   "n": 6,
+   "results": 5,
+   "last": "2026-10-25 05:37:09.098872+00"
+  },
+  {
+   "source": "ai_agent",
+   "status": "failed",
+   "n": 260,
+   "results": 0,
+   "last": "2026-11-07 00:59:04.125899+00"
+  },
+  {
+   "source": "gleif",
+   "status": "done",
+   "n": 438,
+   "results": 1000,
+   "last": "2026-11-06 23:41:02.681117+00"
+  },
+  {
+   "source": "gleif",
+   "status": "pending",
+   "n": 1004,
+   "results": 0,
+   "last": "2026-11-06 23:38:01.742234+00"
+  },
+  {
+   "source": "importyeti",
+   "status": "failed",
+   "n": 353,
+   "results": 0,
+   "last": "2026-11-06 23:38:47.371776+00"
+  },
+  {
+   "source": "importyeti",
+   "status": "pending",
+   "n": 1089,
+   "results": 0,
+   "last": "2026-11-06 23:38:29.109579+00"
+  },
+  {
+   "source": "itpc",
+   "status": "failed",
+   "n": 353,
+   "results": 0,
+   "last": "2026-11-06 23:39:14.726244+00"
+  },
+  {
+   "source": "itpc",
+   "status": "pending",
+   "n": 1089,
+   "results": 0,
+   "last": "2026-11-06 23:38:42.932039+00"
+  },
+  {
+   "source": "wikidata",
+   "status": "done",
+   "n": 353,
+   "results": 60,
+   "last": "2026-11-05 23:57:39.980648+00"
+  },
+  {
+   "source": "wikidata",
+   "status": "pending",
+   "n": 1089,
+   "results": 0,
+   "last": "2026-11-06 23:38:15.423772+00"
+  }
+ ],
+ "agent_missions": [
+  {
+   "hs_code": "0304",
+   "country": "SE",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.7,
+   "at": "2026-11-07 00:59:04.125899+00"
+  },
+  {
+   "hs_code": "1804",
+   "country": "CH",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-07 00:59:03.420788+00"
+  },
+  {
+   "hs_code": "1604",
+   "country": "CA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-07 00:59:00.674704+00"
+  },
+  {
+   "hs_code": "1604",
+   "country": "PL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-07 00:58:58.431675+00"
+  },
+  {
+   "hs_code": "0908",
+   "country": "NZ",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.2,
+   "at": "2026-11-07 00:58:55.655368+00"
+  },
+  {
+   "hs_code": "1805",
+   "country": "CA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.2,
+   "at": "2026-11-07 00:58:53.417176+00"
+  },
+  {
+   "hs_code": "1511",
+   "country": "BE",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.7,
+   "at": "2026-11-06 19:30:49.88048+00"
+  },
+  {
+   "hs_code": "0902",
+   "country": "IN",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.4,
+   "at": "2026-11-06 19:30:49.16448+00"
+  },
+  {
+   "hs_code": "1805",
+   "country": "NZ",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-06 19:30:46.411185+00"
+  },
+  {
+   "hs_code": "0908",
+   "country": "PL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-06 19:30:44.02851+00"
+  },
+  {
+   "hs_code": "0907",
+   "country": "CH",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.5,
+   "at": "2026-11-06 19:30:41.264035+00"
+  },
+  {
+   "hs_code": "0901",
+   "country": "CA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 3.9,
+   "at": "2026-11-06 19:30:39.012836+00"
+  },
+  {
+   "hs_code": "0908",
+   "country": "IN",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.5,
+   "at": "2026-11-06 11:06:13.048112+00"
+  },
+  {
+   "hs_code": "1511",
+   "country": "CH",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.4,
+   "at": "2026-11-06 11:06:11.586396+00"
+  },
+  {
+   "hs_code": "1702",
+   "country": "TR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 7.8,
+   "at": "2026-11-06 11:06:08.321623+00"
+  },
+  {
+   "hs_code": "1804",
+   "country": "IN",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.5,
+   "at": "2026-11-06 11:06:05.679685+00"
+  },
+  {
+   "hs_code": "0908",
+   "country": "KR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 7.3,
+   "at": "2026-11-06 11:06:02.349803+00"
+  },
+  {
+   "hs_code": "1702",
+   "country": "IN",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.5,
+   "at": "2026-11-06 11:05:59.686066+00"
+  },
+  {
+   "hs_code": "1604",
+   "country": "TW",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.8,
+   "at": "2026-11-06 01:37:11.561576+00"
+  },
+  {
+   "hs_code": "1212",
+   "country": "CA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.4,
+   "at": "2026-11-06 01:37:10.84659+00"
+  },
+  {
+   "hs_code": "0304",
+   "country": "TR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.4,
+   "at": "2026-11-06 01:37:08.02877+00"
+  },
+  {
+   "hs_code": "4602",
+   "country": "PL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-06 01:37:05.704425+00"
+  },
+  {
+   "hs_code": "0906",
+   "country": "KR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.4,
+   "at": "2026-11-06 01:37:02.917133+00"
+  },
+  {
+   "hs_code": "0910",
+   "country": "KR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.0,
+   "at": "2026-11-06 01:37:00.691598+00"
+  },
+  {
+   "hs_code": "4602",
+   "country": "IT",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 5.2,
+   "at": "2026-11-05 20:04:56.695667+00"
+  },
+  {
+   "hs_code": "0905",
+   "country": "IN",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.3,
+   "at": "2026-11-05 20:04:52.921748+00"
+  },
+  {
+   "hs_code": "1212",
+   "country": "AU",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.2,
+   "at": "2026-11-05 20:04:50.708341+00"
+  },
+  {
+   "hs_code": "1212",
+   "country": "US",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 7.2,
+   "at": "2026-11-05 20:04:47.905802+00"
+  },
+  {
+   "hs_code": "0801",
+   "country": "US",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.1,
+   "at": "2026-11-05 20:04:45.737669+00"
+  },
+  {
+   "hs_code": "0907",
+   "country": "JP",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 3.8,
+   "at": "2026-11-05 20:04:42.875858+00"
+  },
+  {
+   "hs_code": "0907",
+   "country": "KR",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.9,
+   "at": "2026-11-05 11:08:35.030377+00"
+  },
+  {
+   "hs_code": "0901",
+   "country": "NL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.5,
+   "at": "2026-11-05 11:08:34.270357+00"
+  },
+  {
+   "hs_code": "0910",
+   "country": "NL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.5,
+   "at": "2026-11-05 11:08:31.361617+00"
+  },
+  {
+   "hs_code": "0910",
+   "country": "DE",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.5,
+   "at": "2026-11-05 11:08:29.048851+00"
+  },
+  {
+   "hs_code": "0902",
+   "country": "NL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.4,
+   "at": "2026-11-05 11:08:26.147784+00"
+  },
+  {
+   "hs_code": "0907",
+   "country": "NL",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 2.2,
+   "at": "2026-11-05 11:08:23.796891+00"
+  },
+  {
+   "hs_code": "1702",
+   "country": "AU",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 4.2,
+   "at": "2026-11-05 01:30:17.759677+00"
+  },
+  {
+   "hs_code": "1511",
+   "country": "SA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.5,
+   "at": "2026-11-05 01:30:16.634031+00"
+  },
+  {
+   "hs_code": "0907",
+   "country": "SA",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.5,
+   "at": "2026-11-05 01:30:12.413837+00"
+  },
+  {
+   "hs_code": "0801",
+   "country": "IT",
+   "status": "failed",
+   "result_count": 0,
+   "error": "llm_unavailable: 422: {\"error\":{\"message\":\"Budget has been exceeded! Key=nafadzagmailcom-eksporin (sk-...ylrA) Current cost: 0.2110836750000",
+   "steps": 0,
+   "searches": 0,
+   "pages": 0,
+   "rejected": 0,
+   "tokens": 0,
+   "secs": 6.5,
+   "at": "2026-11-05 01:30:08.964379+00"
+  }
+ ]
+}
